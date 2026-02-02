@@ -14,7 +14,7 @@ export const facebookConfig: PlatformConfig = {
   name: 'Facebook',
   icon: '📘',
   color: '#1877F2',
-  apiUrl: 'https://graph.instagram.com/v18.0',
+  apiUrl: 'https://graph.facebook.com/v19.0',
   supportedContentTypes: ['text', 'image', 'video', 'link'],
   maxContentLength: 63206,
   requiresMediaUpload: true,

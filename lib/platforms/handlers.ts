@@ -75,35 +75,54 @@ class TwitterHandler implements BasePlatformHandler {
     supportsAnalytics: true,
   };
 
-  async authenticate(config) {
-    return { success: true, accessToken: config.accessToken };
+  async authenticate(config: AuthConfig): Promise<AuthResponse> {
+    try {
+      if (!config.accessToken) {
+        return { success: false, error: 'Access token required' };
+      }
+      const accountInfo = await this.getAccountInfo(config.accessToken);
+      return {
+        success: !!accountInfo,
+        accountInfo: accountInfo || undefined,
+        accessToken: config.accessToken,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Authentication failed',
+      };
+    }
   }
 
-  async refreshAuth(refreshToken) {
-    return { success: true };
+  async refreshAuth(refreshToken: string): Promise<AuthResponse> {
+    return { success: false, error: 'Not implemented' };
   }
 
-  async revokeAuth(accessToken) {
+  async revokeAuth(accessToken: string): Promise<boolean> {
     return true;
   }
 
-  async publishPost(post, token) {
-    return { success: true, postId: `tw_${Date.now()}` };
+  async publishPost(post: PostRequest, token: string): Promise<PostResponse> {
+    try {
+      return { success: true, postId: `tw_${Date.now()}` };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed' };
+    }
   }
 
-  async schedulePost(post, token) {
+  async schedulePost(post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId: `tw_${Date.now()}`, scheduledFor: post.scheduleTime };
   }
 
-  async editPost(postId, post, token) {
+  async editPost(postId: string, post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId };
   }
 
-  async deletePost(postId, token) {
+  async deletePost(postId: string, token: string): Promise<boolean> {
     return true;
   }
 
-  async getAccountInfo(token) {
+  async getAccountInfo(token: string): Promise<AccountInfo | null> {
     return {
       id: 'tw_123456',
       username: 'demo_user',
@@ -112,7 +131,7 @@ class TwitterHandler implements BasePlatformHandler {
     };
   }
 
-  async getAnalytics(token, startDate, endDate) {
+  async getAnalytics(token: string, startDate: Date, endDate: Date): Promise<AnalyticsData[]> {
     return [{ date: new Date(), posts: 15, engagements: 800, clicks: 400, reach: 8000, impressions: 15000 }];
   }
 }
@@ -133,35 +152,35 @@ class TikTokHandler implements BasePlatformHandler {
     supportsAnalytics: true,
   };
 
-  async authenticate(config) {
+  async authenticate(config: AuthConfig): Promise<AuthResponse> {
     return { success: true, accessToken: config.accessToken };
   }
 
-  async refreshAuth(refreshToken) {
+  async refreshAuth(refreshToken: string): Promise<AuthResponse> {
     return { success: true };
   }
 
-  async revokeAuth(accessToken) {
+  async revokeAuth(accessToken: string): Promise<boolean> {
     return true;
   }
 
-  async publishPost(post, token) {
+  async publishPost(post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId: `tt_${Date.now()}` };
   }
 
-  async schedulePost(post, token) {
+  async schedulePost(post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId: `tt_${Date.now()}`, scheduledFor: post.scheduleTime };
   }
 
-  async editPost(postId, post, token) {
+  async editPost(postId: string, post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId };
   }
 
-  async deletePost(postId, token) {
+  async deletePost(postId: string, token: string): Promise<boolean> {
     return true;
   }
 
-  async getAccountInfo(token) {
+  async getAccountInfo(token: string): Promise<AccountInfo | null> {
     return {
       id: 'tt_123456',
       username: 'demo_tiktok',
@@ -170,7 +189,7 @@ class TikTokHandler implements BasePlatformHandler {
     };
   }
 
-  async getAnalytics(token, startDate, endDate) {
+  async getAnalytics(token: string, startDate: Date, endDate: Date): Promise<AnalyticsData[]> {
     return [{ date: new Date(), posts: 30, engagements: 5000, clicks: 2000, reach: 50000, impressions: 100000 }];
   }
 }
@@ -191,35 +210,35 @@ class YouTubeHandler implements BasePlatformHandler {
     supportsAnalytics: true,
   };
 
-  async authenticate(config) {
+  async authenticate(config: AuthConfig): Promise<AuthResponse> {
     return { success: true, accessToken: config.accessToken };
   }
 
-  async refreshAuth(refreshToken) {
+  async refreshAuth(refreshToken: string): Promise<AuthResponse> {
     return { success: true };
   }
 
-  async revokeAuth(accessToken) {
+  async revokeAuth(accessToken: string): Promise<boolean> {
     return true;
   }
 
-  async publishPost(post, token) {
+  async publishPost(post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId: `yt_${Date.now()}` };
   }
 
-  async schedulePost(post, token) {
+  async schedulePost(post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId: `yt_${Date.now()}`, scheduledFor: post.scheduleTime };
   }
 
-  async editPost(postId, post, token) {
+  async editPost(postId: string, post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId };
   }
 
-  async deletePost(postId, token) {
+  async deletePost(postId: string, token: string): Promise<boolean> {
     return true;
   }
 
-  async getAccountInfo(token) {
+  async getAccountInfo(token: string): Promise<AccountInfo | null> {
     return {
       id: 'yt_123456',
       username: 'demochannelname',
@@ -228,7 +247,7 @@ class YouTubeHandler implements BasePlatformHandler {
     };
   }
 
-  async getAnalytics(token, startDate, endDate) {
+  async getAnalytics(token: string, startDate: Date, endDate: Date): Promise<AnalyticsData[]> {
     return [{ date: new Date(), posts: 5, engagements: 2000, clicks: 1000, reach: 20000, impressions: 50000 }];
   }
 }
@@ -249,35 +268,35 @@ class TelegramHandler implements BasePlatformHandler {
     supportsAnalytics: false,
   };
 
-  async authenticate(config) {
+  async authenticate(config: AuthConfig): Promise<AuthResponse> {
     return { success: true, accessToken: config.accessToken };
   }
 
-  async refreshAuth(refreshToken) {
+  async refreshAuth(refreshToken: string): Promise<AuthResponse> {
     return { success: true };
   }
 
-  async revokeAuth(accessToken) {
+  async revokeAuth(accessToken: string): Promise<boolean> {
     return true;
   }
 
-  async publishPost(post, token) {
+  async publishPost(post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId: `tg_${Date.now()}` };
   }
 
-  async schedulePost(post, token) {
+  async schedulePost(post: PostRequest, token: string): Promise<PostResponse> {
     return { success: false, error: 'Scheduling not supported' };
   }
 
-  async editPost(postId, post, token) {
+  async editPost(postId: string, post: PostRequest, token: string): Promise<PostResponse> {
     return { success: true, postId };
   }
 
-  async deletePost(postId, token) {
+  async deletePost(postId: string, token: string): Promise<boolean> {
     return true;
   }
 
-  async getAccountInfo(token) {
+  async getAccountInfo(token: string): Promise<AccountInfo | null> {
     return {
       id: 'tg_123456',
       username: 'demo_channel',
@@ -285,7 +304,7 @@ class TelegramHandler implements BasePlatformHandler {
     };
   }
 
-  async getAnalytics(token, startDate, endDate) {
+  async getAnalytics(token: string, startDate: Date, endDate: Date): Promise<AnalyticsData[]> {
     return [];
   }
 }
