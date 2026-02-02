@@ -262,7 +262,5 @@ class Database {
 // Export singleton instance
 export const db = new Database();
 
-// Seed demo data on initialization
-if (typeof window !== 'undefined') {
-  db.seedDemoData();
-}
+// Seed demo data on initialization (always seed for consistent behavior)
+db.seedDemoData();

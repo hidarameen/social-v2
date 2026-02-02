@@ -23,9 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { db, type PlatformAccount } from '@/lib/db';
-import { platformConfigs, type PlatformId } from '@/lib/platforms/handlers';
+import { db, type PlatformAccount, type User } from '@/lib/db/index';
+import { platformConfigs } from '@/lib/platforms/handlers';
+import { type PlatformId } from '@/lib/platforms/types';
 import { Plus, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
+
+function getFirstUser(): User | undefined {
+  const users = Array.from((db as any).users.values()) as User[];
+  return users[0];
+}
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
@@ -38,8 +44,7 @@ export default function AccountsPage() {
   });
 
   useEffect(() => {
-    const users = Array.from((db as any).users.values());
-    const user = users[0];
+    const user = getFirstUser();
     if (user) {
       setAccounts(db.getUserAccounts(user.id));
     }
@@ -53,8 +58,7 @@ export default function AccountsPage() {
       return;
     }
 
-    const users = Array.from((db as any).users.values());
-    const user = users[0];
+    const user = getFirstUser();
 
     if (user) {
       db.createAccount({
@@ -235,20 +239,10 @@ export default function AccountsPage() {
               <p className="text-muted-foreground mb-4">
                 No accounts connected yet. Add your first account to get started.
               </p>
-              <Dialog open={open} onOpenChange={setOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus size={18} className="mr-2" />
-                    Connect First Account
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Account</DialogTitle>
-                  </DialogHeader>
-                  {/* Form content same as above */}
-                </DialogContent>
-              </Dialog>
+              <Button onClick={() => setOpen(true)}>
+                <Plus size={18} className="mr-2" />
+                Connect First Account
+              </Button>
             </CardContent>
           </Card>
         ) : (
