@@ -242,6 +242,18 @@ class Database {
       accountUsername: 'demo_page',
       accountId: 'fb_123456',
       accessToken: 'fb_token_demo',
+      credentials: { pageId: 'fb_123456' },
+      isActive: true,
+    });
+
+    this.createAccount({
+      userId: demoUser.id,
+      platformId: 'telegram',
+      accountName: 'News Channel',
+      accountUsername: '@news_demo',
+      accountId: '@news_demo',
+      accessToken: 'tg_bot_token_demo',
+      credentials: { chatId: '@news_demo' },
       isActive: true,
     });
 

@@ -42,14 +42,12 @@ export default function AccountsPage() {
     accountName: '',
     accountUsername: '',
     accessToken: '',
+    apiKey: '',
+    apiSecret: '',
+    pageId: '',
+    chatId: '', // For Telegram
+    channelId: '', // For YouTube
   });
-
-  useEffect(() => {
-    const user = getFirstUser();
-    if (user) {
-      setAccounts(db.getUserAccounts(user.id));
-    }
-  }, []);
 
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +57,7 @@ export default function AccountsPage() {
       return;
     }
 
-    if (authMethod === 'manual' && !formData.accessToken) {
+    if (authMethod === 'manual' && !formData.accessToken && selectedPlatform !== 'telegram' && selectedPlatform !== 'twitter') {
       alert('Please enter the access token');
       return;
     }
@@ -67,13 +65,24 @@ export default function AccountsPage() {
     const user = getFirstUser();
 
     if (user) {
+      const credentials: any = {};
+      if (authMethod === 'manual') {
+        credentials.accessToken = formData.accessToken;
+        credentials.apiKey = formData.apiKey;
+        credentials.apiSecret = formData.apiSecret;
+        credentials.pageId = formData.pageId;
+        credentials.chatId = formData.chatId;
+        credentials.channelId = formData.channelId;
+      }
+
       db.createAccount({
         userId: user.id,
         platformId: selectedPlatform,
         accountName: formData.accountName,
         accountUsername: formData.accountUsername,
-        accountId: `${selectedPlatform}_${Date.now()}`,
+        accountId: formData.accountUsername || `${selectedPlatform}_${Date.now()}`,
         accessToken: authMethod === 'manual' ? formData.accessToken : `oauth_${Date.now()}`,
+        credentials,
         isActive: true,
       });
 
@@ -81,6 +90,11 @@ export default function AccountsPage() {
         accountName: '',
         accountUsername: '',
         accessToken: '',
+        apiKey: '',
+        apiSecret: '',
+        pageId: '',
+        chatId: '',
+        channelId: '',
       });
       setSelectedPlatform('');
       setAuthMethod('oauth');
@@ -235,24 +249,91 @@ export default function AccountsPage() {
                 </div>
 
                 {authMethod === 'manual' && (
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Access Token / API Key *
-                    </label>
-                    <Input
-                      type="password"
-                      placeholder="Paste your access token here"
-                      value={formData.accessToken}
-                      onChange={(e) =>
-                        setFormData(prev => ({
-                          ...prev,
-                          accessToken: e.target.value,
-                        }))
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Your token is encrypted and stored securely
-                    </p>
+                  <div className="space-y-4">
+                    {selectedPlatform === 'facebook' && (
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Page ID *
+                        </label>
+                        <Input
+                          placeholder="Enter your Facebook Page ID"
+                          value={formData.pageId}
+                          onChange={(e) => setFormData(prev => ({ ...prev, pageId: e.target.value }))}
+                        />
+                      </div>
+                    )}
+
+                    {selectedPlatform === 'twitter' && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            API Key *
+                          </label>
+                          <Input
+                            placeholder="Twitter API Key"
+                            value={formData.apiKey}
+                            onChange={(e) => setFormData(prev => ({ ...prev, apiKey: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            API Secret *
+                          </label>
+                          <Input
+                            type="password"
+                            placeholder="Twitter API Secret"
+                            value={formData.apiSecret}
+                            onChange={(e) => setFormData(prev => ({ ...prev, apiSecret: e.target.value }))}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {selectedPlatform === 'telegram' && (
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Chat ID / Channel Username *
+                        </label>
+                        <Input
+                          placeholder="e.g., @mychannel or -100123456"
+                          value={formData.chatId}
+                          onChange={(e) => setFormData(prev => ({ ...prev, chatId: e.target.value }))}
+                        />
+                      </div>
+                    )}
+
+                    {selectedPlatform === 'youtube' && (
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Channel ID *
+                        </label>
+                        <Input
+                          placeholder="Your YouTube Channel ID"
+                          value={formData.channelId}
+                          onChange={(e) => setFormData(prev => ({ ...prev, channelId: e.target.value }))}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        {selectedPlatform === 'telegram' ? 'Bot Token *' : 'Access Token *'}
+                      </label>
+                      <Input
+                        type="password"
+                        placeholder={selectedPlatform === 'telegram' ? "Enter Bot Father token" : "Paste your access token here"}
+                        value={formData.accessToken}
+                        onChange={(e) =>
+                          setFormData(prev => ({
+                            ...prev,
+                            accessToken: e.target.value,
+                          }))
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Your credentials are encrypted and stored securely
+                      </p>
+                    </div>
                   </div>
                 )}
 
