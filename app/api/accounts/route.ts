@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
     const schema = z.object({
       platformId: z.string().min(1),
-      accountName: z.string().min(1),
+      accountName: z.string().min(1).optional(),
       accountUsername: z.string().optional(),
       accountId: z.string().optional(),
       accessToken: z.string().optional(),
@@ -83,6 +83,14 @@ export async function POST(request: NextRequest) {
     }
     const safe = parsed.data
 
+    if (safe.platformId !== 'telegram' && !safe.accountName) {
+      return NextResponse.json({ success: false, error: 'Account name is required' }, { status: 400 })
+    }
+
+    if (safe.platformId === 'telegram' && !safe.accessToken) {
+      return NextResponse.json({ success: false, error: 'Telegram bot token is required' }, { status: 400 })
+    }
+
     const existing = (await db.getUserAccounts(user.id)).find(
       a => a.platformId === safe.platformId && a.accountId === safe.accountId
     )
@@ -91,14 +99,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, account: existing }, { status: 200 })
     }
 
+    let accountName = safe.accountName ?? '';
+    let accountUsername = safe.accountUsername ?? safe.accountName ?? '';
+    let accountId = safe.accountId ?? `${safe.platformId}_${Date.now()}`;
+
+    if (safe.platformId === 'telegram' && safe.accessToken) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${safe.accessToken}/getMe`);
+        const data = await res.json();
+        if (!res.ok || !data?.ok || !data?.result) {
+          return NextResponse.json({ success: false, error: 'Invalid Telegram bot token' }, { status: 400 })
+        }
+        const bot = data.result;
+        accountName = bot.first_name || 'Telegram Bot';
+        accountUsername = bot.username || bot.first_name || 'telegram_bot';
+        accountId = String(bot.id || accountId);
+        const webhookSecret = randomUUID();
+        const baseUrl = (process.env.APP_URL || request.nextUrl.origin).replace(/\/+$/, '');
+        const webhookUrl = `${baseUrl}/api/telegram/webhook/${safe.accessToken}`;
+
+        const webhookRes = await fetch(`https://api.telegram.org/bot${safe.accessToken}/setWebhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: webhookUrl,
+            secret_token: webhookSecret,
+          }),
+        });
+
+        const webhookData = await webhookRes.json().catch(() => null);
+        if (!webhookRes.ok || !webhookData?.ok) {
+          return NextResponse.json(
+            { success: false, error: 'Failed to register Telegram webhook' },
+            { status: 400 }
+          );
+        }
+
+        safe.credentials = {
+          ...(safe.credentials ?? {}),
+          webhookSecret,
+          chatId: (safe.credentials as any)?.chatId,
+        };
+      } catch (error) {
+        return NextResponse.json({ success: false, error: 'Failed to verify Telegram bot token' }, { status: 400 })
+      }
+    }
+
     // Create account
     const account = await db.createAccount({
       id: randomUUID(),
       userId: user.id,
       platformId: safe.platformId,
-      accountName: safe.accountName,
-      accountUsername: safe.accountUsername ?? safe.accountName,
-      accountId: safe.accountId ?? `${safe.platformId}_${Date.now()}`,
+      accountName,
+      accountUsername,
+      accountId,
       accessToken: safe.accessToken ?? 'manual',
       refreshToken: safe.refreshToken,
       credentials: safe.credentials ?? {},

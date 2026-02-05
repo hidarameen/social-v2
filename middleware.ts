@@ -8,6 +8,9 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith('/api/auth')) return NextResponse.next();
+  if (pathname.startsWith('/api/oauth')) return NextResponse.next();
+  if (pathname.startsWith('/api/twitter/webhook')) return NextResponse.next();
+  if (pathname.startsWith('/api/telegram/webhook')) return NextResponse.next();
   if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
   if (pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/public')) {
     return NextResponse.next();
@@ -24,5 +27,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api/auth|_next|static|public|favicon.ico).*)'],
+  matcher: ['/((?!api/auth|api/oauth|api/telegram/webhook|api/twitter/webhook|_next|static|public|favicon.ico).*)'],
 };

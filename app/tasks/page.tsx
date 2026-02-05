@@ -87,6 +87,7 @@ export default function TasksPage() {
         })
         .catch(error => {
           console.error('[v0] handleDelete: Error deleting task:', error);
+          alert(error instanceof Error ? error.message : 'Failed to delete task');
         });
     }
   };
@@ -200,111 +201,113 @@ export default function TasksPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredTasks.map((task) => (
-              <Card key={task.id} className="hover:border-primary/50 transition-colors">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-foreground">
-                          {task.name}
-                        </h3>
-                        <span
-                          className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                            task.status === 'active'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-                          }`}
-                        >
-                          {task.status}
-                        </span>
-                      </div>
+          <>
+            <div className="grid grid-cols-1 gap-4">
+              {filteredTasks.map((task) => (
+                <Card key={task.id} className="hover:border-primary/50 transition-colors">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="text-lg font-semibold text-foreground">
+                            {task.name}
+                          </h3>
+                          <span
+                            className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+                              task.status === 'active'
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                            }`}
+                          >
+                            {task.status}
+                          </span>
+                        </div>
 
-                      <p className="text-muted-foreground mb-3">
-                        {task.description}
-                      </p>
+                        <p className="text-muted-foreground mb-3">
+                          {task.description}
+                        </p>
 
-                      <div className="flex flex-wrap gap-4 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Source:</p>
-                          <p className="font-medium text-foreground">
-                            {task.sourceAccounts.length} account(s)
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Target:</p>
-                          <p className="font-medium text-foreground">
-                            {task.targetAccounts.length} account(s)
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Type:</p>
-                          <p className="font-medium text-foreground">
-                            {task.executionType}
-                          </p>
-                        </div>
-                        {task.lastExecuted && (
+                        <div className="flex flex-wrap gap-4 text-sm">
                           <div>
-                            <p className="text-muted-foreground">Last run:</p>
+                            <p className="text-muted-foreground">Source:</p>
                             <p className="font-medium text-foreground">
-                              {new Date(task.lastExecuted).toLocaleDateString()}
+                              {task.sourceAccounts.length} account(s)
                             </p>
                           </div>
-                        )}
+                          <div>
+                            <p className="text-muted-foreground">Target:</p>
+                            <p className="font-medium text-foreground">
+                              {task.targetAccounts.length} account(s)
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Type:</p>
+                            <p className="font-medium text-foreground">
+                              {task.executionType}
+                            </p>
+                          </div>
+                          {task.lastExecuted && (
+                            <div>
+                              <p className="text-muted-foreground">Last run:</p>
+                              <p className="font-medium text-foreground">
+                                {new Date(task.lastExecuted).toLocaleDateString()}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleToggleStatus(task)}
+                        >
+                          {task.status === 'active' ? (
+                            <Pause size={18} />
+                          ) : (
+                            <Play size={18} />
+                          )}
+                        </Button>
+
+                        <Link href={`/tasks/${task.id}`}>
+                          <Button variant="outline" size="icon">
+                            <Edit2 size={18} />
+                          </Button>
+                        </Link>
+
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleDelete(task.id)}
+                          className="text-destructive"
+                        >
+                          <Trash2 size={18} />
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          asChild
+                        >
+                          <Link href={`/tasks/${task.id}`}>
+                            <ExternalLink size={18} />
+                          </Link>
+                        </Button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 ml-4">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleToggleStatus(task)}
-                      >
-                        {task.status === 'active' ? (
-                          <Pause size={18} />
-                        ) : (
-                          <Play size={18} />
-                        )}
-                      </Button>
-
-                      <Link href={`/tasks/${task.id}`}>
-                        <Button variant="outline" size="icon">
-                          <Edit2 size={18} />
-                        </Button>
-                      </Link>
-
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleDelete(task.id)}
-                        className="text-destructive"
-                      >
-                        <Trash2 size={18} />
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        asChild
-                      >
-                        <Link href={`/tasks/${task.id}`}>
-                          <ExternalLink size={18} />
-                        </Link>
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {hasMore && (
-            <div className="mt-6 flex justify-center">
-              <Button variant="outline" onClick={handleLoadMore}>
-                Load More
-              </Button>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-          )}
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <Button variant="outline" onClick={handleLoadMore}>
+                  Load More
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>

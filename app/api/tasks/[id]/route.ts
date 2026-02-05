@@ -3,9 +3,13 @@ import { db, type Task } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
 
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const idCheck = z.string().min(1).safeParse(params.id);
+    const { id } = await params;
+    const idCheck = z.string().min(1).safeParse(id);
     if (!idCheck.success) {
       return NextResponse.json({ success: false, error: 'Invalid task id' }, { status: 400 });
     }
@@ -13,7 +17,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const task = await db.getTask(params.id);
+    const task = await db.getTask(id);
     if (!task || task.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
     }
@@ -24,9 +28,13 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const idCheck = z.string().min(1).safeParse(params.id);
+    const { id } = await params;
+    const idCheck = z.string().min(1).safeParse(id);
     if (!idCheck.success) {
       return NextResponse.json({ success: false, error: 'Invalid task id' }, { status: 400 });
     }
@@ -57,11 +65,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ success: false, error: 'Invalid input' }, { status: 400 });
     }
     const body = parsed.data as Partial<Task>;
-    const current = await db.getTask(params.id);
+    const current = await db.getTask(id);
     if (!current || current.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
     }
-    const updated = await db.updateTask(params.id, {
+    const updated = await db.updateTask(id, {
       ...body,
       scheduleTime: body.scheduleTime ? new Date(body.scheduleTime) : body.scheduleTime,
       lastExecuted: body.lastExecuted ? new Date(body.lastExecuted) : body.lastExecuted,
@@ -76,9 +84,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const idCheck = z.string().min(1).safeParse(params.id);
+    const { id } = await params;
+    const idCheck = z.string().min(1).safeParse(id);
     if (!idCheck.success) {
       return NextResponse.json({ success: false, error: 'Invalid task id' }, { status: 400 });
     }
@@ -86,11 +98,11 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const current = await db.getTask(params.id);
+    const current = await db.getTask(id);
     if (!current || current.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
     }
-    const deleted = await db.deleteTask(params.id);
+    const deleted = await db.deleteTask(id);
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
     }

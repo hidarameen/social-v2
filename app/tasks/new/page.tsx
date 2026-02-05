@@ -23,6 +23,7 @@ import { useRouter } from 'next/navigation';
 
 export default function CreateTaskPage() {
   const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -31,6 +32,14 @@ export default function CreateTaskPage() {
     executionType: 'immediate' as const,
     scheduleTime: '',
     recurringPattern: 'daily' as const,
+    template: '',
+    includeMedia: true,
+    twitterSourceType: 'account' as 'account' | 'username',
+    twitterUsername: '',
+    excludeReplies: false,
+    excludeRetweets: false,
+    excludeQuotes: false,
+    originalOnly: false,
   });
 
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
@@ -61,19 +70,29 @@ export default function CreateTaskPage() {
   const targetPlatformAccounts = accounts.filter(
     a => a.platformId === selectedTargetPlatform
   );
+  const selectedSourceTwitter = accounts
+    .filter(a => formData.sourceAccounts.includes(a.id))
+    .some(a => a.platformId === 'twitter');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('[v0] handleSubmit: Form submitted');
     console.log('[v0] formData:', formData);
+
+    if (isSubmitting) return;
 
     if (!formData.name || formData.sourceAccounts.length === 0 || formData.targetAccounts.length === 0) {
       console.warn('[v0] handleSubmit: Validation failed - missing required fields');
       alert('Please fill in all required fields');
       return;
     }
+    if (formData.twitterSourceType === 'username' && !formData.twitterUsername.trim()) {
+      alert('Please enter a Twitter username for the source');
+      return;
+    }
 
     try {
+      setIsSubmitting(true);
       const res = await fetch(`/api/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -87,6 +106,18 @@ export default function CreateTaskPage() {
           executionType: formData.executionType,
           scheduleTime: formData.scheduleTime ? new Date(formData.scheduleTime) : undefined,
           recurringPattern: formData.recurringPattern,
+          transformations: {
+            template: formData.template || undefined,
+            includeMedia: formData.includeMedia,
+          },
+          filters: {
+            twitterSourceType: formData.twitterSourceType,
+            twitterUsername: formData.twitterUsername.trim() || undefined,
+            excludeReplies: formData.excludeReplies,
+            excludeRetweets: formData.excludeRetweets,
+            excludeQuotes: formData.excludeQuotes,
+            originalOnly: formData.originalOnly,
+          },
         }),
       });
       const data = await res.json();
@@ -94,6 +125,9 @@ export default function CreateTaskPage() {
       router.push('/tasks');
     } catch (error) {
       console.error('[v0] handleSubmit: Error creating task:', error);
+      alert(error instanceof Error ? error.message : 'Failed to create task');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -352,11 +386,133 @@ export default function CreateTaskPage() {
             </CardContent>
           </Card>
 
+          {selectedSourceTwitter && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Twitter Source</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Source Type
+                  </label>
+                  <Select
+                    value={formData.twitterSourceType}
+                    onValueChange={(value: any) =>
+                      setFormData(prev => ({ ...prev, twitterSourceType: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="account">My connected account</SelectItem>
+                      <SelectItem value="username">Another user by username</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {formData.twitterSourceType === 'username' && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Twitter Username
+                    </label>
+                    <Input
+                      placeholder="e.g., jack"
+                      value={formData.twitterUsername}
+                      onChange={(e) =>
+                        setFormData(prev => ({ ...prev, twitterUsername: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Filters
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.originalOnly}
+                      onChange={(e) =>
+                        setFormData(prev => ({ ...prev, originalOnly: e.target.checked }))
+                      }
+                    />
+                    Original only (exclude replies/retweets/quotes)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.excludeReplies}
+                      onChange={(e) =>
+                        setFormData(prev => ({ ...prev, excludeReplies: e.target.checked }))
+                      }
+                    />
+                    Exclude replies
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.excludeRetweets}
+                      onChange={(e) =>
+                        setFormData(prev => ({ ...prev, excludeRetweets: e.target.checked }))
+                      }
+                    />
+                    Exclude retweets
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.excludeQuotes}
+                      onChange={(e) =>
+                        setFormData(prev => ({ ...prev, excludeQuotes: e.target.checked }))
+                      }
+                    />
+                    Exclude quote tweets
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Twitter Template */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Twitter Template</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Message Template
+                </label>
+                <Textarea
+                  placeholder="%name% (@%username%)&#10;%date%&#10;%text%&#10;%link%"
+                  value={formData.template}
+                  onChange={(e) => setFormData(prev => ({ ...prev, template: e.target.value }))}
+                  rows={4}
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Available placeholders: %text%, %username%, %name%, %date%, %link%, %media%
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={formData.includeMedia}
+                  onChange={(e) => setFormData(prev => ({ ...prev, includeMedia: e.target.checked }))}
+                  className="rounded border-border"
+                />
+                <span className="text-sm">Include images/videos when available</span>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Actions */}
           <div className="flex gap-4">
-            <Button type="submit" size="lg">
+            <Button type="submit" size="lg" disabled={isSubmitting}>
               <Save size={20} className="mr-2" />
-              Create Task
+              {isSubmitting ? 'Creating...' : 'Create Task'}
             </Button>
             <Button
               type="button"

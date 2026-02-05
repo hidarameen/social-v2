@@ -5,9 +5,13 @@ import { advancedProcessingService } from '@/lib/services/advanced-processing';
 import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
 
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const idCheck = z.string().min(1).safeParse(params.id);
+    const { id } = await params;
+    const idCheck = z.string().min(1).safeParse(id);
     if (!idCheck.success) {
       return NextResponse.json({ success: false, error: 'Invalid task id' }, { status: 400 });
     }
@@ -15,7 +19,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const task = await db.getTask(params.id);
+    const task = await db.getTask(id);
     if (!task || task.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
     }

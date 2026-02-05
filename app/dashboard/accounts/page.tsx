@@ -40,7 +40,7 @@ export default function AccountsPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>('facebook')
   const [accounts, setAccounts] = useState<any[]>([])
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [formData, setFormData] = useState({ username: '', accessToken: '' })
+  const [formData, setFormData] = useState({ username: '', accessToken: '', chatId: '' })
 
   useEffect(() => {
     let cancelled = false
@@ -72,24 +72,46 @@ export default function AccountsPage() {
 
   const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!formData.username.trim()) {
+
+    if (authMethod === 'oauth') {
+      if (selectedPlatform === 'telegram' || selectedPlatform === 'linkedin') {
+        alert('OAuth is not available for this platform. Please use manual setup.')
+        return
+      }
+      const returnTo = `${window.location.pathname}${window.location.search}`
+      window.location.href = `/api/oauth/${selectedPlatform}/start?returnTo=${encodeURIComponent(returnTo)}`
+      return
+    }
+
+    if (selectedPlatform === 'telegram') {
+      if (!formData.accessToken.trim()) {
+        alert('Please enter the Telegram bot token')
+        return
+      }
+      if (!formData.chatId.trim()) {
+        alert('Please enter the Telegram channel/chat ID')
+        return
+      }
+    } else if (!formData.username.trim()) {
       alert('Please enter username')
       return
     }
 
     try {
+      const payload: any = {
+        platformId: selectedPlatform,
+        accountName: selectedPlatform === 'telegram' ? undefined : formData.username,
+        accountUsername: selectedPlatform === 'telegram' ? undefined : formData.username,
+        accountId: selectedPlatform === 'telegram' ? undefined : `${selectedPlatform}_${Date.now()}`,
+        accessToken: formData.accessToken || 'manual',
+        credentials: selectedPlatform === 'telegram' ? { chatId: formData.chatId } : {},
+        isActive: true,
+      }
+
       const res = await fetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          platformId: selectedPlatform,
-          accountName: formData.username,
-          accountUsername: formData.username,
-          accountId: `${selectedPlatform}_${Date.now()}`,
-          accessToken: formData.accessToken || 'manual',
-          isActive: true,
-        }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to add account')
@@ -105,7 +127,7 @@ export default function AccountsPage() {
         },
         ...prev,
       ])
-      setFormData({ username: '', accessToken: '' })
+      setFormData({ username: '', accessToken: '', chatId: '' })
       setShowAddDialog(false)
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to add account')
@@ -203,27 +225,52 @@ export default function AccountsPage() {
 
                 {/* Form */}
                 <form onSubmit={handleAddAccount} className="space-y-4">
-                  <div>
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      placeholder="Your username"
-                      value={formData.username}
-                      onChange={e => setFormData({ ...formData, username: e.target.value })}
-                    />
-                  </div>
+                  {authMethod === 'manual' && selectedPlatform !== 'telegram' && (
+                    <>
+                      <div>
+                        <Label htmlFor="username">Username</Label>
+                        <Input
+                          id="username"
+                          placeholder="Your username"
+                          value={formData.username}
+                          onChange={e => setFormData({ ...formData, username: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="token">Access Token / API Key</Label>
+                        <Input
+                          id="token"
+                          placeholder="Paste your token here"
+                          type="password"
+                          value={formData.accessToken}
+                          onChange={e => setFormData({ ...formData, accessToken: e.target.value })}
+                        />
+                      </div>
+                    </>
+                  )}
 
-                  {authMethod === 'manual' && (
-                    <div>
-                      <Label htmlFor="token">Access Token / API Key</Label>
-                      <Input
-                        id="token"
-                        placeholder="Paste your token here"
-                        type="password"
-                        value={formData.accessToken}
-                        onChange={e => setFormData({ ...formData, accessToken: e.target.value })}
-                      />
-                    </div>
+                  {authMethod === 'manual' && selectedPlatform === 'telegram' && (
+                    <>
+                      <div>
+                        <Label htmlFor="token">Telegram Bot Token</Label>
+                        <Input
+                          id="token"
+                          placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+                          type="password"
+                          value={formData.accessToken}
+                          onChange={e => setFormData({ ...formData, accessToken: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="chatId">Channel / Chat ID</Label>
+                        <Input
+                          id="chatId"
+                          placeholder="-1001234567890"
+                          value={formData.chatId}
+                          onChange={e => setFormData({ ...formData, chatId: e.target.value })}
+                        />
+                      </div>
+                    </>
                   )}
 
                   <div className="flex gap-3 justify-end">

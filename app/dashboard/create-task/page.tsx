@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,105 +11,165 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import {
-  ArrowRight,
-  Plus,
-  Trash2,
-  Facebook,
-  Instagram,
-  Twitter,
-  Music,
-  Play,
-  MessageCircle,
-  Linkedin,
-} from 'lucide-react'
+import type { PlatformAccount } from '@/lib/db'
+import { ArrowRight, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 const platforms = [
-  { id: 'facebook', name: 'Facebook', icon: Facebook },
-  { id: 'instagram', name: 'Instagram', icon: Instagram },
-  { id: 'twitter', name: 'Twitter', icon: Twitter },
-  { id: 'tiktok', name: 'TikTok', icon: Music },
-  { id: 'youtube', name: 'YouTube', icon: Play },
-  { id: 'telegram', name: 'Telegram', icon: MessageCircle },
-  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin },
-]
+  { id: 'facebook', name: 'Facebook' },
+  { id: 'instagram', name: 'Instagram' },
+  { id: 'twitter', name: 'Twitter' },
+  { id: 'tiktok', name: 'TikTok' },
+  { id: 'youtube', name: 'YouTube' },
+  { id: 'telegram', name: 'Telegram' },
+  { id: 'linkedin', name: 'LinkedIn' },
+] as const
 
 export default function CreateTaskPage() {
   const [taskName, setTaskName] = useState('')
   const [description, setDescription] = useState('')
-  const [sourcePlatforms, setSourcePlatforms] = useState<string[]>([])
-  const [destPlatforms, setDestPlatforms] = useState<string[]>([])
+  const [sourceAccounts, setSourceAccounts] = useState<string[]>([])
+  const [targetAccounts, setTargetAccounts] = useState<string[]>([])
   const [frequency, setFrequency] = useState('daily')
   const [addHashtags, setAddHashtags] = useState('')
   const [prependText, setPrependText] = useState('')
   const [appendText, setAppendText] = useState('')
   const [includeSource, setIncludeSource] = useState(false)
   const [isActive, setIsActive] = useState(true)
+  const [accounts, setAccounts] = useState<PlatformAccount[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [template, setTemplate] = useState('')
+  const [includeMedia, setIncludeMedia] = useState(true)
+  const [twitterSourceType, setTwitterSourceType] = useState<'account' | 'username'>('account')
+  const [twitterUsername, setTwitterUsername] = useState('')
+  const [excludeReplies, setExcludeReplies] = useState(false)
+  const [excludeRetweets, setExcludeRetweets] = useState(false)
+  const [excludeQuotes, setExcludeQuotes] = useState(false)
+  const [originalOnly, setOriginalOnly] = useState(false)
 
-  const handleAddSource = (platformId: string) => {
-    setSourcePlatforms(prev =>
-      prev.includes(platformId) ? prev.filter(p => p !== platformId) : [...prev, platformId]
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch('/api/accounts')
+        const data = await res.json()
+        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load accounts')
+        if (!cancelled) setAccounts(data.accounts || [])
+      } catch (error) {
+        console.error('[CreateTaskPage] Failed to load accounts:', error)
+        toast.error('Failed to load accounts')
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleToggleSource = (accountId: string) => {
+    setSourceAccounts(prev =>
+      prev.includes(accountId) ? prev.filter(id => id !== accountId) : [...prev, accountId]
     )
   }
 
-  const handleAddDest = (platformId: string) => {
-    setDestPlatforms(prev =>
-      prev.includes(platformId) ? prev.filter(p => p !== platformId) : [...prev, platformId]
+  const handleToggleTarget = (accountId: string) => {
+    setTargetAccounts(prev =>
+      prev.includes(accountId) ? prev.filter(id => id !== accountId) : [...prev, accountId]
     )
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (isSubmitting) return
 
     if (!taskName.trim()) {
       toast.error('Task name is required')
       return
     }
 
-    if (sourcePlatforms.length === 0) {
-      toast.error('Select at least one source platform')
+    if (sourceAccounts.length === 0) {
+      toast.error('Select at least one source account')
       return
     }
 
-    if (destPlatforms.length === 0) {
-      toast.error('Select at least one destination platform')
+    if (targetAccounts.length === 0) {
+      toast.error('Select at least one destination account')
+      return
+    }
+    if (twitterSourceType === 'username' && !twitterUsername.trim()) {
+      toast.error('Please enter a Twitter username for the source')
       return
     }
 
-    // In production, save to database
-    const taskData = {
-      id: crypto.randomUUID(),
-      name: taskName,
-      description,
-      sourcePlatforms,
-      destPlatforms,
-      frequency,
-      transformations: {
-        addHashtags: addHashtags.split('\n').filter(h => h.trim()),
-        prependText,
-        appendText,
-        includeSource,
-      },
-      isActive,
-      createdAt: new Date().toISOString(),
-    }
+    const recurringPattern =
+      frequency === 'daily' || frequency === 'weekly' || frequency === 'monthly'
+        ? frequency
+        : frequency === 'hourly'
+          ? 'custom'
+          : undefined
+    const executionType = frequency === 'once' ? 'immediate' : 'recurring'
 
-    console.log('[v0] New task created:', taskData)
-    toast.success('Automation task created successfully!')
-    
-    // Reset form
-    setTaskName('')
-    setDescription('')
-    setSourcePlatforms([])
-    setDestPlatforms([])
-    setAddHashtags('')
-    setPrependText('')
-    setAppendText('')
-    setIncludeSource(false)
+    try {
+      setIsSubmitting(true)
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: taskName,
+          description,
+          sourceAccounts,
+          targetAccounts,
+          contentType: 'text',
+          status: isActive ? 'active' : 'paused',
+          executionType,
+          recurringPattern,
+          transformations: {
+            addHashtags: addHashtags.split('\n').filter(h => h.trim()),
+            prependText,
+            appendText,
+            includeSource,
+            template: template || undefined,
+            includeMedia,
+          },
+          filters: {
+            twitterSourceType,
+            twitterUsername: twitterUsername.trim() || undefined,
+            excludeReplies,
+            excludeRetweets,
+            excludeQuotes,
+            originalOnly,
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create task')
+      toast.success(data?.duplicate ? 'This task already exists' : 'Automation task created successfully!')
+      setTaskName('')
+      setDescription('')
+      setSourceAccounts([])
+      setTargetAccounts([])
+      setAddHashtags('')
+      setPrependText('')
+      setAppendText('')
+      setIncludeSource(false)
+      setTemplate('')
+      setIncludeMedia(true)
+      setTwitterSourceType('account')
+      setTwitterUsername('')
+      setExcludeReplies(false)
+      setExcludeRetweets(false)
+      setExcludeQuotes(false)
+      setOriginalOnly(false)
+      setFrequency('daily')
+      setIsActive(true)
+    } catch (error) {
+      console.error('[CreateTaskPage] Failed to create task:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to create task')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -159,36 +219,47 @@ export default function CreateTaskPage() {
             </CardContent>
           </Card>
 
-          {/* Platform Selection */}
+          {/* Account Selection */}
           <Card className="border-border/40">
             <CardHeader>
-              <CardTitle>Platform Configuration</CardTitle>
-              <CardDescription>Select source and destination platforms</CardDescription>
+              <CardTitle>Account Configuration</CardTitle>
+              <CardDescription>Select source and destination accounts</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Source Platforms */}
+              {/* Source Accounts */}
               <div>
-                <Label className="text-base font-semibold mb-3 block">Source Platform(s) *</Label>
-                <p className="text-sm text-muted-foreground mb-3">Posts from these platforms will be forwarded</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Label className="text-base font-semibold mb-3 block">Source Account(s) *</Label>
+                <p className="text-sm text-muted-foreground mb-3">Posts from these accounts will be forwarded</p>
+                <div className="space-y-3">
                   {platforms.map(platform => {
-                    const Icon = platform.icon
-                    const isSelected = sourcePlatforms.includes(platform.id)
+                    const platformAccounts = accounts.filter(a => a.platformId === platform.id)
+                    if (platformAccounts.length === 0) return null
                     return (
-                      <button
-                        key={platform.id}
-                        type="button"
-                        onClick={() => handleAddSource(platform.id)}
-                        className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
-                          isSelected
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border/40 hover:border-border/60'
-                        }`}
-                      >
-                        <Icon className="w-6 h-6" />
-                        <span className="text-xs font-medium text-center">{platform.name}</span>
-                        {isSelected && <Badge className="mt-1">Selected</Badge>}
-                      </button>
+                      <div key={`source-${platform.id}`} className="space-y-2">
+                        <div className="text-sm font-medium">{platform.name}</div>
+                        <div className="space-y-2">
+                          {platformAccounts.map(account => (
+                            <label
+                              key={account.id}
+                              className="flex items-center gap-3 rounded-lg border border-border/40 p-3 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={sourceAccounts.includes(account.id)}
+                                onChange={() => handleToggleSource(account.id)}
+                                className="rounded border-border"
+                              />
+                              <span className="text-sm">
+                                <span className="font-medium">{account.accountName || 'Account'}</span>
+                                {account.accountUsername ? (
+                                  <span className="text-muted-foreground"> @{account.accountUsername}</span>
+                                ) : null}
+                              </span>
+                              {sourceAccounts.includes(account.id) && <Badge className="ml-auto">Selected</Badge>}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     )
                   })}
                 </div>
@@ -199,29 +270,40 @@ export default function CreateTaskPage() {
                 <ArrowRight className="w-6 h-6 text-primary/50 rotate-90" />
               </div>
 
-              {/* Destination Platforms */}
+              {/* Destination Accounts */}
               <div>
-                <Label className="text-base font-semibold mb-3 block">Destination Platform(s) *</Label>
-                <p className="text-sm text-muted-foreground mb-3">Posts will be sent to these platforms</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Label className="text-base font-semibold mb-3 block">Destination Account(s) *</Label>
+                <p className="text-sm text-muted-foreground mb-3">Posts will be sent to these accounts</p>
+                <div className="space-y-3">
                   {platforms.map(platform => {
-                    const Icon = platform.icon
-                    const isSelected = destPlatforms.includes(platform.id)
+                    const platformAccounts = accounts.filter(a => a.platformId === platform.id)
+                    if (platformAccounts.length === 0) return null
                     return (
-                      <button
-                        key={platform.id}
-                        type="button"
-                        onClick={() => handleAddDest(platform.id)}
-                        className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
-                          isSelected
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border/40 hover:border-border/60'
-                        }`}
-                      >
-                        <Icon className="w-6 h-6" />
-                        <span className="text-xs font-medium text-center">{platform.name}</span>
-                        {isSelected && <Badge className="mt-1">Selected</Badge>}
-                      </button>
+                      <div key={`target-${platform.id}`} className="space-y-2">
+                        <div className="text-sm font-medium">{platform.name}</div>
+                        <div className="space-y-2">
+                          {platformAccounts.map(account => (
+                            <label
+                              key={account.id}
+                              className="flex items-center gap-3 rounded-lg border border-border/40 p-3 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={targetAccounts.includes(account.id)}
+                                onChange={() => handleToggleTarget(account.id)}
+                                className="rounded border-border"
+                              />
+                              <span className="text-sm">
+                                <span className="font-medium">{account.accountName || 'Account'}</span>
+                                {account.accountUsername ? (
+                                  <span className="text-muted-foreground"> @{account.accountUsername}</span>
+                                ) : null}
+                              </span>
+                              {targetAccounts.includes(account.id) && <Badge className="ml-auto">Selected</Badge>}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     )
                   })}
                 </div>
@@ -279,6 +361,108 @@ export default function CreateTaskPage() {
             </CardContent>
           </Card>
 
+          {/* Twitter Template */}
+          <Card className="border-border/40">
+            <CardHeader>
+              <CardTitle>Twitter Template</CardTitle>
+              <CardDescription>Format tweets when the source is Twitter</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="twitterTemplate">Message Template</Label>
+                <Textarea
+                  id="twitterTemplate"
+                  placeholder="%name% (@%username%)&#10;%date%&#10;%text%&#10;%link%"
+                  value={template}
+                  onChange={e => setTemplate(e.target.value)}
+                  rows={4}
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Placeholders: %text%, %username%, %name%, %date%, %link%, %media%
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={includeMedia}
+                  onChange={(e) => setIncludeMedia(e.target.checked)}
+                  className="rounded border-border"
+                />
+                <span className="text-sm">Include images/videos when available</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {sourceAccounts.some(id => accounts.find(a => a.id === id)?.platformId === 'twitter') && (
+          {/* Twitter Source */}
+          <Card className="border-border/40">
+            <CardHeader>
+              <CardTitle>Twitter Source</CardTitle>
+              <CardDescription>Choose where tweets come from</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="twitterSourceType">Source Type</Label>
+                <Select value={twitterSourceType} onValueChange={(v: any) => setTwitterSourceType(v)}>
+                  <SelectTrigger id="twitterSourceType">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="account">My connected account</SelectItem>
+                    <SelectItem value="username">Another user by username</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {twitterSourceType === 'username' && (
+                <div>
+                  <Label htmlFor="twitterUsername">Twitter Username</Label>
+                  <Input
+                    id="twitterUsername"
+                    placeholder="e.g., jack"
+                    value={twitterUsername}
+                    onChange={(e) => setTwitterUsername(e.target.value)}
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Filters</Label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={originalOnly}
+                    onChange={(e) => setOriginalOnly(e.target.checked)}
+                  />
+                  Original only (exclude replies/retweets/quotes)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={excludeReplies}
+                    onChange={(e) => setExcludeReplies(e.target.checked)}
+                  />
+                  Exclude replies
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={excludeRetweets}
+                    onChange={(e) => setExcludeRetweets(e.target.checked)}
+                  />
+                  Exclude retweets
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={excludeQuotes}
+                    onChange={(e) => setExcludeQuotes(e.target.checked)}
+                  />
+                  Exclude quote tweets
+                </label>
+              </div>
+            </CardContent>
+          </Card>
+          )}
+
           {/* Scheduling */}
           <Card className="border-border/40">
             <CardHeader>
@@ -319,9 +503,9 @@ export default function CreateTaskPage() {
                 Cancel
               </Button>
             </Link>
-            <Button type="submit" className="gap-2">
+            <Button type="submit" className="gap-2" disabled={isSubmitting}>
               <Plus className="w-4 h-4" />
-              Create Automation Task
+              {isSubmitting ? 'Creating...' : 'Create Automation Task'}
             </Button>
           </div>
         </form>

@@ -3,9 +3,13 @@ import { db } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const idCheck = z.string().min(1).safeParse(params.id);
+    const { id } = await params;
+    const idCheck = z.string().min(1).safeParse(id);
     if (!idCheck.success) {
       return NextResponse.json({ success: false, error: 'Invalid account id' }, { status: 400 });
     }
@@ -13,7 +17,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const current = await db.getAccount(params.id);
+    const current = await db.getAccount(id);
     if (!current || current.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
     }
@@ -32,7 +36,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ success: false, error: 'Invalid input' }, { status: 400 });
     }
     const body = parsed.data;
-    const updated = await db.updateAccount(params.id, body);
+    const updated = await db.updateAccount(id, body);
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
     }
@@ -43,9 +47,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const idCheck = z.string().min(1).safeParse(params.id);
+    const { id } = await params;
+    const idCheck = z.string().min(1).safeParse(id);
     if (!idCheck.success) {
       return NextResponse.json({ success: false, error: 'Invalid account id' }, { status: 400 });
     }
@@ -53,11 +61,11 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const current = await db.getAccount(params.id);
+    const current = await db.getAccount(id);
     if (!current || current.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
     }
-    const deleted = await db.deleteAccount(params.id);
+    const deleted = await db.deleteAccount(id);
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
     }

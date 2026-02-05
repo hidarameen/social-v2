@@ -43,12 +43,20 @@ export interface Task {
     excludeKeywords?: string[];
     minEngagement?: number;
     mediaOnly?: boolean;
+    twitterSourceType?: 'account' | 'username';
+    twitterUsername?: string;
+    excludeReplies?: boolean;
+    excludeRetweets?: boolean;
+    excludeQuotes?: boolean;
+    originalOnly?: boolean;
   };
   transformations?: {
     addHashtags?: string[];
     prependText?: string;
     appendText?: string;
     mediaResize?: boolean;
+    template?: string;
+    includeMedia?: boolean;
   };
   createdAt: Date;
   updatedAt: Date;

@@ -5,6 +5,15 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { Task } from '@/lib/db';
 import {
   Play,
@@ -30,6 +39,16 @@ export default function TaskDetailPage() {
   const [errorAnalysis, setErrorAnalysis] = useState<any[]>([]);
   const [failurePrediction, setFailurePrediction] = useState<any>(null);
   const [performanceReport, setPerformanceReport] = useState<any>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<any>(null);
+
+  const toLocalInputValue = (value?: Date | string | null) => {
+    if (!value) return '';
+    const date = typeof value === 'string' ? new Date(value) : value;
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +60,21 @@ export default function TaskDetailPage() {
         if (cancelled) return;
         setTask(data.task);
         setStats(data.stats);
+        setEditForm({
+          name: data.task.name,
+          description: data.task.description,
+          executionType: data.task.executionType,
+          scheduleTime: toLocalInputValue(data.task.scheduleTime),
+          recurringPattern: data.task.recurringPattern || 'daily',
+          template: data.task.transformations?.template || '',
+          includeMedia: data.task.transformations?.includeMedia !== false,
+          twitterSourceType: data.task.filters?.twitterSourceType || 'account',
+          twitterUsername: data.task.filters?.twitterUsername || '',
+          excludeReplies: Boolean(data.task.filters?.excludeReplies),
+          excludeRetweets: Boolean(data.task.filters?.excludeRetweets),
+          excludeQuotes: Boolean(data.task.filters?.excludeQuotes),
+          originalOnly: Boolean(data.task.filters?.originalOnly),
+        });
         setExecutions(
           (data.executions || []).sort(
             (a: any, b: any) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
@@ -59,6 +93,25 @@ export default function TaskDetailPage() {
       cancelled = true;
     };
   }, [taskId, router]);
+
+  useEffect(() => {
+    if (!task || isEditing) return;
+    setEditForm({
+      name: task.name,
+      description: task.description,
+      executionType: task.executionType,
+      scheduleTime: toLocalInputValue(task.scheduleTime),
+      recurringPattern: task.recurringPattern || 'daily',
+      template: task.transformations?.template || '',
+      includeMedia: task.transformations?.includeMedia !== false,
+      twitterSourceType: task.filters?.twitterSourceType || 'account',
+      twitterUsername: task.filters?.twitterUsername || '',
+      excludeReplies: Boolean(task.filters?.excludeReplies),
+      excludeRetweets: Boolean(task.filters?.excludeRetweets),
+      excludeQuotes: Boolean(task.filters?.excludeQuotes),
+      originalOnly: Boolean(task.filters?.originalOnly),
+    });
+  }, [task, isEditing]);
 
   const handleRunTask = async () => {
     if (!task) return;
@@ -114,6 +167,45 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleSaveEdits = async () => {
+    if (!editForm) return;
+    if (editForm.twitterSourceType === 'username' && !editForm.twitterUsername.trim()) {
+      alert('Please enter a Twitter username for the source');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name,
+          description: editForm.description,
+          executionType: editForm.executionType,
+          scheduleTime: editForm.scheduleTime ? new Date(editForm.scheduleTime) : undefined,
+          recurringPattern: editForm.recurringPattern,
+          transformations: {
+            template: editForm.template || undefined,
+            includeMedia: editForm.includeMedia,
+          },
+          filters: {
+            twitterSourceType: editForm.twitterSourceType,
+            twitterUsername: editForm.twitterUsername.trim() || undefined,
+            excludeReplies: editForm.excludeReplies,
+            excludeRetweets: editForm.excludeRetweets,
+            excludeQuotes: editForm.excludeQuotes,
+            originalOnly: editForm.originalOnly,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update task');
+      setTask(data.task);
+      setIsEditing(false);
+    } catch (error) {
+      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   if (!task || !stats) {
     return (
       <div className="min-h-screen bg-background">
@@ -166,7 +258,7 @@ export default function TaskDetailPage() {
               )}
             </Button>
 
-            <Button variant="outline" size="icon">
+            <Button variant="outline" size="icon" onClick={() => setIsEditing(v => !v)}>
               <Edit2 size={18} />
             </Button>
 
@@ -180,6 +272,205 @@ export default function TaskDetailPage() {
             </Button>
           </div>
         </div>
+
+        {isEditing && editForm && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Edit Task</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Task Name
+                </label>
+                <Input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((prev: any) => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Description
+                </label>
+                <Textarea
+                  value={editForm.description}
+                  onChange={(e) =>
+                    setEditForm((prev: any) => ({ ...prev, description: e.target.value }))
+                  }
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Execution Type
+                </label>
+                <Select
+                  value={editForm.executionType}
+                  onValueChange={(value: any) =>
+                    setEditForm((prev: any) => ({ ...prev, executionType: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="immediate">Immediate</SelectItem>
+                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                    <SelectItem value="recurring">Recurring</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {editForm.executionType === 'scheduled' && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Schedule Time
+                  </label>
+                  <Input
+                    type="datetime-local"
+                    value={editForm.scheduleTime}
+                    onChange={(e) =>
+                      setEditForm((prev: any) => ({ ...prev, scheduleTime: e.target.value }))
+                    }
+                  />
+                </div>
+              )}
+              {editForm.executionType === 'recurring' && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Recurrence Pattern
+                  </label>
+                  <Select
+                    value={editForm.recurringPattern}
+                    onValueChange={(value: any) =>
+                      setEditForm((prev: any) => ({ ...prev, recurringPattern: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Message Template
+                </label>
+                <Textarea
+                  value={editForm.template}
+                  onChange={(e) =>
+                    setEditForm((prev: any) => ({ ...prev, template: e.target.value }))
+                  }
+                  rows={4}
+                  placeholder="%name% (@%username%)&#10;%date%&#10;%text%&#10;%link%"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Placeholders: %text%, %username%, %name%, %date%, %link%, %media%
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editForm.includeMedia}
+                  onChange={(e) =>
+                    setEditForm((prev: any) => ({ ...prev, includeMedia: e.target.checked }))
+                  }
+                />
+                Include images/videos when available
+              </label>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Twitter Source Type
+                </label>
+                <Select
+                  value={editForm.twitterSourceType}
+                  onValueChange={(value: any) =>
+                    setEditForm((prev: any) => ({ ...prev, twitterSourceType: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="account">My connected account</SelectItem>
+                    <SelectItem value="username">Another user by username</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {editForm.twitterSourceType === 'username' && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Twitter Username
+                  </label>
+                  <Input
+                    value={editForm.twitterUsername}
+                    onChange={(e) =>
+                      setEditForm((prev: any) => ({ ...prev, twitterUsername: e.target.value }))
+                    }
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Filters
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editForm.originalOnly}
+                    onChange={(e) =>
+                      setEditForm((prev: any) => ({ ...prev, originalOnly: e.target.checked }))
+                    }
+                  />
+                  Original only (exclude replies/retweets/quotes)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editForm.excludeReplies}
+                    onChange={(e) =>
+                      setEditForm((prev: any) => ({ ...prev, excludeReplies: e.target.checked }))
+                    }
+                  />
+                  Exclude replies
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editForm.excludeRetweets}
+                    onChange={(e) =>
+                      setEditForm((prev: any) => ({ ...prev, excludeRetweets: e.target.checked }))
+                    }
+                  />
+                  Exclude retweets
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editForm.excludeQuotes}
+                    onChange={(e) =>
+                      setEditForm((prev: any) => ({ ...prev, excludeQuotes: e.target.checked }))
+                    }
+                  />
+                  Exclude quote tweets
+                </label>
+              </div>
+
+              <div className="flex gap-3">
+                <Button onClick={handleSaveEdits}>Save Changes</Button>
+                <Button variant="outline" onClick={() => setIsEditing(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Status Badge */}
         <div className="mb-8">

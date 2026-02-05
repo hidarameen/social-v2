@@ -82,6 +82,169 @@ export class TwitterClient {
   }
 
   /**
+   * Get user tweets with media (photos/videos)
+   */
+  async getTweetsWithMedia(
+    userId: string,
+    limit = 10,
+    sinceId?: string
+  ): Promise<
+    Array<{
+      id: string;
+      text: string;
+      createdAt: string;
+      referencedTweets?: Array<{ id: string; type: string }>;
+      media: Array<{ type: string; url?: string; previewImageUrl?: string }>;
+    }>
+  > {
+    try {
+      const params = new URLSearchParams({
+        max_results: String(limit),
+        'tweet.fields': 'created_at,attachments,referenced_tweets',
+        expansions: 'attachments.media_keys',
+        'media.fields': 'type,url,preview_image_url',
+      });
+      if (sinceId) params.set('since_id', sinceId);
+
+      const response = await fetch(
+        `${TWITTER_API_V2}/users/${userId}/tweets?${params.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.bearerToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Twitter API error: ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as {
+        data?: Array<{
+          id: string;
+          text: string;
+          created_at: string;
+          attachments?: { media_keys?: string[] };
+          referenced_tweets?: Array<{ id: string; type: string }>;
+        }>;
+        includes?: { media?: Array<{ media_key: string; type: string; url?: string; preview_image_url?: string }> };
+      };
+
+      const mediaByKey = new Map<string, { type: string; url?: string; previewImageUrl?: string }>();
+      for (const m of data.includes?.media || []) {
+        mediaByKey.set(m.media_key, {
+          type: m.type,
+          url: m.url,
+          previewImageUrl: m.preview_image_url,
+        });
+      }
+
+      return (data.data || []).map(tweet => {
+        const media =
+          tweet.attachments?.media_keys?.map(key => mediaByKey.get(key)).filter(Boolean) as Array<{
+            type: string;
+            url?: string;
+            previewImageUrl?: string;
+          }> || [];
+        return {
+          id: tweet.id,
+          text: tweet.text,
+          createdAt: tweet.created_at,
+          referencedTweets: tweet.referenced_tweets,
+          media,
+        };
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch tweets: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Search recent tweets by username (with media)
+   */
+  async searchRecentByUsername(
+    username: string,
+    limit = 10,
+    sinceId?: string,
+    queryExtras?: string
+  ): Promise<
+    Array<{
+      id: string;
+      text: string;
+      createdAt: string;
+      referencedTweets?: Array<{ id: string; type: string }>;
+      media: Array<{ type: string; url?: string; previewImageUrl?: string }>;
+    }>
+  > {
+    try {
+      const query = `from:${username}${queryExtras ? ` ${queryExtras}` : ''}`;
+      const params = new URLSearchParams({
+        query,
+        max_results: String(limit),
+        'tweet.fields': 'created_at,attachments,referenced_tweets',
+        expansions: 'attachments.media_keys',
+        'media.fields': 'type,url,preview_image_url',
+      });
+      if (sinceId) params.set('since_id', sinceId);
+
+      const response = await fetch(
+        `${TWITTER_API_V2}/tweets/search/recent?${params.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.bearerToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Twitter API error: ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as {
+        data?: Array<{
+          id: string;
+          text: string;
+          created_at: string;
+          attachments?: { media_keys?: string[] };
+          referenced_tweets?: Array<{ id: string; type: string }>;
+        }>;
+        includes?: { media?: Array<{ media_key: string; type: string; url?: string; preview_image_url?: string }> };
+      };
+
+      const mediaByKey = new Map<string, { type: string; url?: string; previewImageUrl?: string }>();
+      for (const m of data.includes?.media || []) {
+        mediaByKey.set(m.media_key, {
+          type: m.type,
+          url: m.url,
+          previewImageUrl: m.preview_image_url,
+        });
+      }
+
+      return (data.data || []).map(tweet => {
+        const media =
+          tweet.attachments?.media_keys?.map(key => mediaByKey.get(key)).filter(Boolean) as Array<{
+            type: string;
+            url?: string;
+            previewImageUrl?: string;
+          }> || [];
+        return {
+          id: tweet.id,
+          text: tweet.text,
+          createdAt: tweet.created_at,
+          referencedTweets: tweet.referenced_tweets,
+          media,
+        };
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to search tweets: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
    * Delete a tweet
    */
   async deleteTweet(tweetId: string): Promise<boolean> {

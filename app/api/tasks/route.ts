@@ -5,9 +5,11 @@ import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
 import { getClientKey, rateLimit } from '@/lib/rate-limit';
 import { parsePagination, parseSort } from '@/lib/validation';
+import { ensureTwitterPollingStarted } from '@/lib/services/twitter-poller';
 
 export async function GET(request: NextRequest) {
   try {
+    ensureTwitterPollingStarted();
     const user = await getAuthUser();
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -51,6 +53,7 @@ export async function POST(request: NextRequest) {
     if (!limiter.ok) {
       return NextResponse.json({ success: false, error: 'Too many requests' }, { status: 429 });
     }
+    ensureTwitterPollingStarted();
     const user = await getAuthUser();
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -74,6 +77,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid input' }, { status: 400 });
     }
     const body = parsed.data as Partial<Task>;
+
+    const normalizeIds = (ids: string[] = []) => [...ids].sort().join('|');
+    const existingTasks = await db.getUserTasks(user.id);
+    const incomingSource = normalizeIds(body.sourceAccounts ?? []);
+    const incomingTarget = normalizeIds(body.targetAccounts ?? []);
+    const duplicate = existingTasks.find(
+      t =>
+        t.name === body.name &&
+        normalizeIds(t.sourceAccounts) === incomingSource &&
+        normalizeIds(t.targetAccounts) === incomingTarget
+    );
+    if (duplicate) {
+      return NextResponse.json({ success: true, task: duplicate, duplicate: true }, { status: 200 });
+    }
 
     const task = await db.createTask({
       id: randomUUID(),
