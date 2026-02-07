@@ -5,6 +5,9 @@ import { advancedProcessingService } from '@/lib/services/advanced-processing';
 import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
 
+export const runtime = 'nodejs';
+
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

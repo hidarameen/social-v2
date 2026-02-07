@@ -1,77 +1,26 @@
+export const runtime = 'nodejs';
+
 import { db } from '@/lib/db';
-import { TwitterClient } from '@/platforms/twitter/client';
-import { TelegramClient } from '@/platforms/telegram/client';
+import { TwitterClient, refreshTwitterToken } from '@/platforms/twitter/client';
 import { taskProcessor } from '@/lib/services/task-processor';
+import {
+  TweetItem,
+  buildMessage,
+  buildTweetLink,
+  isQuote,
+  isReply,
+  isRetweet,
+  sendToTelegram,
+} from '@/lib/services/twitter-utils';
 
-type TweetItem = {
-  id: string;
-  text: string;
-  createdAt: string;
-  referencedTweets?: Array<{ id: string; type: string }>;
-  media: Array<{ type: string; url?: string; previewImageUrl?: string }>;
-};
+const DEFAULT_POLL_INTERVAL_SECONDS = 10;
+const MIN_POLL_INTERVAL_SECONDS = 5;
+const MAX_POLL_INTERVAL_SECONDS = 300;
 
-const DEFAULT_POLL_INTERVAL_SECONDS = 120;
-
-function getPollIntervalMs() {
-  const raw = process.env.TWITTER_POLL_INTERVAL_SECONDS;
-  const seconds = raw ? Number(raw) : DEFAULT_POLL_INTERVAL_SECONDS;
-  if (!Number.isFinite(seconds) || seconds < 15) return DEFAULT_POLL_INTERVAL_SECONDS * 1000;
-  return Math.floor(seconds * 1000);
-}
-
-function renderTemplate(template: string, data: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(data)) {
-    const token = `%${key}%`;
-    result = result.split(token).join(value);
-  }
-  return result;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toISOString();
-  } catch {
-    return iso;
-  }
-}
-
-function buildMessage(taskTemplate: string | undefined, tweet: TweetItem, accountInfo?: { username?: string; name?: string }) {
-  const username = accountInfo?.username || '';
-  const name = accountInfo?.name || '';
-  const link = username ? `https://twitter.com/${username}/status/${tweet.id}` : `https://twitter.com/i/web/status/${tweet.id}`;
-  const mediaUrls = tweet.media
-    .map(m => m.url || m.previewImageUrl)
-    .filter(Boolean)
-    .join('\n');
-
-  const data = {
-    text: tweet.text || '',
-    username,
-    name,
-    date: formatDate(tweet.createdAt),
-    link,
-    media: mediaUrls,
-  };
-
-  const template =
-    taskTemplate?.trim() ||
-    `%name% (@%username%)\n%date%\n%text%\n%link%`;
-
-  return renderTemplate(template, data).trim();
-}
-
-function isReply(tweet: TweetItem): boolean {
-  return Boolean(tweet.referencedTweets?.some(t => t.type === 'replied_to'));
-}
-
-function isRetweet(tweet: TweetItem): boolean {
-  return Boolean(tweet.referencedTweets?.some(t => t.type === 'retweeted'));
-}
-
-function isQuote(tweet: TweetItem): boolean {
-  return Boolean(tweet.referencedTweets?.some(t => t.type === 'quoted'));
+function clampSeconds(value: number) {
+  if (value < MIN_POLL_INTERVAL_SECONDS) return MIN_POLL_INTERVAL_SECONDS;
+  if (value > MAX_POLL_INTERVAL_SECONDS) return MAX_POLL_INTERVAL_SECONDS;
+  return value;
 }
 
 function buildQueryExtras(filters?: any) {
@@ -91,6 +40,12 @@ async function getLastProcessedTweetId(taskId: string, sourceAccountId: string):
   return match ? String((match.responseData as any).sourceTweetId) : undefined;
 }
 
+async function getLastExecutionTime(taskId: string): Promise<Date | undefined> {
+  const executions = await db.getTaskExecutions(taskId, 1);
+  const latest = executions[0];
+  return latest ? new Date(latest.executedAt) : undefined;
+}
+
 async function getLastProcessedTweetIdForUsername(taskId: string, username: string): Promise<string | undefined> {
   const executions = await db.getTaskExecutions(taskId, 50);
   const match = executions.find(
@@ -102,44 +57,7 @@ async function getLastProcessedTweetIdForUsername(taskId: string, username: stri
   return match ? String((match.responseData as any).sourceTweetId) : undefined;
 }
 
-async function sendToTelegram(
-  telegramAccountToken: string,
-  chatId: string,
-  message: string,
-  media: TweetItem['media'],
-  includeMedia: boolean
-) {
-  const client = new TelegramClient(telegramAccountToken);
-
-  if (!includeMedia || media.length === 0) {
-    await client.sendMessage(chatId, message);
-    return;
-  }
-
-  const photos = media.filter(m => m.type === 'photo' && m.url).map(m => m.url as string);
-  const videos = media.filter(m => m.type === 'video' && (m.url || m.previewImageUrl));
-
-  if (photos.length > 0) {
-    const group = photos.map((url, idx) => ({
-      type: 'photo' as const,
-      media: url,
-      caption: idx === 0 ? message : undefined,
-    }));
-    await client.sendMediaGroup(chatId, group);
-    return;
-  }
-
-  if (videos.length > 0) {
-    const first = videos[0];
-    const url = first.url || first.previewImageUrl || '';
-    if (url) {
-      await client.sendVideo(chatId, url, message);
-      return;
-    }
-  }
-
-  await client.sendMessage(chatId, message);
-}
+// sendToTelegram is now in twitter-utils
 
 export class TwitterPoller {
   private intervalId: NodeJS.Timeout | null = null;
@@ -147,15 +65,26 @@ export class TwitterPoller {
 
   start() {
     if (this.intervalId) return;
-    const interval = getPollIntervalMs();
-    this.intervalId = setInterval(() => {
-      this.tick().catch(err => console.error('[TwitterPoller] Tick failed:', err));
-    }, interval);
-    console.log(`[TwitterPoller] Started with interval ${interval}ms`);
+    const scheduleNext = async () => {
+      try {
+        await this.tick();
+      } catch (err) {
+        console.error('[TwitterPoller] Tick failed:', err);
+      } finally {
+        const nextMs = await this.computeNextIntervalMs();
+        this.intervalId = setTimeout(scheduleNext, nextMs);
+      }
+    };
+    scheduleNext().catch(err => console.error('[TwitterPoller] Start failed:', err));
+    console.log('[TwitterPoller] Started (dynamic interval)');
+  }
+
+  async runOnce() {
+    await this.tick();
   }
 
   stop() {
-    if (this.intervalId) clearInterval(this.intervalId);
+    if (this.intervalId) clearTimeout(this.intervalId);
     this.intervalId = null;
   }
 
@@ -180,6 +109,23 @@ export class TwitterPoller {
 
         const filters = task.filters || {};
         const sourceType = filters.twitterSourceType || 'account';
+        const pollIntervalSeconds = Number(filters.pollIntervalSeconds || 0);
+        const pollIntervalMinutes = Number(filters.pollIntervalMinutes || 0);
+        const intervalMs =
+          pollIntervalSeconds > 0
+            ? pollIntervalSeconds * 1000
+            : pollIntervalMinutes > 0
+              ? pollIntervalMinutes * 60 * 1000
+              : 0;
+        if (intervalMs > 0) {
+          const lastExec = await getLastExecutionTime(task.id);
+          if (lastExec) {
+            const elapsedMs = Date.now() - lastExec.getTime();
+            if (elapsedMs < intervalMs) {
+              continue;
+            }
+          }
+        }
 
         const sourcesToUse =
           sourceType === 'username' ? twitterSources.slice(0, 1) : twitterSources;
@@ -188,17 +134,41 @@ export class TwitterPoller {
           if (sourceType === 'account' && process.env.TWITTER_WEBHOOK_ENABLED === 'true') {
             continue;
           }
-          const client = new TwitterClient(source.accessToken);
           const queryExtras = buildQueryExtras(filters);
           const sinceId =
             sourceType === 'username'
               ? await getLastProcessedTweetIdForUsername(task.id, String(filters.twitterUsername || '').toLowerCase())
               : await getLastProcessedTweetId(task.id, source.id);
 
-          const tweets =
-            sourceType === 'username' && filters.twitterUsername
-              ? await client.searchRecentByUsername(filters.twitterUsername, 10, sinceId, queryExtras)
-              : await client.getTweetsWithMedia(source.accountId, 10, sinceId);
+          const fetchTweets = async (accessToken: string) => {
+            const client = new TwitterClient(accessToken);
+            if (sourceType === 'username' && filters.twitterUsername) {
+              // Using searchRecentByUsername which is supported on Pay-as-you-go
+              return client.searchRecentByUsername(filters.twitterUsername, 10, sinceId, queryExtras);
+            }
+            // User Tweets lookup is also supported on Pay-as-you-go
+            return client.getTweetsWithMedia(source.accountId, 10, sinceId);
+          };
+
+          let tweets: TweetItem[];
+          try {
+            tweets = await fetchTweets(source.accessToken);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const isUnauthorized = message.includes('401') || message.toLowerCase().includes('unauthorized');
+            if (isUnauthorized && source.refreshToken) {
+              const refreshed = await refreshTwitterToken(source.refreshToken);
+              await db.updateAccount(source.id, {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken ?? source.refreshToken,
+              });
+              source.accessToken = refreshed.accessToken;
+              if (refreshed.refreshToken) source.refreshToken = refreshed.refreshToken;
+              tweets = await fetchTweets(source.accessToken);
+            } else {
+              throw error;
+            }
+          }
 
           const sorted = [...tweets].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 
@@ -213,6 +183,11 @@ export class TwitterPoller {
 
             const message = buildMessage(task.transformations?.template, tweet, source.credentials?.accountInfo);
             const includeMedia = task.transformations?.includeMedia !== false;
+            const enableYtDlp = task.transformations?.enableYtDlp === true;
+            const link = buildTweetLink(
+              source.credentials?.accountInfo?.username || '',
+              tweet.id
+            );
 
             for (const target of telegramTargets) {
               let status: 'success' | 'failed' = 'success';
@@ -221,7 +196,15 @@ export class TwitterPoller {
               try {
                 const chatId = target.credentials?.chatId;
                 if (!chatId) throw new Error('Missing Telegram target chat ID');
-                await sendToTelegram(target.accessToken, String(chatId), message, tweet.media, includeMedia);
+                await sendToTelegram(
+                  target.accessToken,
+                  String(chatId),
+                  message,
+                  tweet.media,
+                  includeMedia,
+                  link,
+                  enableYtDlp
+                );
               } catch (error) {
                 status = 'failed';
                 errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -250,6 +233,22 @@ export class TwitterPoller {
       }
     } finally {
       this.running = false;
+    }
+  }
+
+  private async computeNextIntervalMs(): Promise<number> {
+    try {
+      const tasks = await db.getAllTasks();
+      const active = tasks.filter(t => t.status === 'active');
+      if (active.length === 0) return DEFAULT_POLL_INTERVAL_SECONDS * 1000;
+      const values = active
+        .map(t => Number(t.filters?.pollIntervalSeconds || 0))
+        .filter(v => Number.isFinite(v) && v > 0);
+      const min = values.length > 0 ? Math.min(...values) : DEFAULT_POLL_INTERVAL_SECONDS;
+      return clampSeconds(min) * 1000;
+    } catch (error) {
+      console.error('[TwitterPoller] Failed to compute interval:', error);
+      return DEFAULT_POLL_INTERVAL_SECONDS * 1000;
     }
   }
 }

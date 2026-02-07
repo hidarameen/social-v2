@@ -3,6 +3,8 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { db } from '@/lib/db';
 import { TelegramClient } from '@/platforms/telegram/client';
 
+export const runtime = 'nodejs';
+
 function computeCrcResponse(crcToken: string, secret: string) {
   const hash = createHmac('sha256', secret).update(crcToken).digest('base64');
   return `sha256=${hash}`;

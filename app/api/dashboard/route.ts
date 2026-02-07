@@ -3,6 +3,9 @@ import { db } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { parsePagination } from '@/lib/validation';
 
+export const runtime = 'nodejs';
+
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser();

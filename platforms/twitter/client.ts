@@ -34,7 +34,7 @@ export class TwitterClient {
       })
 
       if (!response.ok) {
-        throw new Error(`Twitter API error: ${response.statusText}`)
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`)
       }
 
       const data = (await response.json()) as { data: { id: string; text: string } }
@@ -61,7 +61,7 @@ export class TwitterClient {
       )
 
       if (!response.ok) {
-        throw new Error(`Twitter API error: ${response.statusText}`)
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`)
       }
 
       const data = (await response.json()) as { data: any[] }
@@ -116,7 +116,7 @@ export class TwitterClient {
       );
 
       if (!response.ok) {
-        throw new Error(`Twitter API error: ${response.statusText}`);
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`);
       }
 
       const data = (await response.json()) as {
@@ -199,7 +199,7 @@ export class TwitterClient {
       );
 
       if (!response.ok) {
-        throw new Error(`Twitter API error: ${response.statusText}`);
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`);
       }
 
       const data = (await response.json()) as {
@@ -322,7 +322,7 @@ export class TwitterClient {
       })
 
       if (!response.ok) {
-        throw new Error(`Twitter API error: ${response.statusText}`)
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`)
       }
 
       const data = (await response.json()) as { media_id_string: string }
@@ -349,7 +349,7 @@ export class TwitterClient {
       )
 
       if (!response.ok) {
-        throw new Error(`Twitter API error: ${response.statusText}`)
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`)
       }
 
       const data = (await response.json()) as { data: any }
@@ -381,6 +381,54 @@ export class TwitterClient {
       return false
     }
   }
+}
+
+/**
+ * Refresh Twitter OAuth token (OAuth 2.0)
+ */
+export async function refreshTwitterToken(refreshToken: string): Promise<{ accessToken: string; refreshToken?: string }> {
+  const clientId = process.env.TWITTER_CLIENT_ID;
+  const clientSecret = process.env.TWITTER_CLIENT_SECRET;
+  if (!clientId) {
+    throw new Error('Missing TWITTER_CLIENT_ID in environment');
+  }
+
+  const body = new URLSearchParams();
+  body.set('grant_type', 'refresh_token');
+  body.set('refresh_token', refreshToken);
+  body.set('client_id', clientId);
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+
+  if (clientSecret) {
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    headers.Authorization = `Basic ${basic}`;
+  }
+
+  const res = await fetch('https://api.x.com/2/oauth2/token', {
+    method: 'POST',
+    headers,
+    body,
+  });
+
+  const text = await res.text();
+  let data: any = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    // ignore
+  }
+
+  if (!res.ok || !data?.access_token) {
+    throw new Error(data?.error_description || data?.error || `Token refresh failed: ${text}`);
+  }
+
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+  };
 }
 
 /**

@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { TwitterClient } from '@/platforms/twitter/client';
 import { TelegramClient } from '@/platforms/telegram/client';
 
+export const runtime = 'nodejs';
+
 type TelegramUpdate = {
   update_id: number;
   message?: {

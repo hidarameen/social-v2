@@ -5,6 +5,9 @@ import { getAuthUser } from '@/lib/auth';
 import { getClientKey, rateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
+export const runtime = 'nodejs';
+
+
 export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const idCheck = z.string().min(1).safeParse(params.id);

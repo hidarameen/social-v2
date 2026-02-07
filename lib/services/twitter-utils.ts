@@ -1,4 +1,5 @@
 import { TelegramClient } from '@/platforms/telegram/client';
+import { downloadTweetVideo } from '@/lib/services/ytdlp';
 
 export type TweetItem = {
   id: string;
@@ -23,9 +24,7 @@ export function buildMessage(
 ) {
   const username = accountInfo?.username || '';
   const name = accountInfo?.name || '';
-  const link = username
-    ? `https://twitter.com/${username}/status/${tweet.id}`
-    : `https://twitter.com/i/web/status/${tweet.id}`;
+  const link = buildTweetLink(username, tweet.id);
   const mediaUrls = tweet.media
     .map(m => m.url || m.previewImageUrl)
     .filter(Boolean)
@@ -52,6 +51,12 @@ export function buildMessage(
   return result.trim();
 }
 
+export function buildTweetLink(username: string, tweetId: string) {
+  return username
+    ? `https://twitter.com/${username}/status/${tweetId}`
+    : `https://twitter.com/i/web/status/${tweetId}`;
+}
+
 export function isReply(tweet: TweetItem): boolean {
   return Boolean(tweet.referencedTweets?.some(t => t.type === 'replied_to'));
 }
@@ -69,7 +74,9 @@ export async function sendToTelegram(
   chatId: string,
   message: string,
   media: TweetItem['media'],
-  includeMedia: boolean
+  includeMedia: boolean,
+  tweetLink?: string,
+  enableYtDlp?: boolean
 ) {
   const client = new TelegramClient(telegramAccountToken);
 
@@ -79,7 +86,7 @@ export async function sendToTelegram(
   }
 
   const photos = media.filter(m => m.type === 'photo' && m.url).map(m => m.url as string);
-  const videos = media.filter(m => m.type === 'video' && (m.url || m.previewImageUrl));
+  const videos = media.filter(m => m.type === 'video' || m.type === 'animated_gif');
 
   if (photos.length > 0) {
     const group = photos.map((url, idx) => ({
@@ -92,10 +99,19 @@ export async function sendToTelegram(
   }
 
   if (videos.length > 0) {
+    if (tweetLink && enableYtDlp) {
+      try {
+        const { videoPath, thumbnailPath, duration } = await downloadTweetVideo(tweetLink);
+        await client.sendVideoFile(chatId, videoPath, message, duration, thumbnailPath);
+        return;
+      } catch (error) {
+        console.warn('[TwitterUtils] Video download failed, falling back:', error);
+      }
+    }
     const first = videos[0];
-    const url = first.url || first.previewImageUrl || '';
+    const url = first?.previewImageUrl || first?.url || '';
     if (url) {
-      await client.sendVideo(chatId, url, message);
+      await client.sendPhoto(chatId, url, message);
       return;
     }
   }

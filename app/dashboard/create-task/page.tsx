@@ -32,6 +32,8 @@ export default function CreateTaskPage() {
   const [sourceAccounts, setSourceAccounts] = useState<string[]>([])
   const [targetAccounts, setTargetAccounts] = useState<string[]>([])
   const [frequency, setFrequency] = useState('daily')
+  const [scheduleTime, setScheduleTime] = useState('')
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const [addHashtags, setAddHashtags] = useState('')
   const [prependText, setPrependText] = useState('')
   const [appendText, setAppendText] = useState('')
@@ -41,12 +43,14 @@ export default function CreateTaskPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [template, setTemplate] = useState('')
   const [includeMedia, setIncludeMedia] = useState(true)
+  const [enableYtDlp, setEnableYtDlp] = useState(false)
   const [twitterSourceType, setTwitterSourceType] = useState<'account' | 'username'>('account')
   const [twitterUsername, setTwitterUsername] = useState('')
   const [excludeReplies, setExcludeReplies] = useState(false)
   const [excludeRetweets, setExcludeRetweets] = useState(false)
   const [excludeQuotes, setExcludeQuotes] = useState(false)
   const [originalOnly, setOriginalOnly] = useState(false)
+  const [pollIntervalSeconds, setPollIntervalSeconds] = useState(60)
 
   useEffect(() => {
     let cancelled = false
@@ -109,7 +113,7 @@ export default function CreateTaskPage() {
         : frequency === 'hourly'
           ? 'custom'
           : undefined
-    const executionType = frequency === 'once' ? 'immediate' : 'recurring'
+    const executionType = frequency === 'once' ? 'scheduled' : 'recurring'
 
     try {
       setIsSubmitting(true)
@@ -125,6 +129,7 @@ export default function CreateTaskPage() {
           status: isActive ? 'active' : 'paused',
           executionType,
           recurringPattern,
+          scheduleTime: frequency === 'once' && scheduleTime ? new Date(scheduleTime) : undefined,
           transformations: {
             addHashtags: addHashtags.split('\n').filter(h => h.trim()),
             prependText,
@@ -132,6 +137,7 @@ export default function CreateTaskPage() {
             includeSource,
             template: template || undefined,
             includeMedia,
+            enableYtDlp,
           },
           filters: {
             twitterSourceType,
@@ -140,6 +146,7 @@ export default function CreateTaskPage() {
             excludeRetweets,
             excludeQuotes,
             originalOnly,
+            pollIntervalSeconds,
           },
         }),
       })
@@ -156,13 +163,16 @@ export default function CreateTaskPage() {
       setIncludeSource(false)
       setTemplate('')
       setIncludeMedia(true)
+      setEnableYtDlp(false)
       setTwitterSourceType('account')
       setTwitterUsername('')
       setExcludeReplies(false)
       setExcludeRetweets(false)
       setExcludeQuotes(false)
       setOriginalOnly(false)
+      setPollIntervalSeconds(60)
       setFrequency('daily')
+      setScheduleTime('')
       setIsActive(true)
     } catch (error) {
       console.error('[CreateTaskPage] Failed to create task:', error)
@@ -390,6 +400,15 @@ export default function CreateTaskPage() {
                 />
                 <span className="text-sm">Include images/videos when available</span>
               </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={enableYtDlp}
+                  onChange={(e) => setEnableYtDlp(e.target.checked)}
+                  className="rounded border-border"
+                />
+                <span className="text-sm">Download Twitter videos via yt-dlp</span>
+              </div>
             </CardContent>
           </Card>
 
@@ -426,6 +445,16 @@ export default function CreateTaskPage() {
               )}
               <div className="space-y-2">
                 <Label>Filters</Label>
+                <div>
+                  <Label htmlFor="pollIntervalSeconds">Poll Interval (seconds)</Label>
+                  <Input
+                    id="pollIntervalSeconds"
+                    type="number"
+                    min={10}
+                    value={pollIntervalSeconds}
+                    onChange={(e) => setPollIntervalSeconds(Math.max(10, Number(e.target.value || 10)))}
+                  />
+                </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -485,6 +514,21 @@ export default function CreateTaskPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {frequency === 'once' && (
+                <div>
+                  <Label htmlFor="scheduleTime">Schedule Time</Label>
+                  <Input
+                    id="scheduleTime"
+                    type="datetime-local"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Timezone: {timezone}
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border/40">
                 <Switch id="isActive" checked={isActive} onCheckedChange={setIsActive} />

@@ -6,10 +6,16 @@ import { z } from 'zod';
 import { getClientKey, rateLimit } from '@/lib/rate-limit';
 import { parsePagination, parseSort } from '@/lib/validation';
 import { ensureTwitterPollingStarted } from '@/lib/services/twitter-poller';
+import { ensureTwitterStreamStarted } from '@/lib/services/twitter-stream';
+import { ensureSchedulerStarted } from '@/lib/services/task-scheduler';
+
+export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
     ensureTwitterPollingStarted();
+    ensureTwitterStreamStarted();
+    ensureSchedulerStarted();
     const user = await getAuthUser();
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -54,6 +60,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Too many requests' }, { status: 429 });
     }
     ensureTwitterPollingStarted();
+    ensureTwitterStreamStarted();
+    ensureSchedulerStarted();
     const user = await getAuthUser();
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });

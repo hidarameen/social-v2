@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { randomUUID } from 'crypto';
+import { v4 as randomUUID } from 'uuid';
 
 export interface User {
   id: string;
@@ -49,6 +49,8 @@ export interface Task {
     excludeRetweets?: boolean;
     excludeQuotes?: boolean;
     originalOnly?: boolean;
+    pollIntervalMinutes?: number;
+    pollIntervalSeconds?: number;
   };
   transformations?: {
     addHashtags?: string[];
@@ -57,6 +59,7 @@ export interface Task {
     mediaResize?: boolean;
     template?: string;
     includeMedia?: boolean;
+    enableYtDlp?: boolean;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -431,7 +434,7 @@ class Database {
 
   async deleteAccount(id: string): Promise<boolean> {
     const result = await pool.query(`DELETE FROM platform_accounts WHERE id = $1`, [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Task Methods
@@ -626,7 +629,7 @@ class Database {
 
   async deleteTask(id: string): Promise<boolean> {
     const result = await pool.query(`DELETE FROM tasks WHERE id = $1`, [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getActiveTasks(): Promise<Task[]> {
@@ -744,7 +747,7 @@ class Database {
 
     return {
       total: countRes.rows[0]?.count ?? 0,
-      executions: dataRes.rows.map(row => ({
+      executions: dataRes.rows.map((row: any) => ({
         ...mapExecution(row),
         taskName: row.task_name,
       })),
@@ -842,7 +845,7 @@ class Database {
 
     return {
       total: countRes.rows[0]?.count ?? 0,
-      stats: dataRes.rows.map(row => {
+      stats: dataRes.rows.map((row: any) => {
         const total = row.total_executions ?? 0;
         const successful = row.successful ?? 0;
         return {

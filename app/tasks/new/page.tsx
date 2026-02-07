@@ -34,12 +34,14 @@ export default function CreateTaskPage() {
     recurringPattern: 'daily' as const,
     template: '',
     includeMedia: true,
+    enableYtDlp: false,
     twitterSourceType: 'account' as 'account' | 'username',
     twitterUsername: '',
     excludeReplies: false,
     excludeRetweets: false,
     excludeQuotes: false,
     originalOnly: false,
+    pollIntervalSeconds: 60,
   });
 
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
@@ -109,6 +111,7 @@ export default function CreateTaskPage() {
           transformations: {
             template: formData.template || undefined,
             includeMedia: formData.includeMedia,
+            enableYtDlp: formData.enableYtDlp,
           },
           filters: {
             twitterSourceType: formData.twitterSourceType,
@@ -117,6 +120,7 @@ export default function CreateTaskPage() {
             excludeRetweets: formData.excludeRetweets,
             excludeQuotes: formData.excludeQuotes,
             originalOnly: formData.originalOnly,
+            pollIntervalSeconds: formData.pollIntervalSeconds,
           },
         }),
       });
@@ -429,6 +433,20 @@ export default function CreateTaskPage() {
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-foreground mb-2">
+                    Poll Interval (seconds)
+                  </label>
+                  <Input
+                    type="number"
+                    min={10}
+                    value={formData.pollIntervalSeconds}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        pollIntervalSeconds: Math.max(10, Number(e.target.value || 10)),
+                      }))
+                    }
+                  />
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Filters
                   </label>
                   <label className="flex items-center gap-2 text-sm">
@@ -504,6 +522,15 @@ export default function CreateTaskPage() {
                   className="rounded border-border"
                 />
                 <span className="text-sm">Include images/videos when available</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={formData.enableYtDlp}
+                  onChange={(e) => setFormData(prev => ({ ...prev, enableYtDlp: e.target.checked }))}
+                  className="rounded border-border"
+                />
+                <span className="text-sm">Download Twitter videos via yt-dlp</span>
               </div>
             </CardContent>
           </Card>

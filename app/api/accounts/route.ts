@@ -6,6 +6,9 @@ import { getClientKey, rateLimit } from '@/lib/rate-limit'
 import { z } from 'zod'
 import { parsePagination, parseSort } from '@/lib/validation'
 
+export const runtime = 'nodejs';
+
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser()

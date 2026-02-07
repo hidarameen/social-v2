@@ -108,6 +108,54 @@ export class TelegramClient {
   }
 
   /**
+   * Send a video file (multipart upload)
+   */
+  async sendVideoFile(
+    chatId: string,
+    videoPath: string,
+    caption?: string,
+    duration?: number,
+    thumbnailPath?: string
+  ): Promise<{ messageId: number }> {
+    try {
+      const formData = new FormData();
+      formData.append('chat_id', chatId);
+      formData.append('supports_streaming', 'true');
+      if (caption) formData.append('caption', caption);
+      if (duration) formData.append('duration', String(duration));
+
+      const videoResponse = await fetch(`file://${videoPath}`);
+      const videoBlob = await videoResponse.blob();
+      formData.append('video', videoBlob, 'video.mp4');
+
+      if (thumbnailPath) {
+        const thumbResponse = await fetch(`file://${thumbnailPath}`);
+        const thumbBlob = await thumbResponse.blob();
+        formData.append('thumbnail', thumbBlob, 'thumb.jpg');
+      }
+
+      const response = await fetch(this.getTelegramUrl('sendVideo'), {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Telegram API error: ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as any;
+      if (process.env.TELEGRAM_LOG_RESPONSES === 'true') {
+        console.log('[Telegram] sendVideo response:', data);
+      }
+      return { messageId: data.result.message_id };
+    } catch (error) {
+      throw new Error(
+        `Failed to send Telegram video: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
    * Send media group (multiple photos/videos)
    */
   async sendMediaGroup(chatId: string, media: Array<{ type: 'photo' | 'video'; media: string; caption?: string }>): Promise<{ messageIds: number[] }> {

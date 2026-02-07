@@ -10,6 +10,9 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/api/auth')) return NextResponse.next();
   if (pathname.startsWith('/api/oauth')) return NextResponse.next();
   if (pathname.startsWith('/api/twitter/webhook')) return NextResponse.next();
+  if (pathname.startsWith('/api/twitter/stream/sync')) return NextResponse.next();
+  if (pathname.startsWith('/api/twitter/stream/debug')) return NextResponse.next();
+  if (pathname.startsWith('/api/twitter/poll/now')) return NextResponse.next();
   if (pathname.startsWith('/api/telegram/webhook')) return NextResponse.next();
   if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
   if (pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/public')) {
@@ -27,5 +30,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api/auth|api/oauth|api/telegram/webhook|api/twitter/webhook|_next|static|public|favicon.ico).*)'],
+  matcher: ['/((?!api/auth|api/oauth|api/telegram/webhook|api/twitter/webhook|api/twitter/stream/sync|api/twitter/stream/debug|api/twitter/poll/now|_next|static|public|favicon.ico).*)'],
 };

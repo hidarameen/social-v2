@@ -6,6 +6,10 @@ import { getAuthUser } from '@/lib/auth';
 import { getOAuthPlatform } from '@/lib/oauth/platforms';
 import { buildBasicAuth, decodeJwtPayload, safeJsonParse } from '@/lib/oauth/utils';
 import { ensureTwitterPollingStarted } from '@/lib/services/twitter-poller';
+import { ensureTwitterStreamStarted } from '@/lib/services/twitter-stream';
+import { ensureSchedulerStarted } from '@/lib/services/task-scheduler';
+
+export const runtime = 'nodejs';
 
 type TokenResponse = {
   access_token?: string;
@@ -210,7 +214,9 @@ export async function GET(
 
     if (platform.id === 'twitter') {
       ensureTwitterPollingStarted();
+      ensureTwitterStreamStarted();
     }
+    ensureSchedulerStarted();
 
     const returnTo = parsed.returnTo && parsed.returnTo.startsWith('/') ? parsed.returnTo : '/accounts';
     const redirect = new URL(returnTo, appBaseUrl);

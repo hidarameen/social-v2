@@ -5,6 +5,9 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { getClientKey, rateLimit } from '@/lib/rate-limit';
 
+export const runtime = 'nodejs';
+
+
 export async function POST(request: NextRequest) {
   try {
     const limiter = rateLimit(`auth:register:${getClientKey(request)}`, 10, 60_000);

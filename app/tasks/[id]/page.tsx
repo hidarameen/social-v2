@@ -68,12 +68,14 @@ export default function TaskDetailPage() {
           recurringPattern: data.task.recurringPattern || 'daily',
           template: data.task.transformations?.template || '',
           includeMedia: data.task.transformations?.includeMedia !== false,
+          enableYtDlp: data.task.transformations?.enableYtDlp === true,
           twitterSourceType: data.task.filters?.twitterSourceType || 'account',
           twitterUsername: data.task.filters?.twitterUsername || '',
           excludeReplies: Boolean(data.task.filters?.excludeReplies),
           excludeRetweets: Boolean(data.task.filters?.excludeRetweets),
           excludeQuotes: Boolean(data.task.filters?.excludeQuotes),
           originalOnly: Boolean(data.task.filters?.originalOnly),
+          pollIntervalSeconds: Number(data.task.filters?.pollIntervalSeconds || 60),
         });
         setExecutions(
           (data.executions || []).sort(
@@ -104,12 +106,14 @@ export default function TaskDetailPage() {
       recurringPattern: task.recurringPattern || 'daily',
       template: task.transformations?.template || '',
       includeMedia: task.transformations?.includeMedia !== false,
+      enableYtDlp: task.transformations?.enableYtDlp === true,
       twitterSourceType: task.filters?.twitterSourceType || 'account',
       twitterUsername: task.filters?.twitterUsername || '',
       excludeReplies: Boolean(task.filters?.excludeReplies),
       excludeRetweets: Boolean(task.filters?.excludeRetweets),
       excludeQuotes: Boolean(task.filters?.excludeQuotes),
       originalOnly: Boolean(task.filters?.originalOnly),
+      pollIntervalSeconds: Number(task.filters?.pollIntervalSeconds || 60),
     });
   }, [task, isEditing]);
 
@@ -186,6 +190,7 @@ export default function TaskDetailPage() {
           transformations: {
             template: editForm.template || undefined,
             includeMedia: editForm.includeMedia,
+            enableYtDlp: editForm.enableYtDlp,
           },
           filters: {
             twitterSourceType: editForm.twitterSourceType,
@@ -194,6 +199,7 @@ export default function TaskDetailPage() {
             excludeRetweets: editForm.excludeRetweets,
             excludeQuotes: editForm.excludeQuotes,
             originalOnly: editForm.originalOnly,
+            pollIntervalSeconds: Number(editForm.pollIntervalSeconds || 60),
           },
         }),
       });
@@ -383,6 +389,16 @@ export default function TaskDetailPage() {
                 />
                 Include images/videos when available
               </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editForm.enableYtDlp}
+                  onChange={(e) =>
+                    setEditForm((prev: any) => ({ ...prev, enableYtDlp: e.target.checked }))
+                  }
+                />
+                Download Twitter videos via yt-dlp
+              </label>
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
@@ -420,6 +436,20 @@ export default function TaskDetailPage() {
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Filters
                 </label>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Poll Interval (seconds)
+                </label>
+                <Input
+                  type="number"
+                  min={10}
+                  value={editForm.pollIntervalSeconds}
+                  onChange={(e) =>
+                    setEditForm((prev: any) => ({
+                      ...prev,
+                      pollIntervalSeconds: Math.max(10, Number(e.target.value || 10)),
+                    }))
+                  }
+                />
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"

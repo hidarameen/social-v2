@@ -3,6 +3,9 @@ import { db, type Task } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
 
+export const runtime = 'nodejs';
+
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

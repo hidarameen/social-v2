@@ -4,6 +4,9 @@ import { getAuthUser } from '@/lib/auth';
 import { getOAuthPlatform } from '@/lib/oauth/platforms';
 import { generateCodeChallenge, generateCodeVerifier, generateState } from '@/lib/oauth/utils';
 
+export const runtime = 'nodejs';
+
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ platform: string }> }

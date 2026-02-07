@@ -3,6 +3,9 @@ import { db } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
 
+export const runtime = 'nodejs';
+
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
