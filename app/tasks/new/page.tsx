@@ -354,7 +354,7 @@ export default function CreateTaskPage() {
                 </Select>
               </div>
 
-              {formData.executionType === 'scheduled' && (
+              {formData.executionType === ('scheduled' as string) && (
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Schedule Time
@@ -369,7 +369,7 @@ export default function CreateTaskPage() {
                 </div>
               )}
 
-              {formData.executionType === 'recurring' && (
+              {formData.executionType === ('recurring' as string) && (
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Recurrence Pattern
