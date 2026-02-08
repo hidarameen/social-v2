@@ -42,6 +42,8 @@ export default function CreateTaskPage() {
     excludeQuotes: false,
     originalOnly: false,
     pollIntervalSeconds: 60,
+    triggerType: 'on_tweet' as 'on_tweet' | 'on_mention' | 'on_keyword' | 'on_hashtag',
+    triggerValue: '',
   });
 
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
@@ -121,6 +123,8 @@ export default function CreateTaskPage() {
             excludeQuotes: formData.excludeQuotes,
             originalOnly: formData.originalOnly,
             pollIntervalSeconds: formData.pollIntervalSeconds,
+            triggerType: formData.triggerType,
+            triggerValue: formData.triggerValue.trim() || undefined,
           },
         }),
       });
@@ -415,6 +419,43 @@ export default function CreateTaskPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Trigger Type
+                  </label>
+                  <Select
+                    value={formData.triggerType}
+                    onValueChange={(value: any) =>
+                      setFormData(prev => ({ ...prev, triggerType: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="on_tweet">On New Tweet</SelectItem>
+                      <SelectItem value="on_mention">On Mention</SelectItem>
+                      <SelectItem value="on_keyword">On Keyword</SelectItem>
+                      <SelectItem value="on_hashtag">On Hashtag</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {formData.triggerType !== 'on_tweet' && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Trigger Value (Keyword/Hashtag/Username)
+                    </label>
+                    <Input
+                      placeholder="e.g., #AI, @elonmusk, crypto"
+                      value={formData.triggerValue}
+                      onChange={(e) =>
+                        setFormData(prev => ({ ...prev, triggerValue: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
 
                 {formData.twitterSourceType === 'username' && (
                   <div>

@@ -51,6 +51,8 @@ export interface Task {
     originalOnly?: boolean;
     pollIntervalMinutes?: number;
     pollIntervalSeconds?: number;
+    triggerType?: 'on_tweet' | 'on_mention' | 'on_keyword' | 'on_hashtag';
+    triggerValue?: string;
   };
   transformations?: {
     addHashtags?: string[];

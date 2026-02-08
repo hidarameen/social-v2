@@ -10,7 +10,17 @@ function getBearerToken() {
 }
 
 function buildRuleValue(username: string, filters: any) {
-  const parts = [`from:${username}`];
+  let query = `from:${username}`;
+  
+  if (filters?.triggerType === 'on_mention') {
+    query = `@${username}`;
+  } else if (filters?.triggerType === 'on_keyword') {
+    query = filters.triggerValue || '';
+  } else if (filters?.triggerType === 'on_hashtag') {
+    query = filters.triggerValue?.startsWith('#') ? filters.triggerValue : `#${filters.triggerValue}`;
+  }
+
+  const parts = [query];
   if (filters?.excludeReplies || filters?.originalOnly) parts.push('-is:reply');
   if (filters?.excludeRetweets || filters?.originalOnly) parts.push('-is:retweet');
   if (filters?.excludeQuotes || filters?.originalOnly) parts.push('-is:quote');
