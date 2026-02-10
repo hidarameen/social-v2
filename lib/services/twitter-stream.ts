@@ -2,29 +2,14 @@ export const runtime = 'nodejs';
 
 import { db } from '@/lib/db';
 import { TweetItem, buildMessage, buildTweetLink, isQuote, isReply, isRetweet, sendToTelegram } from '@/lib/services/twitter-utils';
+import { buildTwitterQuery } from '@/lib/services/twitter-query';
+import { executeTwitterActions } from '@/lib/services/twitter-actions';
+import { debugLog, debugError } from '@/lib/debug';
 
 const STREAM_URL = 'https://api.twitter.com/2/tweets/search/stream';
 
 function getBearerToken() {
   return process.env.TWITTER_BEARER_TOKEN || '';
-}
-
-function buildRuleValue(username: string, filters: any) {
-  let query = `from:${username}`;
-  
-  if (filters?.triggerType === 'on_mention') {
-    query = `@${username}`;
-  } else if (filters?.triggerType === 'on_keyword') {
-    query = filters.triggerValue || '';
-  } else if (filters?.triggerType === 'on_hashtag') {
-    query = filters.triggerValue?.startsWith('#') ? filters.triggerValue : `#${filters.triggerValue}`;
-  }
-
-  const parts = [query];
-  if (filters?.excludeReplies || filters?.originalOnly) parts.push('-is:reply');
-  if (filters?.excludeRetweets || filters?.originalOnly) parts.push('-is:retweet');
-  if (filters?.excludeQuotes || filters?.originalOnly) parts.push('-is:quote');
-  return parts.join(' ');
 }
 
 function buildRules(tasks: any[]) {
@@ -34,7 +19,8 @@ function buildRules(tasks: any[]) {
     if (filters.twitterSourceType === 'username') {
       const username = String(filters.twitterUsername || '').trim();
       if (!username) continue;
-      rules.push({ value: buildRuleValue(username, filters), tag: `task:${task.id}` });
+      const value = buildTwitterQuery(username, filters);
+      if (value) rules.push({ value, tag: `task:${task.id}` });
       continue;
     }
     for (const source of task.sourceAccountsResolved || []) {
@@ -43,7 +29,8 @@ function buildRules(tasks: any[]) {
         source.credentials?.accountInfo?.username ||
         '';
       if (!username) continue;
-      rules.push({ value: buildRuleValue(username, filters), tag: `task:${task.id}` });
+      const value = buildTwitterQuery(username, filters);
+      if (value) rules.push({ value, tag: `task:${task.id}` });
     }
   }
   return rules;
@@ -67,6 +54,7 @@ export class TwitterStream {
     this.running = true;
     console.log('[TwitterStream] Starting stream connection...');
     await this.syncRules();
+    debugLog('Twitter stream started');
     this.connect().catch(err => {
       console.error('[TwitterStream] Connection error:', err);
       this.running = false;
@@ -90,6 +78,7 @@ export class TwitterStream {
     }));
 
     const rules = buildRules(withSources);
+    debugLog('Twitter stream sync rules', { rules: rules.length });
 
     const existing = await this.fetchRules();
     if (existing.length > 0) {
@@ -185,6 +174,7 @@ export class TwitterStream {
             break;
           }
           const event = JSON.parse(line);
+          debugLog('Twitter stream event received');
           await this.handleEvent(event);
         } catch (err) {
           console.warn('[TwitterStream] Failed to parse event:', err);
@@ -216,7 +206,9 @@ export class TwitterStream {
       createdAt: tweet.created_at || new Date().toISOString(),
       referencedTweets: tweet.referenced_tweets,
       media: media as any,
+      author: { username: author.username, name: author.name },
     };
+    debugLog('Twitter stream tweet parsed', { tweetId: tweetItem.id });
 
     const matchingRules = event.matching_rules || [];
     for (const rule of matchingRules) {
@@ -225,15 +217,22 @@ export class TwitterStream {
       const taskId = tag.slice('task:'.length);
       const task = await db.getTask(taskId);
       if (!task || task.status !== 'active') continue;
+      debugLog('Twitter stream task matched', { taskId });
 
       const filters = task.filters || {};
-      if (filters.originalOnly && (isReply(tweetItem) || isRetweet(tweetItem) || isQuote(tweetItem))) continue;
-      if (filters.excludeReplies && isReply(tweetItem)) continue;
-      if (filters.excludeRetweets && isRetweet(tweetItem)) continue;
-      if (filters.excludeQuotes && isQuote(tweetItem)) continue;
+      const triggerType = filters.triggerType || 'on_tweet';
+      const effectiveOriginalOnly = triggerType === 'on_retweet' ? false : Boolean(filters.originalOnly);
+      const effectiveExcludeReplies = Boolean(filters.excludeReplies);
+      const effectiveExcludeRetweets = triggerType === 'on_retweet' ? false : Boolean(filters.excludeRetweets);
+      const effectiveExcludeQuotes = Boolean(filters.excludeQuotes);
+
+      if (effectiveOriginalOnly && (isReply(tweetItem) || isRetweet(tweetItem) || isQuote(tweetItem))) continue;
+      if (effectiveExcludeReplies && isReply(tweetItem)) continue;
+      if (effectiveExcludeRetweets && isRetweet(tweetItem)) continue;
+      if (effectiveExcludeQuotes && isQuote(tweetItem)) continue;
 
       const userAccounts = await db.getUserAccounts(task.userId);
-      const targets = userAccounts.filter(a => task.targetAccounts.includes(a.id) && a.isActive && a.platformId === 'telegram');
+      const targets = userAccounts.filter(a => task.targetAccounts.includes(a.id) && a.isActive);
 
       const message = buildMessage(task.transformations?.template, tweetItem, {
         username: author.username,
@@ -246,21 +245,44 @@ export class TwitterStream {
       for (const target of targets) {
         let status: 'success' | 'failed' = 'success';
         let errorMessage: string | undefined;
+        let responseData: Record<string, any> = { sourceTweetId: tweetItem.id, sourceUsername: author.username };
+
         try {
-          const chatId = target.credentials?.chatId;
-          if (!chatId) throw new Error('Missing Telegram target chat ID');
-          await sendToTelegram(
-            target.accessToken,
-            String(chatId),
-            message,
-            tweetItem.media,
-            includeMedia,
-            link,
-            enableYtDlp
-          );
+          if (target.platformId === 'telegram') {
+            debugLog('Twitter -> Telegram start', { taskId: task.id, targetId: target.id });
+            const chatId = target.credentials?.chatId;
+            if (!chatId) throw new Error('Missing Telegram target chat ID');
+            await sendToTelegram(
+              target.accessToken,
+              String(chatId),
+              message,
+              tweetItem.media,
+              includeMedia,
+              link,
+              enableYtDlp
+            );
+            debugLog('Twitter -> Telegram sent', { taskId: task.id, targetId: target.id });
+          } else if (target.platformId === 'twitter') {
+            debugLog('Twitter -> Twitter actions start', { taskId: task.id, targetId: target.id });
+            const actionResult = await executeTwitterActions({
+              target,
+              tweet: tweetItem,
+              template: task.transformations?.template,
+              accountInfo: { username: author.username, name: author.name },
+              actions: task.transformations?.twitterActions,
+            });
+            responseData = { ...responseData, actions: actionResult.results, textUsed: actionResult.textUsed };
+            if (!actionResult.ok) {
+              throw new Error(actionResult.error || 'Twitter actions failed');
+            }
+            debugLog('Twitter -> Twitter actions success', { taskId: task.id, targetId: target.id });
+          } else {
+            continue;
+          }
         } catch (error) {
           status = 'failed';
           errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          debugError('Twitter stream target failed', error, { taskId: task.id, targetId: target.id });
         }
 
         await db.createExecution({
@@ -272,7 +294,7 @@ export class TwitterStream {
           status,
           error: errorMessage,
           executedAt: new Date(),
-          responseData: { sourceTweetId: tweetItem.id, sourceUsername: author.username },
+          responseData,
         });
       }
     }

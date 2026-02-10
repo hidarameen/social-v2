@@ -51,7 +51,7 @@ export interface Task {
     originalOnly?: boolean;
     pollIntervalMinutes?: number;
     pollIntervalSeconds?: number;
-    triggerType?: 'on_tweet' | 'on_mention' | 'on_keyword' | 'on_hashtag';
+    triggerType?: 'on_tweet' | 'on_mention' | 'on_keyword' | 'on_hashtag' | 'on_search' | 'on_retweet' | 'on_like';
     triggerValue?: string;
   };
   transformations?: {
@@ -62,6 +62,13 @@ export interface Task {
     template?: string;
     includeMedia?: boolean;
     enableYtDlp?: boolean;
+    twitterActions?: {
+      post?: boolean;
+      reply?: boolean;
+      quote?: boolean;
+      retweet?: boolean;
+      like?: boolean;
+    };
   };
   createdAt: Date;
   updatedAt: Date;

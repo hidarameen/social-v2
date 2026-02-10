@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Task } from '@/lib/db';
+import type { PlatformAccount, Task } from '@/lib/db';
 import {
   Play,
   Pause,
@@ -41,6 +41,7 @@ export default function TaskDetailPage() {
   const [performanceReport, setPerformanceReport] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>(null);
+  const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
 
   const toLocalInputValue = (value?: Date | string | null) => {
     if (!value) return '';
@@ -69,6 +70,13 @@ export default function TaskDetailPage() {
           template: data.task.transformations?.template || '',
           includeMedia: data.task.transformations?.includeMedia !== false,
           enableYtDlp: data.task.transformations?.enableYtDlp === true,
+          twitterActions: data.task.transformations?.twitterActions || {
+            post: true,
+            reply: false,
+            quote: false,
+            retweet: false,
+            like: false,
+          },
           twitterSourceType: data.task.filters?.twitterSourceType || 'account',
           twitterUsername: data.task.filters?.twitterUsername || '',
           excludeReplies: Boolean(data.task.filters?.excludeReplies),
@@ -76,6 +84,8 @@ export default function TaskDetailPage() {
           excludeQuotes: Boolean(data.task.filters?.excludeQuotes),
           originalOnly: Boolean(data.task.filters?.originalOnly),
           pollIntervalSeconds: Number(data.task.filters?.pollIntervalSeconds || 60),
+          triggerType: data.task.filters?.triggerType || 'on_tweet',
+          triggerValue: data.task.filters?.triggerValue || '',
         });
         setExecutions(
           (data.executions || []).sort(
@@ -107,6 +117,13 @@ export default function TaskDetailPage() {
       template: task.transformations?.template || '',
       includeMedia: task.transformations?.includeMedia !== false,
       enableYtDlp: task.transformations?.enableYtDlp === true,
+      twitterActions: task.transformations?.twitterActions || {
+        post: true,
+        reply: false,
+        quote: false,
+        retweet: false,
+        like: false,
+      },
       twitterSourceType: task.filters?.twitterSourceType || 'account',
       twitterUsername: task.filters?.twitterUsername || '',
       excludeReplies: Boolean(task.filters?.excludeReplies),
@@ -114,8 +131,28 @@ export default function TaskDetailPage() {
       excludeQuotes: Boolean(task.filters?.excludeQuotes),
       originalOnly: Boolean(task.filters?.originalOnly),
       pollIntervalSeconds: Number(task.filters?.pollIntervalSeconds || 60),
+      triggerType: task.filters?.triggerType || 'on_tweet',
+      triggerValue: task.filters?.triggerValue || '',
     });
   }, [task, isEditing]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAccounts() {
+      try {
+        const res = await fetch('/api/accounts');
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load accounts');
+        if (!cancelled) setAccounts(data.accounts || []);
+      } catch (error) {
+        console.error('[v0] TaskDetail: Error loading accounts:', error);
+      }
+    }
+    loadAccounts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleRunTask = async () => {
     if (!task) return;
@@ -177,6 +214,19 @@ export default function TaskDetailPage() {
       alert('Please enter a Twitter username for the source');
       return;
     }
+    if (editForm.triggerType === 'on_like' && editForm.twitterSourceType === 'username') {
+      alert('Liked-tweet trigger requires a connected Twitter account');
+      return;
+    }
+    if (
+      (editForm.triggerType === 'on_keyword' ||
+        editForm.triggerType === 'on_hashtag' ||
+        editForm.triggerType === 'on_search') &&
+      !editForm.triggerValue.trim()
+    ) {
+      alert('Please enter a trigger value for the selected trigger type');
+      return;
+    }
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
@@ -191,6 +241,7 @@ export default function TaskDetailPage() {
             template: editForm.template || undefined,
             includeMedia: editForm.includeMedia,
             enableYtDlp: editForm.enableYtDlp,
+            twitterActions: editForm.twitterActions,
           },
           filters: {
             twitterSourceType: editForm.twitterSourceType,
@@ -200,6 +251,8 @@ export default function TaskDetailPage() {
             excludeQuotes: editForm.excludeQuotes,
             originalOnly: editForm.originalOnly,
             pollIntervalSeconds: Number(editForm.pollIntervalSeconds || 60),
+            triggerType: editForm.triggerType,
+            triggerValue: editForm.triggerValue.trim() || undefined,
           },
         }),
       });
@@ -223,6 +276,10 @@ export default function TaskDetailPage() {
       </div>
     );
   }
+
+  const hasTwitterTarget = accounts.some(
+    a => task.targetAccounts.includes(a.id) && a.platformId === 'twitter'
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -419,6 +476,45 @@ export default function TaskDetailPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Trigger Type
+                </label>
+                <Select
+                  value={editForm.triggerType}
+                  onValueChange={(value: any) =>
+                    setEditForm((prev: any) => ({ ...prev, triggerType: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="on_tweet">New tweet by source</SelectItem>
+                    <SelectItem value="on_retweet">New retweet by source</SelectItem>
+                    <SelectItem value="on_like">New liked tweet by source</SelectItem>
+                    <SelectItem value="on_mention">New mention of source</SelectItem>
+                    <SelectItem value="on_search">New tweet from search</SelectItem>
+                    <SelectItem value="on_keyword">New tweet with keyword</SelectItem>
+                    <SelectItem value="on_hashtag">New tweet with hashtag</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(editForm.triggerType === 'on_keyword' ||
+                editForm.triggerType === 'on_hashtag' ||
+                editForm.triggerType === 'on_search') && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Trigger Value
+                  </label>
+                  <Input
+                    value={editForm.triggerValue}
+                    onChange={(e) =>
+                      setEditForm((prev: any) => ({ ...prev, triggerValue: e.target.value }))
+                    }
+                  />
+                </div>
+              )}
               {editForm.twitterSourceType === 'username' && (
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
@@ -454,6 +550,7 @@ export default function TaskDetailPage() {
                   <input
                     type="checkbox"
                     checked={editForm.originalOnly}
+                    disabled={editForm.triggerType === 'on_retweet'}
                     onChange={(e) =>
                       setEditForm((prev: any) => ({ ...prev, originalOnly: e.target.checked }))
                     }
@@ -474,6 +571,7 @@ export default function TaskDetailPage() {
                   <input
                     type="checkbox"
                     checked={editForm.excludeRetweets}
+                    disabled={editForm.triggerType === 'on_retweet'}
                     onChange={(e) =>
                       setEditForm((prev: any) => ({ ...prev, excludeRetweets: e.target.checked }))
                     }
@@ -491,6 +589,82 @@ export default function TaskDetailPage() {
                   Exclude quote tweets
                 </label>
               </div>
+
+              {hasTwitterTarget && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Twitter Actions
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.twitterActions?.post}
+                      onChange={(e) =>
+                        setEditForm((prev: any) => ({
+                          ...prev,
+                          twitterActions: { ...prev.twitterActions, post: e.target.checked },
+                        }))
+                      }
+                    />
+                    Post tweet
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.twitterActions?.reply}
+                      onChange={(e) =>
+                        setEditForm((prev: any) => ({
+                          ...prev,
+                          twitterActions: { ...prev.twitterActions, reply: e.target.checked },
+                        }))
+                      }
+                    />
+                    Reply to the source tweet
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.twitterActions?.quote}
+                      onChange={(e) =>
+                        setEditForm((prev: any) => ({
+                          ...prev,
+                          twitterActions: { ...prev.twitterActions, quote: e.target.checked },
+                        }))
+                      }
+                    />
+                    Quote tweet
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.twitterActions?.retweet}
+                      onChange={(e) =>
+                        setEditForm((prev: any) => ({
+                          ...prev,
+                          twitterActions: { ...prev.twitterActions, retweet: e.target.checked },
+                        }))
+                      }
+                    />
+                    Retweet
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.twitterActions?.like}
+                      onChange={(e) =>
+                        setEditForm((prev: any) => ({
+                          ...prev,
+                          twitterActions: { ...prev.twitterActions, like: e.target.checked },
+                        }))
+                      }
+                    />
+                    Like
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    If none are selected, a tweet will be posted by default.
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <Button onClick={handleSaveEdits}>Save Changes</Button>

@@ -7,6 +7,15 @@ export type TweetItem = {
   createdAt: string;
   referencedTweets?: Array<{ id: string; type: string }>;
   media: Array<{ type: string; url?: string; previewImageUrl?: string }>;
+  author?: { username?: string; name?: string };
+};
+
+export type TwitterActionConfig = {
+  post?: boolean;
+  reply?: boolean;
+  quote?: boolean;
+  retweet?: boolean;
+  like?: boolean;
 };
 
 export function formatDate(iso: string): string {
@@ -22,8 +31,8 @@ export function buildMessage(
   tweet: TweetItem,
   accountInfo?: { username?: string; name?: string }
 ) {
-  const username = accountInfo?.username || '';
-  const name = accountInfo?.name || '';
+  const username = tweet.author?.username || accountInfo?.username || '';
+  const name = tweet.author?.name || accountInfo?.name || '';
   const link = buildTweetLink(username, tweet.id);
   const mediaUrls = tweet.media
     .map(m => m.url || m.previewImageUrl)
@@ -55,6 +64,27 @@ export function buildTweetLink(username: string, tweetId: string) {
   return username
     ? `https://twitter.com/${username}/status/${tweetId}`
     : `https://twitter.com/i/web/status/${tweetId}`;
+}
+
+export function clampTweetText(text: string) {
+  if (text.length <= 280) return text;
+  return `${text.slice(0, 277)}...`;
+}
+
+export function normalizeTwitterActions(input?: TwitterActionConfig) {
+  const actions: TwitterActionConfig = {
+    post: Boolean(input?.post),
+    reply: Boolean(input?.reply),
+    quote: Boolean(input?.quote),
+    retweet: Boolean(input?.retweet),
+    like: Boolean(input?.like),
+  };
+
+  const hasAny = Object.values(actions).some(Boolean);
+  if (!hasAny) {
+    return { post: true };
+  }
+  return actions;
 }
 
 export function isReply(tweet: TweetItem): boolean {

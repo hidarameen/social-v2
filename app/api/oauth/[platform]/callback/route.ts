@@ -213,7 +213,7 @@ export async function GET(
     }
 
     if (platform.id === 'twitter') {
-      ensureTwitterPollingStarted();
+      await ensureTwitterPollingStarted();
       ensureTwitterStreamStarted();
     }
     ensureSchedulerStarted();

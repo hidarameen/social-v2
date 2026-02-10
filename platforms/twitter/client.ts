@@ -1,4 +1,6 @@
 import { TwitterContent, TwitterTweet } from './types'
+import { promises as fs } from 'fs'
+import { debugError } from '@/lib/debug'
 
 const TWITTER_API_V2 = 'https://api.twitter.com/2'
 
@@ -7,6 +9,168 @@ export class TwitterClient {
 
   constructor(bearerToken: string) {
     this.bearerToken = bearerToken
+  }
+
+  private getUploadHeaders() {
+    return {
+      'Authorization': `Bearer ${this.bearerToken}`,
+    };
+  }
+
+  private async uploadInit(totalBytes: number, mediaType: string, mediaCategory?: string): Promise<string> {
+    const formData = new FormData();
+    formData.append('command', 'INIT');
+    formData.append('total_bytes', String(totalBytes));
+    formData.append('media_type', mediaType);
+    if (mediaCategory) formData.append('media_category', mediaCategory);
+
+    const response = await fetch('https://api.x.com/2/media/upload', {
+      method: 'POST',
+      headers: this.getUploadHeaders(),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      debugError('Twitter media INIT failed', null, {
+        status: response.status,
+        statusText: response.statusText,
+        body: text,
+        request: { command: 'INIT', totalBytes, mediaType, mediaCategory },
+      });
+      throw new Error(`Twitter API error: ${response.status} ${response.statusText} ${text}`.trim());
+    }
+
+    const data = (await response.json()) as { media_id?: string; media_id_string?: string };
+    const mediaId = data.media_id || data.media_id_string;
+    if (!mediaId) {
+      throw new Error('Twitter media INIT failed');
+    }
+    return mediaId;
+  }
+
+  private async uploadAppend(mediaId: string, segmentIndex: number, chunk: Buffer) {
+    const formData = new FormData();
+    formData.append('command', 'APPEND');
+    formData.append('media_id', mediaId);
+    formData.append('segment_index', String(segmentIndex));
+    const blob = new Blob([chunk]);
+    formData.append('media', blob as any, 'chunk');
+
+    const response = await fetch('https://api.x.com/2/media/upload', {
+      method: 'POST',
+      headers: this.getUploadHeaders(),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      debugError('Twitter media APPEND failed', null, {
+        status: response.status,
+        statusText: response.statusText,
+        body: text,
+        request: { command: 'APPEND', mediaId, segmentIndex },
+      });
+      throw new Error(`Twitter API error: ${response.status} ${response.statusText} ${text}`.trim());
+    }
+  }
+
+  async uploadMediaFromFile(filePath: string, mediaType: string): Promise<string> {
+    const stat = await fs.stat(filePath);
+    const totalBytes = stat.size;
+    const isVideo = mediaType.startsWith('video/');
+    const isGif = mediaType === 'image/gif';
+    const mediaCategory = isVideo ? 'tweet_video' : isGif ? 'tweet_gif' : 'tweet_image';
+
+    if (!isVideo) {
+      const buffer = await fs.readFile(filePath);
+      return this.uploadMedia(buffer, mediaType, mediaCategory);
+    }
+
+    const mediaId = await this.uploadInit(totalBytes, mediaType, mediaCategory);
+    const chunkSize = 5 * 1024 * 1024;
+    const handle = await fs.open(filePath, 'r');
+    try {
+      let segment = 0;
+      let offset = 0;
+      while (offset < totalBytes) {
+        const length = Math.min(chunkSize, totalBytes - offset);
+        const buffer = Buffer.alloc(length);
+        const { bytesRead } = await handle.read(buffer, 0, length, offset);
+        if (bytesRead === 0) break;
+        const chunk = bytesRead === buffer.length ? buffer : buffer.subarray(0, bytesRead);
+        await this.uploadAppend(mediaId, segment, chunk);
+        segment += 1;
+        offset += bytesRead;
+      }
+    } finally {
+      await handle.close();
+    }
+
+    const finalize = await this.uploadFinalize(mediaId);
+    let info = finalize?.processing_info;
+    let attempts = 0;
+    while (info && (info.state === 'pending' || info.state === 'in_progress')) {
+      if (attempts > 10) {
+        throw new Error('Twitter media processing timeout');
+      }
+      const waitSeconds = Number(info.check_after_secs || 1);
+      await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+      const status = await this.uploadStatus(mediaId);
+      info = status?.processing_info;
+      if (info?.state === 'failed') {
+        throw new Error(info?.error?.message || 'Twitter media processing failed');
+      }
+      attempts += 1;
+    }
+
+    return mediaId;
+  }
+
+  private async uploadFinalize(mediaId: string) {
+    const formData = new FormData();
+    formData.append('command', 'FINALIZE');
+    formData.append('media_id', mediaId);
+
+    const response = await fetch('https://api.x.com/2/media/upload', {
+      method: 'POST',
+      headers: this.getUploadHeaders(),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      debugError('Twitter media FINALIZE failed', null, {
+        status: response.status,
+        statusText: response.statusText,
+        body: text,
+        request: { command: 'FINALIZE', mediaId },
+      });
+      throw new Error(`Twitter API error: ${response.status} ${response.statusText} ${text}`.trim());
+    }
+    return (await response.json()) as any;
+  }
+
+  private async uploadStatus(mediaId: string) {
+    const params = new URLSearchParams();
+    params.set('command', 'STATUS');
+    params.set('media_id', mediaId);
+    const response = await fetch(`https://api.x.com/2/media/upload?${params.toString()}`, {
+      method: 'GET',
+      headers: this.getUploadHeaders(),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      debugError('Twitter media STATUS failed', null, {
+        status: response.status,
+        statusText: response.statusText,
+        body: text,
+        request: { command: 'STATUS', mediaId },
+      });
+      throw new Error(`Twitter API error: ${response.status} ${response.statusText} ${text}`.trim());
+    }
+    return (await response.json()) as any;
   }
 
   /**
@@ -43,6 +207,70 @@ export class TwitterClient {
       throw new Error(
         `Failed to post to Twitter: ${error instanceof Error ? error.message : 'Unknown error'}`
       )
+    }
+  }
+
+  /**
+   * Reply to a tweet
+   */
+  async replyTweet(text: string, replyToTweetId: string): Promise<{ id: string; text: string }> {
+    try {
+      const payload: any = {
+        text,
+        reply: { in_reply_to_tweet_id: replyToTweetId },
+      };
+
+      const response = await fetch(`${TWITTER_API_V2}/tweets`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.bearerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as { data: { id: string; text: string } };
+      return data.data;
+    } catch (error) {
+      throw new Error(
+        `Failed to reply on Twitter: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Quote a tweet
+   */
+  async quoteTweet(text: string, quoteTweetId: string): Promise<{ id: string; text: string }> {
+    try {
+      const payload: any = {
+        text,
+        quote_tweet_id: quoteTweetId,
+      };
+
+      const response = await fetch(`${TWITTER_API_V2}/tweets`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.bearerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as { data: { id: string; text: string } };
+      return data.data;
+    } catch (error) {
+      throw new Error(
+        `Failed to quote on Twitter: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -176,6 +404,7 @@ export class TwitterClient {
       createdAt: string;
       referencedTweets?: Array<{ id: string; type: string }>;
       media: Array<{ type: string; url?: string; previewImageUrl?: string }>;
+      author?: { username?: string; name?: string };
     }>
   > {
     try {
@@ -183,9 +412,10 @@ export class TwitterClient {
       const params = new URLSearchParams({
         query,
         max_results: String(limit),
-        'tweet.fields': 'created_at,attachments,referenced_tweets',
-        expansions: 'attachments.media_keys',
+        'tweet.fields': 'created_at,attachments,referenced_tweets,author_id',
+        expansions: 'attachments.media_keys,author_id',
         'media.fields': 'type,url,preview_image_url',
+        'user.fields': 'username,name',
       });
       if (sinceId) params.set('since_id', sinceId);
 
@@ -209,8 +439,12 @@ export class TwitterClient {
           created_at: string;
           attachments?: { media_keys?: string[] };
           referenced_tweets?: Array<{ id: string; type: string }>;
+          author_id?: string;
         }>;
-        includes?: { media?: Array<{ media_key: string; type: string; url?: string; preview_image_url?: string }> };
+        includes?: {
+          media?: Array<{ media_key: string; type: string; url?: string; preview_image_url?: string }>;
+          users?: Array<{ id: string; username?: string; name?: string }>;
+        };
       };
 
       const mediaByKey = new Map<string, { type: string; url?: string; previewImageUrl?: string }>();
@@ -220,6 +454,10 @@ export class TwitterClient {
           url: m.url,
           previewImageUrl: m.preview_image_url,
         });
+      }
+      const usersById = new Map<string, { username?: string; name?: string }>();
+      for (const u of data.includes?.users || []) {
+        usersById.set(u.id, { username: u.username, name: u.name });
       }
 
       return (data.data || []).map(tweet => {
@@ -235,11 +473,195 @@ export class TwitterClient {
           createdAt: tweet.created_at,
           referencedTweets: tweet.referenced_tweets,
           media,
+          author: tweet.author_id ? usersById.get(tweet.author_id) : undefined,
         };
       });
     } catch (error) {
       throw new Error(
         `Failed to search tweets: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Search recent tweets by query (with media)
+   */
+  async searchRecent(
+    query: string,
+    limit = 10,
+    sinceId?: string
+  ): Promise<
+    Array<{
+      id: string;
+      text: string;
+      createdAt: string;
+      referencedTweets?: Array<{ id: string; type: string }>;
+      media: Array<{ type: string; url?: string; previewImageUrl?: string }>;
+      author?: { username?: string; name?: string };
+    }>
+  > {
+    try {
+      const params = new URLSearchParams({
+        query,
+        max_results: String(limit),
+        'tweet.fields': 'created_at,attachments,referenced_tweets,author_id',
+        expansions: 'attachments.media_keys,author_id',
+        'media.fields': 'type,url,preview_image_url',
+        'user.fields': 'username,name',
+      });
+      if (sinceId) params.set('since_id', sinceId);
+
+      const response = await fetch(
+        `${TWITTER_API_V2}/tweets/search/recent?${params.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.bearerToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as {
+        data?: Array<{
+          id: string;
+          text: string;
+          created_at: string;
+          attachments?: { media_keys?: string[] };
+          referenced_tweets?: Array<{ id: string; type: string }>;
+          author_id?: string;
+        }>;
+        includes?: {
+          media?: Array<{ media_key: string; type: string; url?: string; preview_image_url?: string }>;
+          users?: Array<{ id: string; username?: string; name?: string }>;
+        };
+      };
+
+      const mediaByKey = new Map<string, { type: string; url?: string; previewImageUrl?: string }>();
+      for (const m of data.includes?.media || []) {
+        mediaByKey.set(m.media_key, {
+          type: m.type,
+          url: m.url,
+          previewImageUrl: m.preview_image_url,
+        });
+      }
+      const usersById = new Map<string, { username?: string; name?: string }>();
+      for (const u of data.includes?.users || []) {
+        usersById.set(u.id, { username: u.username, name: u.name });
+      }
+
+      return (data.data || []).map(tweet => {
+        const media =
+          tweet.attachments?.media_keys?.map(key => mediaByKey.get(key)).filter(Boolean) as Array<{
+            type: string;
+            url?: string;
+            previewImageUrl?: string;
+          }> || [];
+        return {
+          id: tweet.id,
+          text: tweet.text,
+          createdAt: tweet.created_at,
+          referencedTweets: tweet.referenced_tweets,
+          media,
+          author: tweet.author_id ? usersById.get(tweet.author_id) : undefined,
+        };
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to search tweets: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Get liked tweets by user
+   */
+  async getLikedTweets(
+    userId: string,
+    limit = 10,
+    sinceId?: string
+  ): Promise<
+    Array<{
+      id: string;
+      text: string;
+      createdAt: string;
+      referencedTweets?: Array<{ id: string; type: string }>;
+      media: Array<{ type: string; url?: string; previewImageUrl?: string }>;
+      author?: { username?: string; name?: string };
+    }>
+  > {
+    try {
+      const params = new URLSearchParams({
+        max_results: String(limit),
+        'tweet.fields': 'created_at,attachments,referenced_tweets,author_id',
+        expansions: 'attachments.media_keys,author_id',
+        'media.fields': 'type,url,preview_image_url',
+        'user.fields': 'username,name',
+      });
+      if (sinceId) params.set('since_id', sinceId);
+
+      const response = await fetch(
+        `${TWITTER_API_V2}/users/${userId}/liked_tweets?${params.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.bearerToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as {
+        data?: Array<{
+          id: string;
+          text: string;
+          created_at: string;
+          attachments?: { media_keys?: string[] };
+          referenced_tweets?: Array<{ id: string; type: string }>;
+          author_id?: string;
+        }>;
+        includes?: {
+          media?: Array<{ media_key: string; type: string; url?: string; preview_image_url?: string }>;
+          users?: Array<{ id: string; username?: string; name?: string }>;
+        };
+      };
+
+      const mediaByKey = new Map<string, { type: string; url?: string; previewImageUrl?: string }>();
+      for (const m of data.includes?.media || []) {
+        mediaByKey.set(m.media_key, {
+          type: m.type,
+          url: m.url,
+          previewImageUrl: m.preview_image_url,
+        });
+      }
+      const usersById = new Map<string, { username?: string; name?: string }>();
+      for (const u of data.includes?.users || []) {
+        usersById.set(u.id, { username: u.username, name: u.name });
+      }
+
+      return (data.data || []).map(tweet => {
+        const media =
+          tweet.attachments?.media_keys?.map(key => mediaByKey.get(key)).filter(Boolean) as Array<{
+            type: string;
+            url?: string;
+            previewImageUrl?: string;
+          }> || [];
+        return {
+          id: tweet.id,
+          text: tweet.text,
+          createdAt: tweet.created_at,
+          referencedTweets: tweet.referenced_tweets,
+          media,
+          author: tweet.author_id ? usersById.get(tweet.author_id) : undefined,
+        };
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch liked tweets: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
@@ -307,27 +729,61 @@ export class TwitterClient {
   /**
    * Upload media to Twitter
    */
-  async uploadMedia(mediaBuffer: Buffer, mediaType: string): Promise<string> {
+  async uploadMedia(mediaBuffer: Buffer, mediaType: string, mediaCategory?: string): Promise<string> {
     try {
-      const formData = new FormData()
-      const blob = new Blob([mediaBuffer], { type: mediaType })
-      formData.append('media_data', blob as any)
-
-      const response = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.bearerToken}`,
-        },
-        body: formData,
-      })
-
-      if (!response.ok) {
-        throw new Error(`Twitter API error: ${response.status} ${response.statusText}`)
+      const isVideo = mediaType.startsWith('video/');
+      if (!isVideo) {
+        const initMediaCategory = mediaCategory || (mediaType === 'image/gif' ? 'tweet_gif' : 'tweet_image');
+        const mediaId = await this.uploadInit(mediaBuffer.length, mediaType, initMediaCategory);
+        await this.uploadAppend(mediaId, 0, mediaBuffer);
+        const finalize = await this.uploadFinalize(mediaId);
+        let info = finalize?.processing_info;
+        let attempts = 0;
+        while (info && (info.state === 'pending' || info.state === 'in_progress')) {
+          if (attempts > 10) {
+            throw new Error('Twitter media processing timeout');
+          }
+          const waitSeconds = Number(info.check_after_secs || 1);
+          await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+          const status = await this.uploadStatus(mediaId);
+          info = status?.processing_info;
+          if (info?.state === 'failed') {
+            throw new Error(info?.error?.message || 'Twitter media processing failed');
+          }
+          attempts += 1;
+        }
+        return mediaId;
       }
 
-      const data = (await response.json()) as { media_id_string: string }
-      return data.media_id_string
+      const mediaId = await this.uploadInit(mediaBuffer.length, mediaType, mediaCategory || 'tweet_video');
+      const chunkSize = 5 * 1024 * 1024;
+      let segment = 0;
+      for (let offset = 0; offset < mediaBuffer.length; offset += chunkSize) {
+        const chunk = mediaBuffer.subarray(offset, Math.min(offset + chunkSize, mediaBuffer.length));
+        await this.uploadAppend(mediaId, segment, chunk);
+        segment += 1;
+      }
+
+      const finalize = await this.uploadFinalize(mediaId);
+      let info = finalize?.processing_info;
+      let attempts = 0;
+      while (info && (info.state === 'pending' || info.state === 'in_progress')) {
+        if (attempts > 10) {
+          throw new Error('Twitter media processing timeout');
+        }
+        const waitSeconds = Number(info.check_after_secs || 1);
+        await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+        const status = await this.uploadStatus(mediaId);
+        info = status?.processing_info;
+        if (info?.state === 'failed') {
+          throw new Error(info?.error?.message || 'Twitter media processing failed');
+        }
+        attempts += 1;
+      }
+
+      return mediaId
     } catch (error) {
+      debugError('Twitter uploadMedia failed', error);
       throw new Error(
         `Failed to upload media: ${error instanceof Error ? error.message : 'Unknown error'}`
       )
@@ -439,7 +895,7 @@ export function generateTwitterAuthUrl(clientId: string, redirectUri: string, co
     response_type: 'code',
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: 'tweet.read tweet.write users.read follows.read follows.write',
+    scope: 'tweet.read tweet.write users.read follows.read follows.write media.write',
     state: crypto.randomUUID(),
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',

@@ -18,7 +18,7 @@ export const oauthPlatforms: Record<OAuthPlatformId, OAuthPlatformConfig> = {
     name: 'Twitter / X',
     authUrl: 'https://x.com/i/oauth2/authorize',
     tokenUrl: 'https://api.x.com/2/oauth2/token',
-    scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
+    scopes: ['tweet.read', 'tweet.write', 'users.read', 'media.write', 'offline.access'],
     clientIdEnv: 'TWITTER_CLIENT_ID',
     clientSecretEnv: 'TWITTER_CLIENT_SECRET',
     usePKCE: true,

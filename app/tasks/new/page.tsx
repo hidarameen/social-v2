@@ -42,8 +42,15 @@ export default function CreateTaskPage() {
     excludeQuotes: false,
     originalOnly: false,
     pollIntervalSeconds: 60,
-    triggerType: 'on_tweet' as 'on_tweet' | 'on_mention' | 'on_keyword' | 'on_hashtag',
+    triggerType: 'on_tweet' as 'on_tweet' | 'on_mention' | 'on_keyword' | 'on_hashtag' | 'on_search' | 'on_retweet' | 'on_like',
     triggerValue: '',
+    twitterActions: {
+      post: true,
+      reply: false,
+      quote: false,
+      retweet: false,
+      like: false,
+    },
   });
 
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
@@ -77,6 +84,9 @@ export default function CreateTaskPage() {
   const selectedSourceTwitter = accounts
     .filter(a => formData.sourceAccounts.includes(a.id))
     .some(a => a.platformId === 'twitter');
+  const selectedTargetTwitter = accounts
+    .filter(a => formData.targetAccounts.includes(a.id))
+    .some(a => a.platformId === 'twitter');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,6 +102,19 @@ export default function CreateTaskPage() {
     }
     if (formData.twitterSourceType === 'username' && !formData.twitterUsername.trim()) {
       alert('Please enter a Twitter username for the source');
+      return;
+    }
+    if (formData.triggerType === 'on_like' && formData.twitterSourceType === 'username') {
+      alert('Liked-tweet trigger requires a connected Twitter account');
+      return;
+    }
+    if (
+      (formData.triggerType === 'on_keyword' ||
+        formData.triggerType === 'on_hashtag' ||
+        formData.triggerType === 'on_search') &&
+      !formData.triggerValue.trim()
+    ) {
+      alert('Please enter a trigger value for the selected trigger type');
       return;
     }
 
@@ -114,6 +137,7 @@ export default function CreateTaskPage() {
             template: formData.template || undefined,
             includeMedia: formData.includeMedia,
             enableYtDlp: formData.enableYtDlp,
+            twitterActions: formData.twitterActions,
           },
           filters: {
             twitterSourceType: formData.twitterSourceType,
@@ -395,12 +419,12 @@ export default function CreateTaskPage() {
           </Card>
 
           {selectedSourceTwitter && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Twitter Source</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Twitter Source</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Source Type
                   </label>
@@ -434,21 +458,26 @@ export default function CreateTaskPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="on_tweet">On New Tweet</SelectItem>
-                      <SelectItem value="on_mention">On Mention</SelectItem>
-                      <SelectItem value="on_keyword">On Keyword</SelectItem>
-                      <SelectItem value="on_hashtag">On Hashtag</SelectItem>
+                      <SelectItem value="on_tweet">New tweet by source</SelectItem>
+                      <SelectItem value="on_retweet">New retweet by source</SelectItem>
+                      <SelectItem value="on_like">New liked tweet by source</SelectItem>
+                      <SelectItem value="on_mention">New mention of source</SelectItem>
+                      <SelectItem value="on_search">New tweet from search</SelectItem>
+                      <SelectItem value="on_keyword">New tweet with keyword</SelectItem>
+                      <SelectItem value="on_hashtag">New tweet with hashtag</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                {formData.triggerType !== 'on_tweet' && (
+                {(formData.triggerType === 'on_keyword' ||
+                  formData.triggerType === 'on_hashtag' ||
+                  formData.triggerType === 'on_search') && (
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">
-                      Trigger Value (Keyword/Hashtag/Username)
+                      Trigger Value
                     </label>
                     <Input
-                      placeholder="e.g., #AI, @elonmusk, crypto"
+                      placeholder="e.g., #AI, crypto, from:news"
                       value={formData.triggerValue}
                       onChange={(e) =>
                         setFormData(prev => ({ ...prev, triggerValue: e.target.value }))
@@ -494,6 +523,7 @@ export default function CreateTaskPage() {
                     <input
                       type="checkbox"
                       checked={formData.originalOnly}
+                      disabled={formData.triggerType === 'on_retweet'}
                       onChange={(e) =>
                         setFormData(prev => ({ ...prev, originalOnly: e.target.checked }))
                       }
@@ -514,6 +544,7 @@ export default function CreateTaskPage() {
                     <input
                       type="checkbox"
                       checked={formData.excludeRetweets}
+                      disabled={formData.triggerType === 'on_retweet'}
                       onChange={(e) =>
                         setFormData(prev => ({ ...prev, excludeRetweets: e.target.checked }))
                       }
@@ -531,6 +562,84 @@ export default function CreateTaskPage() {
                     Exclude quote tweets
                   </label>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedTargetTwitter && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Twitter Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.twitterActions.post}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        twitterActions: { ...prev.twitterActions, post: e.target.checked },
+                      }))
+                    }
+                  />
+                  Post tweet
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.twitterActions.reply}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        twitterActions: { ...prev.twitterActions, reply: e.target.checked },
+                      }))
+                    }
+                  />
+                  Reply to the source tweet
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.twitterActions.quote}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        twitterActions: { ...prev.twitterActions, quote: e.target.checked },
+                      }))
+                    }
+                  />
+                  Quote tweet
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.twitterActions.retweet}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        twitterActions: { ...prev.twitterActions, retweet: e.target.checked },
+                      }))
+                    }
+                  />
+                  Retweet
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.twitterActions.like}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        twitterActions: { ...prev.twitterActions, like: e.target.checked },
+                      }))
+                    }
+                  />
+                  Like
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  If none are selected, a tweet will be posted by default.
+                </p>
               </CardContent>
             </Card>
           )}

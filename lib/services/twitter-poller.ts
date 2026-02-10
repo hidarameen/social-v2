@@ -12,6 +12,9 @@ import {
   isRetweet,
   sendToTelegram,
 } from '@/lib/services/twitter-utils';
+import { buildTwitterQuery } from '@/lib/services/twitter-query';
+import { executeTwitterActions } from '@/lib/services/twitter-actions';
+import { debugLog, debugError } from '@/lib/debug';
 
 const DEFAULT_POLL_INTERVAL_SECONDS = 10;
 const MIN_POLL_INTERVAL_SECONDS = 5;
@@ -23,13 +26,15 @@ function clampSeconds(value: number) {
   return value;
 }
 
-function buildQueryExtras(filters?: any) {
-  if (!filters) return '';
-  const extras: string[] = [];
-  if (filters.excludeReplies || filters.originalOnly) extras.push('-is:reply');
-  if (filters.excludeRetweets || filters.originalOnly) extras.push('-is:retweet');
-  if (filters.excludeQuotes || filters.originalOnly) extras.push('-is:quote');
-  return extras.join(' ');
+function resolveSourceUsername(source: any, filters: any) {
+  if (filters?.twitterSourceType === 'username') {
+    return String(filters.twitterUsername || '').trim();
+  }
+  return (
+    source.accountUsername ||
+    source.credentials?.accountInfo?.username ||
+    ''
+  );
 }
 
 async function getLastProcessedTweetId(taskId: string, sourceAccountId: string): Promise<string | undefined> {
@@ -96,6 +101,7 @@ export class TwitterPoller {
       const activeTwitterTasks = tasks.filter(
         t => t.status === 'active' && t.sourceAccounts.length > 0 && t.targetAccounts.length > 0
       );
+      debugLog('Twitter poller tick', { tasks: activeTwitterTasks.length });
 
       for (const task of activeTwitterTasks) {
         const sourceAccounts = (await Promise.all(task.sourceAccounts.map(id => db.getAccount(id))))
@@ -104,11 +110,15 @@ export class TwitterPoller {
           .filter(Boolean) as any[];
 
         const twitterSources = sourceAccounts.filter(a => a.platformId === 'twitter' && a.isActive);
-        const telegramTargets = targetAccounts.filter(a => a.platformId === 'telegram' && a.isActive);
-        if (twitterSources.length === 0 || telegramTargets.length === 0) continue;
+        const activeTargets = targetAccounts.filter(a => a.isActive);
+        if (twitterSources.length === 0 || activeTargets.length === 0) continue;
 
         const filters = task.filters || {};
         const sourceType = filters.twitterSourceType || 'account';
+        const triggerType = filters.triggerType || 'on_tweet';
+        if (triggerType === 'on_like' && sourceType === 'username') {
+          continue;
+        }
         const pollIntervalSeconds = Number(filters.pollIntervalSeconds || 0);
         const pollIntervalMinutes = Number(filters.pollIntervalMinutes || 0);
         const intervalMs =
@@ -131,10 +141,13 @@ export class TwitterPoller {
           sourceType === 'username' ? twitterSources.slice(0, 1) : twitterSources;
 
         for (const source of sourcesToUse) {
-          if (sourceType === 'account' && process.env.TWITTER_WEBHOOK_ENABLED === 'true') {
+          if (
+            sourceType === 'account' &&
+            process.env.TWITTER_WEBHOOK_ENABLED === 'true' &&
+            triggerType !== 'on_like'
+          ) {
             continue;
           }
-          const queryExtras = buildQueryExtras(filters);
           const sinceId =
             sourceType === 'username'
               ? await getLastProcessedTweetIdForUsername(task.id, String(filters.twitterUsername || '').toLowerCase())
@@ -142,9 +155,22 @@ export class TwitterPoller {
 
           const fetchTweets = async (accessToken: string) => {
             const client = new TwitterClient(accessToken);
+            if (triggerType === 'on_like') {
+              if (!source.accountId) throw new Error('Missing Twitter source account ID for likes');
+              return client.getLikedTweets(source.accountId, 10, sinceId);
+            }
+
+            const username = resolveSourceUsername(source, filters);
+            const query = buildTwitterQuery(username, filters);
+
+            if (triggerType !== 'on_tweet') {
+              if (!query) return [];
+              return client.searchRecent(query, 10, sinceId);
+            }
+
             if (sourceType === 'username' && filters.twitterUsername) {
               // Using searchRecentByUsername which is supported on Pay-as-you-go
-              return client.searchRecentByUsername(filters.twitterUsername, 10, sinceId, queryExtras);
+              return client.searchRecentByUsername(filters.twitterUsername, 10, sinceId);
             }
             // User Tweets lookup is also supported on Pay-as-you-go
             return client.getTweetsWithMedia(source.accountId, 10, sinceId);
@@ -153,6 +179,7 @@ export class TwitterPoller {
           let tweets: TweetItem[];
           try {
             tweets = await fetchTweets(source.accessToken);
+            debugLog('Twitter poller fetched tweets', { taskId: task.id, count: tweets.length });
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const isUnauthorized = message.includes('401') || message.toLowerCase().includes('unauthorized');
@@ -166,48 +193,82 @@ export class TwitterPoller {
               if (refreshed.refreshToken) source.refreshToken = refreshed.refreshToken;
               tweets = await fetchTweets(source.accessToken);
             } else {
+              debugError('Twitter poller fetch failed', error, { taskId: task.id });
               throw error;
             }
           }
 
           const sorted = [...tweets].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 
+          const effectiveOriginalOnly = triggerType === 'on_retweet' ? false : Boolean(filters.originalOnly);
+          const effectiveExcludeReplies = Boolean(filters.excludeReplies);
+          const effectiveExcludeRetweets = triggerType === 'on_retweet' ? false : Boolean(filters.excludeRetweets);
+          const effectiveExcludeQuotes = Boolean(filters.excludeQuotes);
+
           for (const tweet of sorted) {
-            if (filters.originalOnly) {
+            if (effectiveOriginalOnly) {
               if (isReply(tweet) || isRetweet(tweet) || isQuote(tweet)) continue;
             }
-            if (filters.excludeReplies && isReply(tweet)) continue;
-            if (filters.excludeRetweets && isRetweet(tweet)) continue;
-            if (filters.excludeQuotes && isQuote(tweet)) continue;
+            if (effectiveExcludeReplies && isReply(tweet)) continue;
+            if (effectiveExcludeRetweets && isRetweet(tweet)) continue;
+            if (effectiveExcludeQuotes && isQuote(tweet)) continue;
             if (!taskProcessor.applyFilters(tweet.text, task.filters)) continue;
 
             const message = buildMessage(task.transformations?.template, tweet, source.credentials?.accountInfo);
             const includeMedia = task.transformations?.includeMedia !== false;
             const enableYtDlp = task.transformations?.enableYtDlp === true;
             const link = buildTweetLink(
-              source.credentials?.accountInfo?.username || '',
+              tweet.author?.username || source.credentials?.accountInfo?.username || '',
               tweet.id
             );
 
-            for (const target of telegramTargets) {
+            for (const target of activeTargets) {
               let status: 'success' | 'failed' = 'success';
               let errorMessage: string | undefined;
+              let responseData: Record<string, any> = {
+                sourceTweetId: tweet.id,
+                sourceUsername:
+                  sourceType === 'username'
+                    ? String(filters.twitterUsername || '').toLowerCase()
+                    : source.credentials?.accountInfo?.username,
+              };
 
               try {
-                const chatId = target.credentials?.chatId;
-                if (!chatId) throw new Error('Missing Telegram target chat ID');
-                await sendToTelegram(
-                  target.accessToken,
-                  String(chatId),
-                  message,
-                  tweet.media,
-                  includeMedia,
-                  link,
-                  enableYtDlp
-                );
+                if (target.platformId === 'telegram') {
+                  debugLog('Twitter poller -> Telegram start', { taskId: task.id, targetId: target.id });
+                  const chatId = target.credentials?.chatId;
+                  if (!chatId) throw new Error('Missing Telegram target chat ID');
+                  await sendToTelegram(
+                    target.accessToken,
+                    String(chatId),
+                    message,
+                    tweet.media,
+                    includeMedia,
+                    link,
+                    enableYtDlp
+                  );
+                  debugLog('Twitter poller -> Telegram sent', { taskId: task.id, targetId: target.id });
+                } else if (target.platformId === 'twitter') {
+                  debugLog('Twitter poller -> Twitter actions start', { taskId: task.id, targetId: target.id });
+                  const actionResult = await executeTwitterActions({
+                    target,
+                    tweet,
+                    template: task.transformations?.template,
+                    accountInfo: source.credentials?.accountInfo,
+                    actions: task.transformations?.twitterActions,
+                  });
+                  responseData = { ...responseData, actions: actionResult.results, textUsed: actionResult.textUsed };
+                  if (!actionResult.ok) {
+                    throw new Error(actionResult.error || 'Twitter actions failed');
+                  }
+                  debugLog('Twitter poller -> Twitter actions success', { taskId: task.id, targetId: target.id });
+                } else {
+                  continue;
+                }
               } catch (error) {
                 status = 'failed';
                 errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                debugError('Twitter poller target failed', error, { taskId: task.id, targetId: target.id });
               }
 
               await db.createExecution({
@@ -219,13 +280,7 @@ export class TwitterPoller {
                 status,
                 error: errorMessage,
                 executedAt: new Date(),
-                responseData: {
-                  sourceTweetId: tweet.id,
-                  sourceUsername:
-                    sourceType === 'username'
-                      ? String(filters.twitterUsername || '').toLowerCase()
-                      : source.credentials?.accountInfo?.username,
-                },
+                responseData,
               });
             }
           }
@@ -261,6 +316,46 @@ if (!g[globalKey]) {
 
 export const twitterPoller: TwitterPoller = g[globalKey];
 
-export function ensureTwitterPollingStarted() {
-  twitterPoller.start();
+function taskNeedsPolling(task: any, accountsById: Map<string, any>) {
+  if (task.status !== 'active') return false;
+  if (!Array.isArray(task.sourceAccounts) || task.sourceAccounts.length === 0) return false;
+  if (!Array.isArray(task.targetAccounts) || task.targetAccounts.length === 0) return false;
+
+  const filters = task.filters || {};
+  const triggerType = filters.triggerType || 'on_tweet';
+  const sourceType = filters.twitterSourceType || 'account';
+  const hasTwitterSource = task.sourceAccounts
+    .map((id: string) => accountsById.get(id))
+    .some((a: any) => a?.platformId === 'twitter' && a?.isActive);
+  if (!hasTwitterSource) return false;
+
+  if (process.env.TWITTER_WEBHOOK_ENABLED === 'true') {
+    if (triggerType === 'on_like') return true;
+    if (sourceType === 'username') return true;
+    if (triggerType === 'on_search' || triggerType === 'on_keyword' || triggerType === 'on_hashtag') return true;
+    if (triggerType === 'on_mention' || triggerType === 'on_retweet') return true;
+    return false;
+  }
+  return true;
+}
+
+export async function ensureTwitterPollingStarted() {
+  if (process.env.TWITTER_POLLING_ENABLED === 'false') {
+    twitterPoller.stop();
+    return;
+  }
+  try {
+    const tasks = await db.getAllTasks();
+    const accounts = await db.getAllAccounts();
+    const accountsById = new Map(accounts.map(a => [a.id, a]));
+    const shouldStart = tasks.some(t => taskNeedsPolling(t, accountsById));
+    if (shouldStart) {
+      twitterPoller.start();
+    } else {
+      twitterPoller.stop();
+    }
+  } catch (error) {
+    console.error('[TwitterPoller] Failed to decide start/stop:', error);
+    twitterPoller.start();
+  }
 }

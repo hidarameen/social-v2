@@ -51,6 +51,17 @@ export default function CreateTaskPage() {
   const [excludeQuotes, setExcludeQuotes] = useState(false)
   const [originalOnly, setOriginalOnly] = useState(false)
   const [pollIntervalSeconds, setPollIntervalSeconds] = useState(60)
+  const [triggerType, setTriggerType] = useState<
+    'on_tweet' | 'on_mention' | 'on_keyword' | 'on_hashtag' | 'on_search' | 'on_retweet' | 'on_like'
+  >('on_tweet')
+  const [triggerValue, setTriggerValue] = useState('')
+  const [twitterActions, setTwitterActions] = useState({
+    post: true,
+    reply: false,
+    quote: false,
+    retweet: false,
+    like: false,
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -70,6 +81,10 @@ export default function CreateTaskPage() {
       cancelled = true
     }
   }, [])
+
+  const hasTwitterTarget = targetAccounts.some(
+    id => accounts.find(a => a.id === id)?.platformId === 'twitter'
+  )
 
   const handleToggleSource = (accountId: string) => {
     setSourceAccounts(prev =>
@@ -106,6 +121,17 @@ export default function CreateTaskPage() {
       toast.error('Please enter a Twitter username for the source')
       return
     }
+    if (triggerType === 'on_like' && twitterSourceType === 'username') {
+      toast.error('Liked-tweet trigger requires a connected Twitter account')
+      return
+    }
+    if (
+      (triggerType === 'on_keyword' || triggerType === 'on_hashtag' || triggerType === 'on_search') &&
+      !triggerValue.trim()
+    ) {
+      toast.error('Please enter a trigger value for the selected trigger type')
+      return
+    }
 
     const recurringPattern =
       frequency === 'daily' || frequency === 'weekly' || frequency === 'monthly'
@@ -138,6 +164,7 @@ export default function CreateTaskPage() {
             template: template || undefined,
             includeMedia,
             enableYtDlp,
+            twitterActions,
           },
           filters: {
             twitterSourceType,
@@ -147,6 +174,8 @@ export default function CreateTaskPage() {
             excludeQuotes,
             originalOnly,
             pollIntervalSeconds,
+            triggerType,
+            triggerValue: triggerValue.trim() || undefined,
           },
         }),
       })
@@ -171,6 +200,9 @@ export default function CreateTaskPage() {
       setExcludeQuotes(false)
       setOriginalOnly(false)
       setPollIntervalSeconds(60)
+      setTriggerType('on_tweet')
+      setTriggerValue('')
+      setTwitterActions({ post: true, reply: false, quote: false, retweet: false, like: false })
       setFrequency('daily')
       setScheduleTime('')
       setIsActive(true)
@@ -432,6 +464,34 @@ export default function CreateTaskPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label htmlFor="twitterTriggerType">Trigger Type</Label>
+                <Select value={triggerType} onValueChange={(v: any) => setTriggerType(v)}>
+                  <SelectTrigger id="twitterTriggerType">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="on_tweet">New tweet by source</SelectItem>
+                    <SelectItem value="on_retweet">New retweet by source</SelectItem>
+                    <SelectItem value="on_like">New liked tweet by source</SelectItem>
+                    <SelectItem value="on_mention">New mention of source</SelectItem>
+                    <SelectItem value="on_search">New tweet from search</SelectItem>
+                    <SelectItem value="on_keyword">New tweet with keyword</SelectItem>
+                    <SelectItem value="on_hashtag">New tweet with hashtag</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(triggerType === 'on_keyword' || triggerType === 'on_hashtag' || triggerType === 'on_search') && (
+                <div>
+                  <Label htmlFor="twitterTriggerValue">Trigger Value</Label>
+                  <Input
+                    id="twitterTriggerValue"
+                    placeholder="e.g., #AI, crypto, from:news"
+                    value={triggerValue}
+                    onChange={(e) => setTriggerValue(e.target.value)}
+                  />
+                </div>
+              )}
               {twitterSourceType === 'username' && (
                 <div>
                   <Label htmlFor="twitterUsername">Twitter Username</Label>
@@ -459,6 +519,7 @@ export default function CreateTaskPage() {
                   <input
                     type="checkbox"
                     checked={originalOnly}
+                    disabled={triggerType === 'on_retweet'}
                     onChange={(e) => setOriginalOnly(e.target.checked)}
                   />
                   Original only (exclude replies/retweets/quotes)
@@ -475,6 +536,7 @@ export default function CreateTaskPage() {
                   <input
                     type="checkbox"
                     checked={excludeRetweets}
+                    disabled={triggerType === 'on_retweet'}
                     onChange={(e) => setExcludeRetweets(e.target.checked)}
                   />
                   Exclude retweets
@@ -490,6 +552,70 @@ export default function CreateTaskPage() {
               </div>
             </CardContent>
           </Card>
+          )}
+
+          {hasTwitterTarget && (
+            <Card className="border-border/40">
+              <CardHeader>
+                <CardTitle>Twitter Actions</CardTitle>
+                <CardDescription>Choose what to do on Twitter when a trigger fires</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={twitterActions.post}
+                    onChange={(e) =>
+                      setTwitterActions(prev => ({ ...prev, post: e.target.checked }))
+                    }
+                  />
+                  Post tweet
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={twitterActions.reply}
+                    onChange={(e) =>
+                      setTwitterActions(prev => ({ ...prev, reply: e.target.checked }))
+                    }
+                  />
+                  Reply to the source tweet
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={twitterActions.quote}
+                    onChange={(e) =>
+                      setTwitterActions(prev => ({ ...prev, quote: e.target.checked }))
+                    }
+                  />
+                  Quote tweet
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={twitterActions.retweet}
+                    onChange={(e) =>
+                      setTwitterActions(prev => ({ ...prev, retweet: e.target.checked }))
+                    }
+                  />
+                  Retweet
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={twitterActions.like}
+                    onChange={(e) =>
+                      setTwitterActions(prev => ({ ...prev, like: e.target.checked }))
+                    }
+                  />
+                  Like
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  If none are selected, a tweet will be posted by default.
+                </p>
+              </CardContent>
+            </Card>
           )}
 
           {/* Scheduling */}

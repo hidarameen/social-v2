@@ -13,7 +13,7 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    ensureTwitterPollingStarted();
+    await ensureTwitterPollingStarted();
     ensureTwitterStreamStarted();
     ensureSchedulerStarted();
     const user = await getAuthUser();
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     if (!limiter.ok) {
       return NextResponse.json({ success: false, error: 'Too many requests' }, { status: 429 });
     }
-    ensureTwitterPollingStarted();
+    await ensureTwitterPollingStarted();
     ensureTwitterStreamStarted();
     ensureSchedulerStarted();
     const user = await getAuthUser();
