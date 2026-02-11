@@ -1,8 +1,10 @@
 import { TwitterContent, TwitterTweet } from './types'
 import { promises as fs } from 'fs'
-import { debugError } from '@/lib/debug'
+import { debugError, debugLog } from '@/lib/debug'
+import crypto from 'crypto'
 
 const TWITTER_API_V2 = 'https://api.twitter.com/2'
+const TWITTER_MEDIA_V2 = 'https://api.x.com/2/media/upload'
 
 export class TwitterClient {
   private bearerToken: string
@@ -11,10 +13,109 @@ export class TwitterClient {
     this.bearerToken = bearerToken
   }
 
-  private getUploadHeaders() {
-    return {
-      'Authorization': `Bearer ${this.bearerToken}`,
+  private getOAuth1Credentials() {
+    const consumerKey =
+      process.env.TWITTER_CONSUMER_KEY ||
+      process.env.TWITTER_API_KEY ||
+      process.env.TWITTER_CLIENT_ID;
+    const consumerSecret =
+      process.env.TWITTER_CONSUMER_SECRET ||
+      process.env.TWITTER_API_SECRET ||
+      process.env.TWITTER_CLIENT_SECRET;
+    const token =
+      process.env.TWITTER_ACCESS_TOKEN ||
+      process.env.TWITTER_USER_ACCESS_TOKEN ||
+      process.env.TWITTER_OAUTH_TOKEN;
+    const tokenSecret =
+      process.env.TWITTER_ACCESS_TOKEN_SECRET ||
+      process.env.TWITTER_USER_ACCESS_TOKEN_SECRET ||
+      process.env.TWITTER_OAUTH_TOKEN_SECRET;
+
+    if (!consumerKey || !consumerSecret || !token || !tokenSecret) {
+      debugError('Twitter OAuth1 credentials missing', null, {
+        hasConsumerKey: Boolean(consumerKey),
+        hasConsumerSecret: Boolean(consumerSecret),
+        hasToken: Boolean(token),
+        hasTokenSecret: Boolean(tokenSecret),
+      });
+      return null;
+    }
+    return { consumerKey, consumerSecret, token, tokenSecret };
+  }
+
+  private percentEncode(value: string) {
+    return encodeURIComponent(value)
+      .replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  }
+
+  private buildOAuth1Header(method: string, url: string, params: Record<string, string>) {
+    const creds = this.getOAuth1Credentials();
+    if (!creds) return null;
+
+    const oauthParams: Record<string, string> = {
+      oauth_consumer_key: creds.consumerKey,
+      oauth_nonce: crypto.randomBytes(16).toString('hex'),
+      oauth_signature_method: 'HMAC-SHA1',
+      oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+      oauth_token: creds.token,
+      oauth_version: '1.0',
     };
+
+    const allParams: Record<string, string> = { ...params, ...oauthParams };
+    const normalized = Object.keys(allParams)
+      .sort()
+      .map(k => `${this.percentEncode(k)}=${this.percentEncode(allParams[k])}`)
+      .join('&');
+
+    const baseString = [
+      method.toUpperCase(),
+      this.percentEncode(url),
+      this.percentEncode(normalized),
+    ].join('&');
+
+    const signingKey = `${this.percentEncode(creds.consumerSecret)}&${this.percentEncode(creds.tokenSecret)}`;
+    const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
+    const oauthHeaderParams = {
+      ...oauthParams,
+      oauth_signature: signature,
+    };
+
+    const header = 'OAuth ' + Object.keys(oauthHeaderParams)
+      .sort()
+      .map(k => `${this.percentEncode(k)}=\"${this.percentEncode(oauthHeaderParams[k])}\"`)
+      .join(', ');
+
+    debugLog('Twitter OAuth1 header built', { method, url });
+    return header;
+  }
+
+  private getUploadHeaders(method: string, url: string, params: Record<string, string>) {
+    const oauth1 = this.buildOAuth1Header(method, url, params);
+    if (oauth1) {
+      return { Authorization: oauth1 };
+    }
+    debugError('Twitter OAuth1 not used, falling back to OAuth2', null, {
+      url,
+      method,
+    });
+    return { Authorization: `Bearer ${this.bearerToken}` };
+  }
+
+  async verifyOAuth1(): Promise<{ ok: boolean; error?: string; body?: string }> {
+    const url = 'https://api.twitter.com/1.1/account/verify_credentials.json';
+    const auth = this.buildOAuth1Header('GET', url, {});
+    if (!auth) {
+      return { ok: false, error: 'OAuth1 credentials missing' };
+    }
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: auth },
+    });
+    const text = await response.text().catch(() => '');
+    if (!response.ok) {
+      return { ok: false, error: `Twitter API error: ${response.status} ${response.statusText}`, body: text };
+    }
+    return { ok: true, body: text };
   }
 
   private async uploadInit(totalBytes: number, mediaType: string, mediaCategory?: string): Promise<string> {
@@ -43,11 +144,12 @@ export class TwitterClient {
       throw new Error(`Twitter API error: ${response.status} ${response.statusText} ${text}`.trim());
     }
 
-    const data = (await response.json()) as { media_id?: string; media_id_string?: string };
-    const mediaId = data.media_id || data.media_id_string;
+    const data = (await response.json()) as { media_id_string?: string; media_id?: string };
+    const mediaId = data.media_id_string || data.media_id;
     if (!mediaId) {
       throw new Error('Twitter media INIT failed');
     }
+    debugLog('Twitter media INIT success', { mediaId, totalBytes, mediaType, mediaCategory });
     return mediaId;
   }
 
@@ -77,6 +179,7 @@ export class TwitterClient {
       });
       throw new Error(`Twitter API error: ${response.status} ${response.statusText} ${text}`.trim());
     }
+    debugLog('Twitter media APPEND success', { mediaId, segmentIndex });
   }
 
   async uploadMediaFromFile(filePath: string, mediaType: string): Promise<string> {
@@ -154,14 +257,17 @@ export class TwitterClient {
       });
       throw new Error(`Twitter API error: ${response.status} ${response.statusText} ${text}`.trim());
     }
+    debugLog('Twitter media FINALIZE success', { mediaId });
     return (await response.json()) as any;
   }
 
   private async uploadStatus(mediaId: string) {
-    const params = new URLSearchParams();
-    params.set('command', 'STATUS');
-    params.set('media_id', mediaId);
-    const response = await fetch(`https://upload.twitter.com/1.1/media/upload.json?${params.toString()}`, {
+    const params = new URLSearchParams({
+      command: 'STATUS',
+      media_id: mediaId,
+    });
+    const url = `https://upload.twitter.com/1.1/media/upload.json?${params.toString()}`;
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${this.bearerToken}`,
@@ -740,30 +846,10 @@ export class TwitterClient {
   async uploadMedia(mediaBuffer: Buffer, mediaType: string, mediaCategory?: string): Promise<string> {
     try {
       const isVideo = mediaType.startsWith('video/');
-      if (!isVideo) {
-        const initMediaCategory = mediaCategory || (mediaType === 'image/gif' ? 'tweet_gif' : 'tweet_image');
-        const mediaId = await this.uploadInit(mediaBuffer.length, mediaType, initMediaCategory);
-        await this.uploadAppend(mediaId, 0, mediaBuffer);
-        const finalize = await this.uploadFinalize(mediaId);
-        let info = finalize?.processing_info;
-        let attempts = 0;
-        while (info && (info.state === 'pending' || info.state === 'in_progress')) {
-          if (attempts > 10) {
-            throw new Error('Twitter media processing timeout');
-          }
-          const waitSeconds = Number(info.check_after_secs || 1);
-          await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
-          const status = await this.uploadStatus(mediaId);
-          info = status?.processing_info;
-          if (info?.state === 'failed') {
-            throw new Error(info?.error?.message || 'Twitter media processing failed');
-          }
-          attempts += 1;
-        }
-        return mediaId;
-      }
+      const isGif = mediaType === 'image/gif';
+      const category = mediaCategory || (isVideo ? 'tweet_video' : isGif ? 'tweet_gif' : 'tweet_image');
 
-      const mediaId = await this.uploadInit(mediaBuffer.length, mediaType, mediaCategory || 'tweet_video');
+      const mediaId = await this.uploadInit(mediaBuffer.length, mediaType, category);
       const chunkSize = 5 * 1024 * 1024;
       let segment = 0;
       for (let offset = 0; offset < mediaBuffer.length; offset += chunkSize) {
