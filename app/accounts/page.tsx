@@ -26,9 +26,14 @@ import {
 import type { PlatformAccount } from '@/lib/db';
 import { platformConfigs } from '@/lib/platforms/handlers';
 import { type PlatformId } from '@/lib/platforms/types';
+import { PlatformIcon } from '@/components/common/platform-icon';
+import { AccountAvatar } from '@/components/common/account-avatar';
 import { Plus, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { useConfirmDialog } from '@/components/common/use-confirm-dialog';
 
 export default function AccountsPage() {
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
   const [open, setOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformId | ''>('');
@@ -78,13 +83,13 @@ export default function AccountsPage() {
     e.preventDefault();
 
     if (!selectedPlatform) {
-      alert('Please select a platform');
+      toast.error('Please select a platform');
       return;
     }
 
     if (authMethod === 'oauth') {
       if (selectedPlatform === 'telegram' || selectedPlatform === 'linkedin') {
-        alert('OAuth is not available for this platform. Please use manual setup.');
+        toast.error('OAuth is not available for this platform. Please use manual setup.');
         return;
       }
       const returnTo = `${window.location.pathname}${window.location.search}`;
@@ -93,23 +98,23 @@ export default function AccountsPage() {
     }
 
     if (authMethod === 'manual' && selectedPlatform !== 'telegram' && !formData.accountName) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     if (authMethod === 'manual' && selectedPlatform === 'telegram') {
       if (!formData.accessToken) {
-        alert('Please enter the Telegram bot token');
+        toast.error('Please enter the Telegram bot token');
         return;
       }
       if (!formData.chatId) {
-        alert('Please enter the Telegram channel/chat ID');
+        toast.error('Please enter the Telegram channel/chat ID');
         return;
       }
     }
 
-    if (authMethod === 'manual' && !formData.accessToken && selectedPlatform !== 'telegram' && selectedPlatform !== 'twitter') {
-      alert('Please enter the access token');
+    if (authMethod === 'manual' && !formData.accessToken && selectedPlatform !== 'telegram') {
+      toast.error('Please enter the access token');
       return;
     }
 
@@ -161,20 +166,28 @@ export default function AccountsPage() {
         setAuthMethod('oauth');
         setOpen(false);
         setAccounts(prev => [data.account, ...prev]);
+        toast.success('Account added successfully');
       })
-      .catch(error => alert(error instanceof Error ? error.message : 'Failed to create account'));
+      .catch(error => toast.error(error instanceof Error ? error.message : 'Failed to create account'));
   };
 
-  const handleDeleteAccount = (accountId: string) => {
-    if (confirm('Are you sure you want to delete this account?')) {
-      fetch(`/api/accounts/${accountId}`, { method: 'DELETE' })
-        .then(res => res.json())
-        .then(data => {
-          if (!data.success) throw new Error(data.error || 'Failed to delete account');
-          setAccounts(accounts.filter(a => a.id !== accountId));
-        })
-        .catch(error => alert(error instanceof Error ? error.message : 'Failed to delete account'));
-    }
+  const handleDeleteAccount = async (accountId: string) => {
+    const accepted = await confirm({
+      title: 'Delete Account?',
+      description: 'This account connection will be removed from your workspace.',
+      confirmText: 'Delete',
+      destructive: true,
+    });
+    if (!accepted) return;
+
+    fetch(`/api/accounts/${accountId}`, { method: 'DELETE' })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success) throw new Error(data.error || 'Failed to delete account');
+        setAccounts(accounts.filter(a => a.id !== accountId));
+        toast.success('Account deleted successfully');
+      })
+      .catch(error => toast.error(error instanceof Error ? error.message : 'Failed to delete account'));
   };
 
   const handleToggleStatus = (account: PlatformAccount) => {
@@ -191,8 +204,9 @@ export default function AccountsPage() {
             a.id === account.id ? { ...a, isActive: !a.isActive } : a
           )
         );
+        toast.success(!account.isActive ? 'Account activated' : 'Account deactivated');
       })
-      .catch(error => alert(error instanceof Error ? error.message : 'Failed to update account'));
+      .catch(error => toast.error(error instanceof Error ? error.message : 'Failed to update account'));
   };
 
   const handleLoadMore = async () => {
@@ -221,11 +235,11 @@ export default function AccountsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background control-app">
       <Sidebar />
       <Header />
 
-      <main className="ml-64 mt-16 p-8">
+      <main className="control-main">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
@@ -298,7 +312,10 @@ export default function AccountsPage() {
                     <SelectContent>
                       {Object.entries(platformAccountsMap).map(([key, config]) => (
                         <SelectItem key={key} value={key}>
-                          {config.icon} {config.name}
+                          <span className="inline-flex items-center gap-2">
+                            <PlatformIcon platformId={key as PlatformId} size={16} />
+                            <span>{config.name}</span>
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -513,8 +530,9 @@ export default function AccountsPage() {
               const config = platformConfigs[platformId as PlatformId];
               return (
                 <div key={platformId}>
-                  <h2 className="text-xl font-bold text-foreground mb-4">
-                    {config.icon} {config.name}
+                  <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-foreground">
+                    <PlatformIcon platformId={platformId as PlatformId} size={20} />
+                    <span>{config.name}</span>
                   </h2>
 
                   <div className="grid grid-cols-1 gap-4">
@@ -525,7 +543,27 @@ export default function AccountsPage() {
                       >
                         <CardContent className="p-6">
                           <div className="flex items-center justify-between">
-                            <div className="flex-1">
+                            <div className="flex flex-1 items-center gap-4">
+                              <AccountAvatar
+                                platformId={account.platformId as PlatformId}
+                                profileImageUrl={
+                                  (account.credentials as any)?.profileImageUrl ||
+                                  (account.credentials as any)?.accountInfo?.profileImageUrl ||
+                                  (account.credentials as any)?.accountInfo?.avatarUrl
+                                }
+                                isBot={
+                                  account.platformId === 'telegram' &&
+                                  Boolean(
+                                    (account.credentials as any)?.isBot ??
+                                    (account.credentials as any)?.accountInfo?.isBot ??
+                                    true
+                                  )
+                                }
+                                label={account.accountName || account.accountUsername || config.name}
+                                size={52}
+                              />
+
+                              <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-3 mb-2">
                                 <h3 className="text-lg font-semibold text-foreground">
                                   {account.accountName}
@@ -553,6 +591,7 @@ export default function AccountsPage() {
                               <p className="text-xs text-muted-foreground mt-2">
                                 Added {new Date(account.createdAt).toLocaleDateString()}
                               </p>
+                            </div>
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -591,6 +630,7 @@ export default function AccountsPage() {
           </div>
         )}
       </main>
+      {ConfirmDialog}
     </div>
   );
 }

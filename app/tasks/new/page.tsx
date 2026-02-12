@@ -18,8 +18,16 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { PlatformAccount } from '@/lib/db';
 import { platformConfigs } from '@/lib/platforms/handlers';
+import type { PlatformId } from '@/lib/platforms/types';
+import { PlatformIcon } from '@/components/common/platform-icon';
+import {
+  DEFAULT_YOUTUBE_CATEGORY_ID,
+  resolveYouTubeCategoryId,
+  YOUTUBE_VIDEO_CATEGORIES,
+} from '@/lib/youtube-categories';
 import { ArrowRight, Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 export default function CreateTaskPage() {
   const router = useRouter();
@@ -50,6 +58,27 @@ export default function CreateTaskPage() {
       quote: false,
       retweet: false,
       like: false,
+    },
+    youtubeActions: {
+      uploadVideo: true,
+      uploadVideoToPlaylist: false,
+      playlistId: '',
+    },
+    youtubeVideo: {
+      titleTemplate: '',
+      descriptionTemplate: '',
+      tagsText: '',
+      privacyStatus: 'public',
+      categoryId: DEFAULT_YOUTUBE_CATEGORY_ID,
+      embeddable: true,
+      license: 'youtube',
+      publicStatsViewable: true,
+      selfDeclaredMadeForKids: false,
+      notifySubscribers: true,
+      publishAt: '',
+      defaultLanguage: '',
+      defaultAudioLanguage: '',
+      recordingDate: '',
     },
   });
 
@@ -87,6 +116,44 @@ export default function CreateTaskPage() {
   const selectedTargetTwitter = accounts
     .filter(a => formData.targetAccounts.includes(a.id))
     .some(a => a.platformId === 'twitter');
+  const selectedTargetYouTubeAccounts = accounts
+    .filter(a => formData.targetAccounts.includes(a.id))
+    .filter(a => a.platformId === 'youtube');
+  const selectedTargetYouTube = selectedTargetYouTubeAccounts.length > 0;
+  const youtubePlaylists: Array<{ id: string; title: string }> = [];
+  const youtubePlaylistSeen = new Set<string>();
+  for (const account of selectedTargetYouTubeAccounts) {
+    const available = Array.isArray((account.credentials as any)?.availablePlaylists)
+      ? (account.credentials as any).availablePlaylists
+      : [];
+    for (const item of available) {
+      const id = String(item?.id || '');
+      const title = String(item?.title || item?.id || '');
+      if (!id || !title || youtubePlaylistSeen.has(id)) continue;
+      youtubePlaylistSeen.add(id);
+      youtubePlaylists.push({ id, title });
+    }
+  }
+
+  const handleSourcePlatformChange = (platformId: string) => {
+    setSelectedSourcePlatform(platformId);
+    setFormData(prev => ({
+      ...prev,
+      sourceAccounts: prev.sourceAccounts.filter(
+        id => accounts.find(a => a.id === id)?.platformId === platformId
+      ).slice(0, 1),
+    }));
+  };
+
+  const handleTargetPlatformChange = (platformId: string) => {
+    setSelectedTargetPlatform(platformId);
+    setFormData(prev => ({
+      ...prev,
+      targetAccounts: prev.targetAccounts.filter(
+        id => accounts.find(a => a.id === id)?.platformId === platformId
+      ).slice(0, 1),
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,15 +164,20 @@ export default function CreateTaskPage() {
 
     if (!formData.name || formData.sourceAccounts.length === 0 || formData.targetAccounts.length === 0) {
       console.warn('[v0] handleSubmit: Validation failed - missing required fields');
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
     if (formData.twitterSourceType === 'username' && !formData.twitterUsername.trim()) {
-      alert('Please enter a Twitter username for the source');
+      toast.error('Please enter a Twitter username for the source');
+      return;
+    }
+    const overlappingAccounts = formData.sourceAccounts.filter(id => formData.targetAccounts.includes(id));
+    if (overlappingAccounts.length > 0) {
+      toast.error('A single account cannot be both source and target in the same task.');
       return;
     }
     if (formData.triggerType === 'on_like' && formData.twitterSourceType === 'username') {
-      alert('Liked-tweet trigger requires a connected Twitter account');
+      toast.error('Liked-tweet trigger requires a connected Twitter account');
       return;
     }
     if (
@@ -114,10 +186,17 @@ export default function CreateTaskPage() {
         formData.triggerType === 'on_search') &&
       !formData.triggerValue.trim()
     ) {
-      alert('Please enter a trigger value for the selected trigger type');
+      toast.error('Please enter a trigger value for the selected trigger type');
       return;
     }
-
+    if (
+      selectedTargetYouTube &&
+      formData.youtubeActions.uploadVideoToPlaylist &&
+      !formData.youtubeActions.playlistId
+    ) {
+      toast.error('Please select a YouTube playlist or disable "Upload video to playlist".');
+      return;
+    }
     try {
       setIsSubmitting(true);
       const res = await fetch(`/api/tasks`, {
@@ -138,6 +217,41 @@ export default function CreateTaskPage() {
             includeMedia: formData.includeMedia,
             enableYtDlp: formData.enableYtDlp,
             twitterActions: formData.twitterActions,
+            youtubeActions: {
+              uploadVideo: formData.youtubeActions.uploadVideo,
+              uploadVideoToPlaylist: formData.youtubeActions.uploadVideoToPlaylist,
+              playlistId: formData.youtubeActions.uploadVideoToPlaylist
+                ? formData.youtubeActions.playlistId || undefined
+                : undefined,
+            },
+            youtubeVideo: {
+              titleTemplate: formData.youtubeVideo.titleTemplate || undefined,
+              descriptionTemplate: formData.youtubeVideo.descriptionTemplate || undefined,
+              tags: formData.youtubeVideo.tagsText
+                .split(/[\n,]/)
+                .map(tag => tag.trim())
+                .filter(Boolean),
+              privacyStatus: formData.youtubeVideo.privacyStatus as
+                | 'private'
+                | 'unlisted'
+                | 'public',
+              categoryId:
+                resolveYouTubeCategoryId(formData.youtubeVideo.categoryId) ||
+                DEFAULT_YOUTUBE_CATEGORY_ID,
+              embeddable: formData.youtubeVideo.embeddable,
+              license: formData.youtubeVideo.license as 'youtube' | 'creativeCommon',
+              publicStatsViewable: formData.youtubeVideo.publicStatsViewable,
+              selfDeclaredMadeForKids: formData.youtubeVideo.selfDeclaredMadeForKids,
+              notifySubscribers: formData.youtubeVideo.notifySubscribers,
+              publishAt: formData.youtubeVideo.publishAt
+                ? new Date(formData.youtubeVideo.publishAt).toISOString()
+                : undefined,
+              defaultLanguage: formData.youtubeVideo.defaultLanguage || undefined,
+              defaultAudioLanguage: formData.youtubeVideo.defaultAudioLanguage || undefined,
+              recordingDate: formData.youtubeVideo.recordingDate
+                ? new Date(`${formData.youtubeVideo.recordingDate}T00:00:00.000Z`).toISOString()
+                : undefined,
+            },
           },
           filters: {
             twitterSourceType: formData.twitterSourceType,
@@ -154,10 +268,11 @@ export default function CreateTaskPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create task');
+      toast.success('Task created successfully');
       router.push('/tasks');
     } catch (error) {
       console.error('[v0] handleSubmit: Error creating task:', error);
-      alert(error instanceof Error ? error.message : 'Failed to create task');
+      toast.error(error instanceof Error ? error.message : 'Failed to create task');
     } finally {
       setIsSubmitting(false);
     }
@@ -167,8 +282,11 @@ export default function CreateTaskPage() {
     setFormData(prev => ({
       ...prev,
       sourceAccounts: prev.sourceAccounts.includes(accountId)
-        ? prev.sourceAccounts.filter(id => id !== accountId)
-        : [...prev.sourceAccounts, accountId],
+        ? []
+        : [accountId],
+      targetAccounts: prev.sourceAccounts.includes(accountId)
+        ? prev.targetAccounts
+        : prev.targetAccounts.filter(id => id !== accountId),
     }));
   };
 
@@ -176,27 +294,33 @@ export default function CreateTaskPage() {
     setFormData(prev => ({
       ...prev,
       targetAccounts: prev.targetAccounts.includes(accountId)
-        ? prev.targetAccounts.filter(id => id !== accountId)
-        : [...prev.targetAccounts, accountId],
+        ? []
+        : [accountId],
+      sourceAccounts: prev.targetAccounts.includes(accountId)
+        ? prev.sourceAccounts
+        : prev.sourceAccounts.filter(id => id !== accountId),
     }));
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background control-app">
       <Sidebar />
       <Header />
 
-      <main className="ml-64 mt-16 p-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
+      <main className="control-main">
+        <div className="page-header animate-fade-up">
+          <div>
+            <span className="kpi-pill">Automation Builder</span>
+            <h1 className="page-title mt-3">
             Create New Task
-          </h1>
-          <p className="text-muted-foreground">
-            Set up an automation task to transfer content between platforms
-          </p>
+            </h1>
+            <p className="page-subtitle">
+              Set up an automation task to transfer content between platforms
+            </p>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="max-w-4xl space-y-6">
+        <form onSubmit={handleSubmit} className="max-w-5xl space-y-6">
           {/* Basic Info */}
           <Card>
             <CardHeader>
@@ -237,14 +361,17 @@ export default function CreateTaskPage() {
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Source Platform
                 </label>
-                <Select value={selectedSourcePlatform} onValueChange={setSelectedSourcePlatform}>
+                <Select value={selectedSourcePlatform} onValueChange={handleSourcePlatformChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Choose source platform" />
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(platformConfigs).map(([key, config]) => (
                       <SelectItem key={key} value={key}>
-                        {config.icon} {config.name}
+                        <span className="inline-flex items-center gap-2">
+                          <PlatformIcon platformId={key as PlatformId} size={16} />
+                          <span>{config.name}</span>
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -299,14 +426,17 @@ export default function CreateTaskPage() {
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Target Platform(s)
                 </label>
-                <Select value={selectedTargetPlatform} onValueChange={setSelectedTargetPlatform}>
+                <Select value={selectedTargetPlatform} onValueChange={handleTargetPlatformChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Choose target platform" />
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(platformConfigs).map(([key, config]) => (
                       <SelectItem key={key} value={key}>
-                        {config.icon} {config.name}
+                        <span className="inline-flex items-center gap-2">
+                          <PlatformIcon platformId={key as PlatformId} size={16} />
+                          <span>{config.name}</span>
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -571,7 +701,7 @@ export default function CreateTaskPage() {
               <CardHeader>
                 <CardTitle>Twitter Actions</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-4">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -644,6 +774,339 @@ export default function CreateTaskPage() {
             </Card>
           )}
 
+          {selectedTargetYouTube && (
+            <Card>
+              <CardHeader>
+                <CardTitle>YouTube Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.youtubeActions.uploadVideo}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        youtubeActions: { ...prev.youtubeActions, uploadVideo: e.target.checked },
+                      }))
+                    }
+                  />
+                  Upload video
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.youtubeActions.uploadVideoToPlaylist}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        youtubeActions: {
+                          ...prev.youtubeActions,
+                          uploadVideoToPlaylist: e.target.checked,
+                        },
+                      }))
+                    }
+                  />
+                  Upload video to playlist
+                </label>
+
+                {formData.youtubeActions.uploadVideoToPlaylist && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Playlist
+                    </label>
+                    {youtubePlaylists.length > 0 ? (
+                      <Select
+                        value={formData.youtubeActions.playlistId}
+                        onValueChange={(value: string) =>
+                          setFormData(prev => ({
+                            ...prev,
+                            youtubeActions: { ...prev.youtubeActions, playlistId: value },
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select YouTube playlist" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {youtubePlaylists.map(playlist => (
+                            <SelectItem key={playlist.id} value={playlist.id}>
+                              {playlist.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No playlists detected for selected YouTube account. Reconnect account to refresh playlists.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Video Title Template
+                  </label>
+                  <Input
+                    placeholder="%text%"
+                    value={formData.youtubeVideo.titleTemplate}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        youtubeVideo: { ...prev.youtubeVideo, titleTemplate: e.target.value },
+                      }))
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Video Description Template
+                  </label>
+                  <Textarea
+                    placeholder="%text%&#10;&#10;%link%"
+                    rows={4}
+                    value={formData.youtubeVideo.descriptionTemplate}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        youtubeVideo: { ...prev.youtubeVideo, descriptionTemplate: e.target.value },
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Placeholders: %text%, %username%, %name%, %date%, %link%, %media%
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Tags (comma or new line separated)
+                  </label>
+                  <Textarea
+                    placeholder="automation, social media, video"
+                    rows={3}
+                    value={formData.youtubeVideo.tagsText}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        youtubeVideo: { ...prev.youtubeVideo, tagsText: e.target.value },
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Privacy
+                    </label>
+                    <Select
+                      value={formData.youtubeVideo.privacyStatus}
+                      onValueChange={(value: any) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: { ...prev.youtubeVideo, privacyStatus: value },
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="public">Public</SelectItem>
+                        <SelectItem value="unlisted">Unlisted</SelectItem>
+                        <SelectItem value="private">Private</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      License
+                    </label>
+                    <Select
+                      value={formData.youtubeVideo.license}
+                      onValueChange={(value: any) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: { ...prev.youtubeVideo, license: value },
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="youtube">Standard YouTube License</SelectItem>
+                        <SelectItem value="creativeCommon">Creative Commons</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Category
+                    </label>
+                    <Select
+                      value={formData.youtubeVideo.categoryId}
+                      onValueChange={(value: string) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: { ...prev.youtubeVideo, categoryId: value },
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {YOUTUBE_VIDEO_CATEGORIES.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Schedule Publish At (optional)
+                    </label>
+                    <Input
+                      type="datetime-local"
+                      value={formData.youtubeVideo.publishAt}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: { ...prev.youtubeVideo, publishAt: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Default Language
+                    </label>
+                    <Input
+                      placeholder="en"
+                      value={formData.youtubeVideo.defaultLanguage}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: { ...prev.youtubeVideo, defaultLanguage: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Audio Language
+                    </label>
+                    <Input
+                      placeholder="en"
+                      value={formData.youtubeVideo.defaultAudioLanguage}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: {
+                            ...prev.youtubeVideo,
+                            defaultAudioLanguage: e.target.value,
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Recording Date (optional)
+                  </label>
+                  <Input
+                    type="date"
+                    value={formData.youtubeVideo.recordingDate}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        youtubeVideo: { ...prev.youtubeVideo, recordingDate: e.target.value },
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.youtubeVideo.embeddable}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: { ...prev.youtubeVideo, embeddable: e.target.checked },
+                        }))
+                      }
+                    />
+                    Allow embedding
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.youtubeVideo.publicStatsViewable}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: {
+                            ...prev.youtubeVideo,
+                            publicStatsViewable: e.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Public stats viewable
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.youtubeVideo.selfDeclaredMadeForKids}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: {
+                            ...prev.youtubeVideo,
+                            selfDeclaredMadeForKids: e.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Made for kids
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.youtubeVideo.notifySubscribers}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          youtubeVideo: {
+                            ...prev.youtubeVideo,
+                            notifySubscribers: e.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Notify subscribers
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Twitter Template */}
           <Card>
             <CardHeader>
@@ -686,9 +1149,9 @@ export default function CreateTaskPage() {
           </Card>
 
           {/* Actions */}
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Button type="submit" size="lg" disabled={isSubmitting}>
-              <Save size={20} className="mr-2" />
+              <Save size={18} />
               {isSubmitting ? 'Creating...' : 'Create Task'}
             </Button>
             <Button

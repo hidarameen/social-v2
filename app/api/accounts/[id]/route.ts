@@ -5,6 +5,19 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
+async function revokeFacebookAppPermissions(userAccessToken: string): Promise<void> {
+  const token = String(userAccessToken || '').trim();
+  if (!token) return;
+  try {
+    await fetch(
+      `https://graph.facebook.com/v22.0/me/permissions?access_token=${encodeURIComponent(token)}`,
+      { method: 'DELETE' }
+    );
+  } catch {
+    // Best effort only.
+  }
+}
+
 
 export async function PATCH(
   request: NextRequest,
@@ -68,10 +81,32 @@ export async function DELETE(
     if (!current || current.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
     }
+
+    const shouldTryFacebookRevoke = current.platformId === 'facebook';
+    const currentCredentials = (current.credentials || {}) as Record<string, any>;
+    const oauthUserId = String(currentCredentials?.oauthUser?.id || '').trim();
+    const tokenFromTokenResponse = String(currentCredentials?.tokenResponse?.access_token || '').trim();
+    const tokenFromOauthUserToken = String(currentCredentials?.oauthUserAccessToken || '').trim();
+    const revokeToken = tokenFromOauthUserToken || tokenFromTokenResponse;
+
     const deleted = await db.deleteAccount(id);
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
     }
+
+    if (shouldTryFacebookRevoke && revokeToken) {
+      const remainingAccounts = await db.getUserAccounts(user.id);
+      const hasSameFacebookIdentity = remainingAccounts.some((account) => {
+        if (account.platformId !== 'facebook') return false;
+        const creds = (account.credentials || {}) as Record<string, any>;
+        const otherOauthUserId = String(creds?.oauthUser?.id || '').trim();
+        return oauthUserId.length > 0 && otherOauthUserId === oauthUserId;
+      });
+      if (!hasSameFacebookIdentity) {
+        await revokeFacebookAppPermissions(revokeToken);
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[API] Error deleting account:', error);

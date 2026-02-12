@@ -10,14 +10,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
+import { useConfirmDialog } from '@/components/common/use-confirm-dialog'
+import { PlatformIcon } from '@/components/common/platform-icon'
+import { AccountAvatar } from '@/components/common/account-avatar'
+import type { PlatformId } from '@/lib/platforms/types'
 import {
-  Facebook,
-  Instagram,
-  Twitter,
-  Music,
-  Play,
-  MessageCircle,
-  Linkedin,
   Plus,
   Trash2,
   Edit,
@@ -26,16 +24,17 @@ import {
 } from 'lucide-react'
 
 const platforms = [
-  { id: 'facebook', name: 'Facebook', icon: Facebook, color: 'bg-blue-600' },
-  { id: 'instagram', name: 'Instagram', icon: Instagram, color: 'bg-gradient-to-r from-purple-600 to-pink-600' },
-  { id: 'twitter', name: 'Twitter', icon: Twitter, color: 'bg-sky-500' },
-  { id: 'tiktok', name: 'TikTok', icon: Music, color: 'bg-black' },
-  { id: 'youtube', name: 'YouTube', icon: Play, color: 'bg-red-600' },
-  { id: 'telegram', name: 'Telegram', icon: MessageCircle, color: 'bg-sky-400' },
-  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: 'bg-blue-700' },
-]
+  { id: 'facebook', name: 'Facebook', color: 'bg-blue-600' },
+  { id: 'instagram', name: 'Instagram', color: 'bg-gradient-to-r from-purple-600 to-pink-600' },
+  { id: 'twitter', name: 'Twitter', color: 'bg-sky-500' },
+  { id: 'tiktok', name: 'TikTok', color: 'bg-black' },
+  { id: 'youtube', name: 'YouTube', color: 'bg-red-600' },
+  { id: 'telegram', name: 'Telegram', color: 'bg-sky-400' },
+  { id: 'linkedin', name: 'LinkedIn', color: 'bg-blue-700' },
+] satisfies Array<{ id: PlatformId; name: string; color: string }>
 
 export default function AccountsPage() {
+  const { confirm, ConfirmDialog } = useConfirmDialog()
   const [authMethod, setAuthMethod] = useState<'oauth' | 'manual'>('oauth')
   const [selectedPlatform, setSelectedPlatform] = useState<string>('facebook')
   const [accounts, setAccounts] = useState<any[]>([])
@@ -55,9 +54,16 @@ export default function AccountsPage() {
             id: a.id,
             platform: a.platformId,
             platformName: platforms.find(p => p.id === a.platformId)?.name || a.platformId,
+            accountName: a.accountName,
             username: a.accountUsername,
             status: a.isActive ? 'connected' : 'paused',
             connectedAt: new Date(a.createdAt).toLocaleDateString(),
+            profileImageUrl:
+              a?.credentials?.profileImageUrl ||
+              a?.credentials?.accountInfo?.profileImageUrl ||
+              a?.credentials?.accountInfo?.avatarUrl ||
+              '',
+            isBot: Boolean(a?.credentials?.isBot ?? a?.credentials?.accountInfo?.isBot ?? false),
           }))
         )
       } catch (error) {
@@ -75,7 +81,7 @@ export default function AccountsPage() {
 
     if (authMethod === 'oauth') {
       if (selectedPlatform === 'telegram' || selectedPlatform === 'linkedin') {
-        alert('OAuth is not available for this platform. Please use manual setup.')
+        toast.error('OAuth is not available for this platform. Please use manual setup.')
         return
       }
       const returnTo = `${window.location.pathname}${window.location.search}`
@@ -85,15 +91,18 @@ export default function AccountsPage() {
 
     if (selectedPlatform === 'telegram') {
       if (!formData.accessToken.trim()) {
-        alert('Please enter the Telegram bot token')
+        toast.error('Please enter the Telegram bot token')
         return
       }
       if (!formData.chatId.trim()) {
-        alert('Please enter the Telegram channel/chat ID')
+        toast.error('Please enter the Telegram channel/chat ID')
         return
       }
+    } else if (selectedPlatform === 'twitter' && !formData.accessToken.trim()) {
+      toast.error('Please connect Twitter with OAuth or provide a valid user access token')
+      return
     } else if (!formData.username.trim()) {
-      alert('Please enter username')
+      toast.error('Please enter username')
       return
     }
 
@@ -121,29 +130,44 @@ export default function AccountsPage() {
           id: data.account.id,
           platform: data.account.platformId,
           platformName: platforms.find(p => p.id === data.account.platformId)?.name || data.account.platformId,
+          accountName: data.account.accountName,
           username: data.account.accountUsername,
           status: data.account.isActive ? 'connected' : 'paused',
           connectedAt: new Date(data.account.createdAt).toLocaleDateString(),
+          profileImageUrl:
+            data?.account?.credentials?.profileImageUrl ||
+            data?.account?.credentials?.accountInfo?.profileImageUrl ||
+            data?.account?.credentials?.accountInfo?.avatarUrl ||
+            '',
+          isBot: Boolean(data?.account?.credentials?.isBot ?? data?.account?.credentials?.accountInfo?.isBot ?? false),
         },
         ...prev,
       ])
       setFormData({ username: '', accessToken: '', chatId: '' })
       setShowAddDialog(false)
+      toast.success('Account added successfully')
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to add account')
+      toast.error(error instanceof Error ? error.message : 'Failed to add account')
     }
   }
 
-  const handleRemoveAccount = (id: string) => {
-    if (confirm('Are you sure you want to remove this account?')) {
-      fetch(`/api/accounts/${id}`, { method: 'DELETE' })
-        .then(res => res.json())
-        .then(data => {
-          if (!data.success) throw new Error(data.error || 'Failed to remove account')
-          setAccounts(accounts.filter(a => a.id !== id))
-        })
-        .catch(error => alert(error instanceof Error ? error.message : 'Failed to remove account'))
-    }
+  const handleRemoveAccount = async (id: string) => {
+    const accepted = await confirm({
+      title: 'Remove Account?',
+      description: 'This account will be disconnected from the dashboard.',
+      confirmText: 'Remove',
+      destructive: true,
+    })
+    if (!accepted) return
+
+    fetch(`/api/accounts/${id}`, { method: 'DELETE' })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success) throw new Error(data.error || 'Failed to remove account')
+        setAccounts(accounts.filter(a => a.id !== id))
+        toast.success('Account removed successfully')
+      })
+      .catch(error => toast.error(error instanceof Error ? error.message : 'Failed to remove account'))
   }
 
   return (
@@ -204,7 +228,6 @@ export default function AccountsPage() {
                   <Label className="text-base font-semibold mb-4 block">Select Platform</Label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {platforms.map(platform => {
-                      const Icon = platform.icon
                       return (
                         <button
                           key={platform.id}
@@ -215,7 +238,7 @@ export default function AccountsPage() {
                               : 'border-border/40 hover:border-border/60'
                           }`}
                         >
-                          <Icon className="w-6 h-6" />
+                          <PlatformIcon platformId={platform.id} size={24} />
                           <span className="text-xs font-medium text-center">{platform.name}</span>
                         </button>
                       )
@@ -315,12 +338,11 @@ export default function AccountsPage() {
               const platformAccounts = accounts.filter(a => a.platform === platform.id)
               if (platformAccounts.length === 0) return null
 
-              const Icon = platform.icon
               return (
                 <Card key={platform.id} className="border-border/40">
                   <CardHeader className="pb-4 border-b border-border/40">
                     <div className="flex items-center gap-3">
-                      <Icon className="w-6 h-6" />
+                      <PlatformIcon platformId={platform.id} size={24} />
                       <div>
                         <CardTitle>{platform.name}</CardTitle>
                         <CardDescription>{platformAccounts.length} account(s) connected</CardDescription>
@@ -332,8 +354,18 @@ export default function AccountsPage() {
                       {platformAccounts.map(account => (
                         <div key={account.id} className="flex items-center justify-between p-4 rounded-lg border border-border/40 hover:border-border/60 transition">
                           <div className="flex items-center gap-3 flex-1">
+                            <AccountAvatar
+                              platformId={account.platform as PlatformId}
+                              profileImageUrl={account.profileImageUrl}
+                              isBot={account.platform === 'telegram' && account.isBot}
+                              label={account.accountName || account.username || account.platformName}
+                              size={44}
+                            />
                             <div className="flex-1">
-                              <p className="font-medium">{account.username}</p>
+                              <p className="font-medium">{account.accountName || account.username}</p>
+                              {account.accountName && account.username ? (
+                                <p className="text-xs text-muted-foreground">@{account.username}</p>
+                              ) : null}
                               <p className="text-sm text-muted-foreground">Connected {account.connectedAt}</p>
                             </div>
                             <Badge variant="outline" className="gap-1">
@@ -365,6 +397,7 @@ export default function AccountsPage() {
           </div>
         )}
       </main>
+      {ConfirmDialog}
     </div>
   )
 }

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { db } from '@/lib/db';
 import { buildMessage, buildTweetLink, sendToTelegram, type TweetItem } from '@/lib/services/twitter-utils';
 import { executeTwitterActions } from '@/lib/services/twitter-actions';
+import { publishToFacebook } from '@/lib/services/facebook-publish';
+import { executionQueue } from '@/lib/services/execution-queue';
 import { debugLog, debugError } from '@/lib/debug';
+import { getAnyTwitterWebhookSecret, getTwitterWebhookSecretForUser } from '@/lib/platform-credentials';
 
 export const runtime = 'nodejs';
 
@@ -34,13 +37,214 @@ type TwitterWebhookTweet = {
   entities?: { media?: Array<{ type?: string; media_url_https?: string; video_info?: any }> };
 };
 
+type TwitterSourceAccount = Awaited<ReturnType<typeof db.getAllAccounts>>[number];
+
+type TwitterWebhookTaskContext = {
+  sourceAccount: TwitterSourceAccount;
+  task: any;
+  accountsById: Map<string, TwitterSourceAccount>;
+  tweets: TwitterWebhookTweet[];
+};
+
+async function processTaskTweetsForSource({
+  sourceAccount,
+  task,
+  accountsById,
+  tweets,
+}: TwitterWebhookTaskContext): Promise<void> {
+  const filters = task.filters || {};
+  const targets = (task.targetAccounts as string[])
+    .map((id: string) => accountsById.get(id))
+    .filter((a: TwitterSourceAccount | undefined): a is TwitterSourceAccount => Boolean(a))
+    .filter((a: TwitterSourceAccount) => a.isActive);
+
+  for (const tweet of tweets) {
+    debugLog('Twitter webhook tweet received', { tweetId: tweet.id_str });
+    const triggerType = filters.triggerType || 'on_tweet';
+    if (
+      triggerType === 'on_like' ||
+      triggerType === 'on_search' ||
+      triggerType === 'on_keyword' ||
+      triggerType === 'on_hashtag' ||
+      triggerType === 'on_mention'
+    ) {
+      continue;
+    }
+
+    const isReply = Boolean(tweet.in_reply_to_status_id_str);
+    const isRetweet = Boolean(tweet.retweeted_status);
+    const isQuote = Boolean(tweet.is_quote_status);
+
+    if (triggerType === 'on_retweet' && !isRetweet) continue;
+
+    const effectiveOriginalOnly = triggerType === 'on_retweet' ? false : Boolean(filters.originalOnly);
+    const effectiveExcludeReplies = Boolean(filters.excludeReplies);
+    const effectiveExcludeRetweets = triggerType === 'on_retweet' ? false : Boolean(filters.excludeRetweets);
+    const effectiveExcludeQuotes = Boolean(filters.excludeQuotes);
+
+    if (effectiveOriginalOnly && (isReply || isRetweet || isQuote)) continue;
+    if (effectiveExcludeReplies && isReply) continue;
+    if (effectiveExcludeRetweets && isRetweet) continue;
+    if (effectiveExcludeQuotes && isQuote) continue;
+
+    const username = tweet.user?.screen_name || sourceAccount.credentials?.accountInfo?.username || '';
+    const name = tweet.user?.name || sourceAccount.credentials?.accountInfo?.name || '';
+    const link = buildTweetLink(username, tweet.id_str);
+
+    const media =
+      tweet.entities?.media?.map(m => ({
+        type: m.type || 'photo',
+        url: m.media_url_https,
+      })).filter(m => m.url) || [];
+
+    const tweetItem: TweetItem = {
+      id: tweet.id_str,
+      text: tweet.text || '',
+      createdAt: tweet.created_at ? new Date(tweet.created_at).toISOString() : new Date().toISOString(),
+      referencedTweets: [],
+      media: media as any,
+      author: { username, name },
+    };
+
+    const message = buildMessage(task.transformations?.template, tweetItem, {
+      username,
+      name,
+    });
+    const includeMedia = task.transformations?.includeMedia !== false;
+    const enableYtDlp = task.transformations?.enableYtDlp === true;
+
+    for (const target of targets) {
+      let status: 'success' | 'failed' = 'success';
+      let errorMessage: string | undefined;
+      let responseData: Record<string, any> = { sourceTweetId: tweet.id_str, sourceUsername: username };
+
+      try {
+        if (target.platformId === 'telegram') {
+          debugLog('Twitter webhook -> Telegram start', { taskId: task.id, targetId: target.id });
+          const chatId = target.credentials?.chatId;
+          if (!chatId) throw new Error('Missing Telegram target chat ID');
+          await sendToTelegram(
+            target.accessToken,
+            String(chatId),
+            message,
+            tweetItem.media,
+            includeMedia,
+            link,
+            enableYtDlp
+          );
+          debugLog('Twitter webhook -> Telegram sent', { taskId: task.id, targetId: target.id });
+        } else if (target.platformId === 'twitter') {
+          debugLog('Twitter webhook -> Twitter actions start', { taskId: task.id, targetId: target.id });
+          const actionResult = await executeTwitterActions({
+            target,
+            tweet: tweetItem,
+            template: task.transformations?.template,
+            accountInfo: { username, name },
+            actions: task.transformations?.twitterActions,
+          });
+          responseData = { ...responseData, actions: actionResult.results, textUsed: actionResult.textUsed };
+          if (!actionResult.ok) {
+            throw new Error(actionResult.error || 'Twitter actions failed');
+          }
+          debugLog('Twitter webhook -> Twitter actions success', { taskId: task.id, targetId: target.id });
+        } else if (target.platformId === 'facebook') {
+          debugLog('Twitter webhook -> Facebook start', { taskId: task.id, targetId: target.id });
+          const mediaCandidates = includeMedia ? tweetItem.media : [];
+          const videoUrl = mediaCandidates.find(
+            (item) => (item.type === 'video' || item.type === 'animated_gif') && item.url
+          )?.url;
+          const photoUrl = mediaCandidates.find(
+            (item) => item.type === 'photo' && item.url
+          )?.url;
+
+          const facebookResult = await publishToFacebook({
+            target,
+            message,
+            link,
+            media: videoUrl
+              ? { kind: 'video', url: videoUrl }
+              : photoUrl
+                ? { kind: 'image', url: photoUrl }
+                : undefined,
+          });
+          responseData = {
+            ...responseData,
+            facebook: facebookResult,
+          };
+          debugLog('Twitter webhook -> Facebook publish success', {
+            taskId: task.id,
+            targetId: target.id,
+            postId: facebookResult.id,
+          });
+        } else {
+          continue;
+        }
+      } catch (error) {
+        status = 'failed';
+        errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        debugError('Twitter webhook target failed', error, { taskId: task.id, targetId: target.id });
+      }
+
+      await db.createExecution({
+        taskId: task.id,
+        sourceAccount: sourceAccount.id,
+        targetAccount: target.id,
+        originalContent: tweet.text || '',
+        transformedContent: message,
+        status,
+        error: errorMessage,
+        executedAt: new Date(),
+        responseData,
+      });
+    }
+  }
+}
+
+async function processWebhookTweetsForSource(
+  sourceAccountId: string,
+  tweets: TwitterWebhookTweet[],
+  eventKey: string
+): Promise<void> {
+  const sourceAccount = await db.getAccount(sourceAccountId);
+  if (!sourceAccount || sourceAccount.platformId !== 'twitter' || !sourceAccount.isActive) {
+    return;
+  }
+
+  const userTasks = await db.getUserTasks(sourceAccount.userId);
+  const activeTasks = userTasks.filter(
+    t => t.status === 'active' && t.sourceAccounts.includes(sourceAccount.id)
+  );
+  if (activeTasks.length === 0) {
+    debugLog('Twitter webhook ignored: no active tasks', { userId: sourceAccount.userId });
+    return;
+  }
+
+  const userAccounts = await db.getUserAccounts(sourceAccount.userId);
+  const accountsById = new Map(userAccounts.map(a => [a.id, a]));
+  const jobs = activeTasks.map((task) =>
+    executionQueue.enqueue({
+      label: 'twitter:webhook-task',
+      userId: sourceAccount.userId,
+      taskId: task.id,
+      dedupeKey: `twitter:webhook:task:${task.id}:${eventKey}`,
+      run: async () =>
+        processTaskTweetsForSource({
+          sourceAccount,
+          task,
+          accountsById,
+          tweets,
+        }),
+    })
+  );
+
+  if (jobs.length > 0) {
+    await Promise.allSettled(jobs);
+  }
+}
+
 export async function GET(request: NextRequest) {
   const crcToken = request.nextUrl.searchParams.get('crc_token');
-  // X uses the app "Consumer Secret" (API Secret) for CRC/signatures
-  const secret =
-    process.env.TWITTER_API_SECRET ||
-    process.env.TWITTER_WEBHOOK_SECRET ||
-    process.env.TWITTER_CLIENT_SECRET;
+  const secret = await getAnyTwitterWebhookSecret();
   if (!crcToken || !secret) {
     return NextResponse.json({ error: 'Missing crc_token or webhook secret' }, { status: 400 });
   }
@@ -48,19 +252,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // X uses the app "Consumer Secret" (API Secret) for CRC/signatures
-  const secret =
-    process.env.TWITTER_API_SECRET ||
-    process.env.TWITTER_WEBHOOK_SECRET ||
-    process.env.TWITTER_CLIENT_SECRET;
   const rawBody = await request.text();
-  if (secret) {
-    const signature = request.headers.get('x-twitter-webhooks-signature');
-    if (!verifySignature(rawBody, signature, secret)) {
-      debugLog('Twitter webhook ignored: invalid signature');
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-    }
-  }
 
   let payload: any;
   try {
@@ -85,144 +277,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  const secret = await getTwitterWebhookSecretForUser(sourceAccount.userId);
+  if (!secret) {
+    return NextResponse.json({ error: 'Missing Twitter webhook secret in Settings.' }, { status: 400 });
+  }
+  const signature = request.headers.get('x-twitter-webhooks-signature');
+  if (!verifySignature(rawBody, signature, secret)) {
+    debugLog('Twitter webhook ignored: invalid signature');
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+  }
+
   const tweets: TwitterWebhookTweet[] = payload.tweet_create_events || [];
   if (tweets.length === 0) {
     debugLog('Twitter webhook ignored: no tweets');
     return NextResponse.json({ ok: true });
   }
-
-  const userTasks = await db.getUserTasks(sourceAccount.userId);
-  const activeTasks = userTasks.filter(
-    t => t.status === 'active' && t.sourceAccounts.includes(sourceAccount.id)
-  );
-  if (activeTasks.length === 0) {
-    debugLog('Twitter webhook ignored: no active tasks', { userId: sourceAccount.userId });
-    return NextResponse.json({ ok: true });
-  }
-
-  const userAccounts = await db.getUserAccounts(sourceAccount.userId);
-  const accountsById = new Map(userAccounts.map(a => [a.id, a]));
-
-  for (const task of activeTasks) {
-    const filters = task.filters || {};
-    const targets = task.targetAccounts
-      .map(id => accountsById.get(id))
-      .filter((a): a is typeof sourceAccount => Boolean(a))
-      .filter(a => a.isActive);
-
-    for (const tweet of tweets) {
-      debugLog('Twitter webhook tweet received', { tweetId: tweet.id_str });
-      const triggerType = filters.triggerType || 'on_tweet';
-      if (
-        triggerType === 'on_like' ||
-        triggerType === 'on_search' ||
-        triggerType === 'on_keyword' ||
-        triggerType === 'on_hashtag' ||
-        triggerType === 'on_mention'
-      ) {
-        continue;
-      }
-
-      const isReply = Boolean(tweet.in_reply_to_status_id_str);
-      const isRetweet = Boolean(tweet.retweeted_status);
-      const isQuote = Boolean(tweet.is_quote_status);
-
-      if (triggerType === 'on_retweet' && !isRetweet) continue;
-
-      const effectiveOriginalOnly = triggerType === 'on_retweet' ? false : Boolean(filters.originalOnly);
-      const effectiveExcludeReplies = Boolean(filters.excludeReplies);
-      const effectiveExcludeRetweets = triggerType === 'on_retweet' ? false : Boolean(filters.excludeRetweets);
-      const effectiveExcludeQuotes = Boolean(filters.excludeQuotes);
-
-      if (effectiveOriginalOnly && (isReply || isRetweet || isQuote)) continue;
-      if (effectiveExcludeReplies && isReply) continue;
-      if (effectiveExcludeRetweets && isRetweet) continue;
-      if (effectiveExcludeQuotes && isQuote) continue;
-
-      const username = tweet.user?.screen_name || sourceAccount.credentials?.accountInfo?.username || '';
-      const name = tweet.user?.name || sourceAccount.credentials?.accountInfo?.name || '';
-      const link = buildTweetLink(username, tweet.id_str);
-      const date = tweet.created_at ? new Date(tweet.created_at).toISOString() : new Date().toISOString();
-
-      const media =
-        tweet.entities?.media?.map(m => ({
-          type: m.type || 'photo',
-          url: m.media_url_https,
-        })).filter(m => m.url) || [];
-
-      const tweetItem: TweetItem = {
-        id: tweet.id_str,
-        text: tweet.text || '',
-        createdAt: date,
-        referencedTweets: [],
-        media: media as any,
-        author: { username, name },
-      };
-
-      const message = buildMessage(task.transformations?.template, tweetItem, {
-        username,
-        name,
+  const payloadHash = createHash('sha256').update(rawBody).digest('hex');
+  void executionQueue
+    .enqueue({
+      label: 'twitter:webhook',
+      userId: sourceAccount.userId,
+      taskId: `twitter-account:${sourceAccount.id}`,
+      dedupeKey: `twitter:webhook:${sourceAccount.id}:${payloadHash}`,
+      run: async () => {
+        await processWebhookTweetsForSource(sourceAccount.id, tweets, payloadHash);
+      },
+    })
+    .catch((error) => {
+      debugError('Twitter webhook queued processing failed', error, {
+        sourceAccountId: sourceAccount.id,
       });
-      const includeMedia = task.transformations?.includeMedia !== false;
-      const enableYtDlp = task.transformations?.enableYtDlp === true;
+    });
 
-      for (const target of targets) {
-        let status: 'success' | 'failed' = 'success';
-        let errorMessage: string | undefined;
-        let responseData: Record<string, any> = { sourceTweetId: tweet.id_str, sourceUsername: username };
-
-        try {
-          if (target.platformId === 'telegram') {
-            debugLog('Twitter webhook -> Telegram start', { taskId: task.id, targetId: target.id });
-            const chatId = target.credentials?.chatId;
-            if (!chatId) throw new Error('Missing Telegram target chat ID');
-            await sendToTelegram(
-              target.accessToken,
-              String(chatId),
-              message,
-              tweetItem.media,
-              includeMedia,
-              link,
-              enableYtDlp
-            );
-            debugLog('Twitter webhook -> Telegram sent', { taskId: task.id, targetId: target.id });
-          } else if (target.platformId === 'twitter') {
-            debugLog('Twitter webhook -> Twitter actions start', { taskId: task.id, targetId: target.id });
-            const actionResult = await executeTwitterActions({
-              target,
-              tweet: tweetItem,
-              template: task.transformations?.template,
-              accountInfo: { username, name },
-              actions: task.transformations?.twitterActions,
-            });
-            responseData = { ...responseData, actions: actionResult.results, textUsed: actionResult.textUsed };
-            if (!actionResult.ok) {
-              throw new Error(actionResult.error || 'Twitter actions failed');
-            }
-            debugLog('Twitter webhook -> Twitter actions success', { taskId: task.id, targetId: target.id });
-          } else {
-            continue;
-          }
-        } catch (error) {
-          status = 'failed';
-          errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          debugError('Twitter webhook target failed', error, { taskId: task.id, targetId: target.id });
-        }
-
-        await db.createExecution({
-          taskId: task.id,
-          sourceAccount: sourceAccount.id,
-          targetAccount: target.id,
-          originalContent: tweet.text || '',
-          transformedContent: message,
-          status,
-          error: errorMessage,
-          executedAt: new Date(),
-          responseData,
-        });
-      }
-    }
-  }
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, queued: true });
 }

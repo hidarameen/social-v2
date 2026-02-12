@@ -13,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { TaskExecution } from '@/lib/db';
+import { extractYouTubeVideoLinks } from '@/lib/execution-links';
 import { Search, Filter, Download, RefreshCw, ChevronDown } from 'lucide-react';
 
 interface ExpandedExecution extends TaskExecution {
@@ -114,11 +116,11 @@ export default function ExecutionsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background control-app">
       <Sidebar />
       <Header />
 
-      <main className="ml-64 mt-16 p-8">
+      <main className="control-main">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
@@ -351,6 +353,32 @@ export default function ExecutionsPage() {
                           </p>
                         </div>
                       </div>
+
+                      {(() => {
+                        const youtubeLinks = extractYouTubeVideoLinks(execution.responseData);
+                        if (youtubeLinks.length === 0) return null;
+                        return (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-2">
+                              Uploaded YouTube Video
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {youtubeLinks.map((url, idx) => (
+                                <a
+                                  key={`${execution.id}-yt-${idx}`}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                  className="inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-primary hover:bg-accent"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  Open Video {youtubeLinks.length > 1 ? idx + 1 : ''}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {execution.responseData && (
                         <div>

@@ -1,5 +1,10 @@
 import { TelegramClient } from '@/platforms/telegram/client';
 import { downloadTweetVideo } from '@/lib/services/ytdlp';
+import { promises as fs } from 'fs';
+import { createWriteStream } from 'fs';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
+import { randomUUID } from 'crypto';
 
 export type TweetItem = {
   id: string;
@@ -16,6 +21,13 @@ export type TwitterActionConfig = {
   quote?: boolean;
   retweet?: boolean;
   like?: boolean;
+};
+
+export type DownloadedYouTubeMedia = {
+  tempPath: string;
+  mimeType: string;
+  cleanup: () => Promise<void>;
+  viaYtDlp: boolean;
 };
 
 export function formatDate(iso: string): string {
@@ -64,6 +76,70 @@ export function buildTweetLink(username: string, tweetId: string) {
   return username
     ? `https://twitter.com/${username}/status/${tweetId}`
     : `https://twitter.com/i/web/status/${tweetId}`;
+}
+
+function guessMimeTypeFromUrl(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes('.mp4')) return 'video/mp4';
+  if (lower.includes('.mov')) return 'video/quicktime';
+  if (lower.includes('.m4v')) return 'video/x-m4v';
+  if (lower.includes('.webm')) return 'video/webm';
+  return 'video/mp4';
+}
+
+async function downloadUrlToTemp(url: string): Promise<{ path: string; mimeType: string }> {
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to download media URL: ${response.status} ${response.statusText}`);
+  }
+  const mimeType = response.headers.get('content-type') || guessMimeTypeFromUrl(url);
+  const tempPath = `/tmp/socialflow-youtube-${randomUUID()}.mp4`;
+  const stream = Readable.fromWeb(response.body as any);
+  await pipeline(stream, createWriteStream(tempPath));
+  return { path: tempPath, mimeType };
+}
+
+export async function prepareYouTubeVideoFromTweet(
+  tweet: TweetItem,
+  tweetLink: string,
+  enableYtDlp = false
+): Promise<DownloadedYouTubeMedia> {
+  const videoUrl = tweet.media.find(
+    media => (media.type === 'video' || media.type === 'animated_gif') && media.url
+  )?.url;
+
+  if (videoUrl) {
+    const downloaded = await downloadUrlToTemp(videoUrl);
+    return {
+      tempPath: downloaded.path,
+      mimeType: downloaded.mimeType,
+      viaYtDlp: false,
+      cleanup: async () => {
+        await fs.unlink(downloaded.path).catch(() => undefined);
+      },
+    };
+  }
+
+  if (!enableYtDlp) {
+    throw new Error('No direct tweet video URL found. Enable yt-dlp for YouTube uploads from Twitter.');
+  }
+
+  if (tweetLink) {
+    const result = await downloadTweetVideo(tweetLink);
+    return {
+      tempPath: result.videoPath,
+      mimeType: 'video/mp4',
+      viaYtDlp: true,
+      cleanup: async () => {
+        await fs.unlink(result.videoPath).catch(() => undefined);
+        if (result.thumbnailPath) {
+          await fs.unlink(result.thumbnailPath).catch(() => undefined);
+        }
+      },
+    };
+  }
+
+  throw new Error('Tweet has no downloadable video URL');
 }
 
 export function clampTweetText(text: string) {

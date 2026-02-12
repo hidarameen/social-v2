@@ -45,7 +45,10 @@ export async function downloadTweetVideo(tweetUrl: string): Promise<DownloadResu
   const concurrentFragments = getEnvNumber('YTDLP_CONCURRENT_FRAGMENTS', 8);
   const retries = getEnvNumber('YTDLP_RETRIES', 3);
   const fragmentRetries = getEnvNumber('YTDLP_FRAGMENT_RETRIES', 3);
-  const maxFilesizeMb = getEnvNumber('TELEGRAM_MAX_UPLOAD_MB', 50);
+  const maxFilesizeMb = getEnvNumber(
+    'YTDLP_MAX_FILESIZE_MB',
+    getEnvNumber('TELEGRAM_MAX_UPLOAD_MB', 50)
+  );
   const externalDownloader = getEnvString('YTDLP_EXTERNAL_DOWNLOADER');
   const externalDownloaderArgs = getEnvString('YTDLP_EXTERNAL_DOWNLOADER_ARGS');
   const proxy = getEnvString('YTDLP_PROXY');

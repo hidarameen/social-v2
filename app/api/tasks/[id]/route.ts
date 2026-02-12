@@ -72,8 +72,60 @@ export async function PATCH(
     if (!current || current.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
     }
+
+    const uniqueIds = (ids: string[] = []) => [...new Set(ids.filter(Boolean))];
+    const nextSourceAccounts = body.sourceAccounts ? uniqueIds(body.sourceAccounts) : current.sourceAccounts;
+    const nextTargetAccounts = body.targetAccounts ? uniqueIds(body.targetAccounts) : current.targetAccounts;
+    if (nextSourceAccounts.length === 0 || nextTargetAccounts.length === 0) {
+      return NextResponse.json({ success: false, error: 'Source and target accounts are required' }, { status: 400 });
+    }
+
+    const overlappingAccounts = nextSourceAccounts.filter(id => nextTargetAccounts.includes(id));
+    if (overlappingAccounts.length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'A single account cannot be both source and target in the same task' },
+        { status: 400 }
+      );
+    }
+
+    const userAccounts = await db.getUserAccounts(user.id);
+    const userAccountIds = new Set(userAccounts.map(a => a.id));
+    const unknownAccountId = [...nextSourceAccounts, ...nextTargetAccounts].find(id => !userAccountIds.has(id));
+    if (unknownAccountId) {
+      return NextResponse.json({ success: false, error: 'One or more selected accounts are invalid' }, { status: 400 });
+    }
+
+    const accountById = new Map(userAccounts.map(a => [a.id, a]));
+    const sourcePlatforms = new Set(nextSourceAccounts.map(id => accountById.get(id)?.platformId).filter(Boolean));
+    const targetPlatforms = new Set(nextTargetAccounts.map(id => accountById.get(id)?.platformId).filter(Boolean));
+    const hasTelegramBothSides = sourcePlatforms.has('telegram') && targetPlatforms.has('telegram');
+    const hasTwitterBothSides = sourcePlatforms.has('twitter') && targetPlatforms.has('twitter');
+    if (hasTelegramBothSides && hasTwitterBothSides) {
+      return NextResponse.json(
+        { success: false, error: 'This task configuration can create a Telegram/Twitter loop. Split it into one-way tasks.' },
+        { status: 400 }
+      );
+    }
+
+    const youtubeActions = (body.transformations as any)?.youtubeActions;
+    if (youtubeActions?.uploadVideoToPlaylist && !String(youtubeActions?.playlistId || '').trim()) {
+      return NextResponse.json(
+        { success: false, error: 'YouTube playlist action requires selecting a playlist' },
+        { status: 400 }
+      );
+    }
+    const publishAt = (body.transformations as any)?.youtubeVideo?.publishAt;
+    if (publishAt && Number.isNaN(new Date(String(publishAt)).getTime())) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid YouTube publish date/time' },
+        { status: 400 }
+      );
+    }
+
     const updated = await db.updateTask(id, {
       ...body,
+      sourceAccounts: nextSourceAccounts,
+      targetAccounts: nextTargetAccounts,
       scheduleTime: body.scheduleTime ? new Date(body.scheduleTime) : body.scheduleTime,
       lastExecuted: body.lastExecuted ? new Date(body.lastExecuted) : body.lastExecuted,
     });

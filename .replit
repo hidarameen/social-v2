@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web"]
+modules = ["nodejs-20", "python-3.11", "web"]
 [agent]
 expertMode = true
 
@@ -15,7 +15,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Next.js Dev Server"
+args = "Next.js Production Server"
 
 [[workflows.workflow]]
 name = "Next.js Dev Server"
@@ -23,7 +23,19 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm dev"
+args = "bash scripts/start-with-telegram-local-api.sh pnpm dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow]]
+name = "Next.js Production Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "rm -f .next/lock && pnpm build && bash scripts/start-with-telegram-local-api.sh pnpm start"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -39,7 +51,7 @@ externalPort = 3000
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["pnpm", "start"]
+run = ["bash", "scripts/start-with-telegram-local-api.sh", "pnpm", "start"]
 build = ["pnpm", "build"]
 
 [userenv]

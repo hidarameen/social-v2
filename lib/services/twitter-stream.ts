@@ -1,16 +1,16 @@
 export const runtime = 'nodejs';
 
 import { db } from '@/lib/db';
-import { TweetItem, buildMessage, buildTweetLink, isQuote, isReply, isRetweet, sendToTelegram } from '@/lib/services/twitter-utils';
+import { TweetItem, buildMessage, buildTweetLink, isQuote, isReply, isRetweet, prepareYouTubeVideoFromTweet, sendToTelegram } from '@/lib/services/twitter-utils';
 import { buildTwitterQuery } from '@/lib/services/twitter-query';
 import { executeTwitterActions } from '@/lib/services/twitter-actions';
+import { executeYouTubePublish } from '@/lib/services/youtube-actions';
+import { publishToFacebook } from '@/lib/services/facebook-publish';
+import { executionQueue } from '@/lib/services/execution-queue';
 import { debugLog, debugError } from '@/lib/debug';
+import { getAnyTwitterBearerToken } from '@/lib/platform-credentials';
 
 const STREAM_URL = 'https://api.twitter.com/2/tweets/search/stream';
-
-function getBearerToken() {
-  return process.env.TWITTER_BEARER_TOKEN || '';
-}
 
 function buildRules(tasks: any[]) {
   const rules: Array<{ value: string; tag: string }> = [];
@@ -39,6 +39,11 @@ function buildRules(tasks: any[]) {
 export class TwitterStream {
   private abortController: AbortController | null = null;
   private running = false;
+  private bearerToken = '';
+
+  private async refreshBearerToken() {
+    this.bearerToken = (await getAnyTwitterBearerToken()) || '';
+  }
 
   async start() {
     if (this.running) return;
@@ -46,9 +51,9 @@ export class TwitterStream {
       console.log('[TwitterStream] Stream is disabled via TWITTER_STREAM_ENABLED');
       return;
     }
-    const bearerToken = getBearerToken();
-    if (!bearerToken) {
-      console.warn('[TwitterStream] Missing TWITTER_BEARER_TOKEN');
+    await this.refreshBearerToken();
+    if (!this.bearerToken) {
+      console.warn('[TwitterStream] Missing Twitter bearer token in DB credentials');
       return;
     }
     this.running = true;
@@ -90,8 +95,9 @@ export class TwitterStream {
   }
 
   private async fetchRules(): Promise<Array<{ id: string; value: string; tag?: string }>> {
+    if (!this.bearerToken) return [];
     const res = await fetch(`${STREAM_URL}/rules`, {
-      headers: { Authorization: `Bearer ${getBearerToken()}` },
+      headers: { Authorization: `Bearer ${this.bearerToken}` },
     });
     if (!res.ok) {
       console.warn('[TwitterStream] Failed to fetch rules:', res.statusText);
@@ -102,10 +108,11 @@ export class TwitterStream {
   }
 
   private async deleteRules(ids: string[]) {
+    if (!this.bearerToken) return;
     const res = await fetch(`${STREAM_URL}/rules`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${getBearerToken()}`,
+        Authorization: `Bearer ${this.bearerToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ delete: { ids } }),
@@ -117,10 +124,11 @@ export class TwitterStream {
   }
 
   private async addRules(rules: Array<{ value: string; tag: string }>) {
+    if (!this.bearerToken) return;
     const res = await fetch(`${STREAM_URL}/rules`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${getBearerToken()}`,
+        Authorization: `Bearer ${this.bearerToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ add: rules }),
@@ -144,7 +152,7 @@ export class TwitterStream {
 
     this.abortController = new AbortController();
     const res = await fetch(`${STREAM_URL}?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${getBearerToken()}` },
+      headers: { Authorization: `Bearer ${this.bearerToken}` },
       signal: this.abortController.signal,
     });
 
@@ -183,6 +191,154 @@ export class TwitterStream {
     }
   }
 
+  private async processMatchedTask(
+    taskId: string,
+    tweetItem: TweetItem,
+    author: { username?: string; name?: string }
+  ) {
+    const task = await db.getTask(taskId);
+    if (!task || task.status !== 'active') return;
+    debugLog('Twitter stream task matched', { taskId });
+
+    const filters = task.filters || {};
+    const triggerType = filters.triggerType || 'on_tweet';
+    const effectiveOriginalOnly = triggerType === 'on_retweet' ? false : Boolean(filters.originalOnly);
+    const effectiveExcludeReplies = Boolean(filters.excludeReplies);
+    const effectiveExcludeRetweets = triggerType === 'on_retweet' ? false : Boolean(filters.excludeRetweets);
+    const effectiveExcludeQuotes = Boolean(filters.excludeQuotes);
+
+    if (effectiveOriginalOnly && (isReply(tweetItem) || isRetweet(tweetItem) || isQuote(tweetItem))) return;
+    if (effectiveExcludeReplies && isReply(tweetItem)) return;
+    if (effectiveExcludeRetweets && isRetweet(tweetItem)) return;
+    if (effectiveExcludeQuotes && isQuote(tweetItem)) return;
+
+    const userAccounts = await db.getUserAccounts(task.userId);
+    const targets = userAccounts.filter(a => task.targetAccounts.includes(a.id) && a.isActive);
+
+    const message = buildMessage(task.transformations?.template, tweetItem, {
+      username: author.username,
+      name: author.name,
+    });
+    const includeMedia = task.transformations?.includeMedia !== false;
+    const enableYtDlp = task.transformations?.enableYtDlp === true;
+    const link = buildTweetLink(author.username || '', tweetItem.id);
+
+    for (const target of targets) {
+      let status: 'success' | 'failed' = 'success';
+      let errorMessage: string | undefined;
+      let responseData: Record<string, any> = { sourceTweetId: tweetItem.id, sourceUsername: author.username };
+
+      try {
+        if (target.platformId === 'telegram') {
+          debugLog('Twitter -> Telegram start', { taskId: task.id, targetId: target.id });
+          const chatId = target.credentials?.chatId;
+          if (!chatId) throw new Error('Missing Telegram target chat ID');
+          await sendToTelegram(
+            target.accessToken,
+            String(chatId),
+            message,
+            tweetItem.media,
+            includeMedia,
+            link,
+            enableYtDlp
+          );
+          debugLog('Twitter -> Telegram sent', { taskId: task.id, targetId: target.id });
+        } else if (target.platformId === 'twitter') {
+          debugLog('Twitter -> Twitter actions start', { taskId: task.id, targetId: target.id });
+          const actionResult = await executeTwitterActions({
+            target,
+            tweet: tweetItem,
+            template: task.transformations?.template,
+            accountInfo: { username: author.username, name: author.name },
+            actions: task.transformations?.twitterActions,
+          });
+          responseData = { ...responseData, actions: actionResult.results, textUsed: actionResult.textUsed };
+          if (!actionResult.ok) {
+            throw new Error(actionResult.error || 'Twitter actions failed');
+          }
+          debugLog('Twitter -> Twitter actions success', { taskId: task.id, targetId: target.id });
+        } else if (target.platformId === 'youtube') {
+          debugLog('Twitter -> YouTube start', { taskId: task.id, targetId: target.id });
+          const media = await prepareYouTubeVideoFromTweet(tweetItem, link, enableYtDlp);
+          try {
+            const result = await executeYouTubePublish({
+              target,
+              filePath: media.tempPath,
+              mimeType: media.mimeType,
+              transformations: task.transformations,
+              context: {
+                text: message,
+                username: author.username || '',
+                name: author.name || '',
+                date: tweetItem.createdAt,
+                link,
+              },
+            });
+            responseData = {
+              ...responseData,
+              youtube: result,
+              mediaSource: media.viaYtDlp ? 'yt-dlp' : 'direct_url',
+            };
+          } finally {
+            await media.cleanup().catch(() => undefined);
+          }
+          debugLog('Twitter -> YouTube upload success', {
+            taskId: task.id,
+            targetId: target.id,
+            videoId: responseData?.youtube?.id,
+          });
+        } else if (target.platformId === 'facebook') {
+          debugLog('Twitter -> Facebook start', { taskId: task.id, targetId: target.id });
+          const mediaCandidates = includeMedia ? tweetItem.media : [];
+          const videoUrl = mediaCandidates.find(
+            (item) => (item.type === 'video' || item.type === 'animated_gif') && item.url
+          )?.url;
+          const photoUrl = mediaCandidates.find(
+            (item) => item.type === 'photo' && item.url
+          )?.url;
+
+          const facebookResult = await publishToFacebook({
+            target,
+            message,
+            link,
+            media: videoUrl
+              ? { kind: 'video', url: videoUrl }
+              : photoUrl
+                ? { kind: 'image', url: photoUrl }
+                : undefined,
+          });
+          responseData = {
+            ...responseData,
+            facebook: facebookResult,
+          };
+          debugLog('Twitter -> Facebook publish success', {
+            taskId: task.id,
+            targetId: target.id,
+            postId: facebookResult.id,
+          });
+        } else {
+          continue;
+        }
+      } catch (error) {
+        status = 'failed';
+        errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        debugError('Twitter stream target failed', error, { taskId: task.id, targetId: target.id });
+      }
+
+      await db.createExecution({
+        taskId: task.id,
+        sourceAccount: task.sourceAccounts[0] || '',
+        targetAccount: target.id,
+        originalContent: tweetItem.text,
+        transformedContent: message,
+        status,
+        error: errorMessage,
+        executedAt: new Date(),
+        responseData,
+      });
+    }
+  }
+
   public async handleEvent(event: any) {
     if (!event?.data?.id) return;
 
@@ -215,88 +371,21 @@ export class TwitterStream {
       const tag = rule.tag || '';
       if (!tag.startsWith('task:')) continue;
       const taskId = tag.slice('task:'.length);
-      const task = await db.getTask(taskId);
-      if (!task || task.status !== 'active') continue;
-      debugLog('Twitter stream task matched', { taskId });
-
-      const filters = task.filters || {};
-      const triggerType = filters.triggerType || 'on_tweet';
-      const effectiveOriginalOnly = triggerType === 'on_retweet' ? false : Boolean(filters.originalOnly);
-      const effectiveExcludeReplies = Boolean(filters.excludeReplies);
-      const effectiveExcludeRetweets = triggerType === 'on_retweet' ? false : Boolean(filters.excludeRetweets);
-      const effectiveExcludeQuotes = Boolean(filters.excludeQuotes);
-
-      if (effectiveOriginalOnly && (isReply(tweetItem) || isRetweet(tweetItem) || isQuote(tweetItem))) continue;
-      if (effectiveExcludeReplies && isReply(tweetItem)) continue;
-      if (effectiveExcludeRetweets && isRetweet(tweetItem)) continue;
-      if (effectiveExcludeQuotes && isQuote(tweetItem)) continue;
-
-      const userAccounts = await db.getUserAccounts(task.userId);
-      const targets = userAccounts.filter(a => task.targetAccounts.includes(a.id) && a.isActive);
-
-      const message = buildMessage(task.transformations?.template, tweetItem, {
-        username: author.username,
-        name: author.name,
-      });
-      const includeMedia = task.transformations?.includeMedia !== false;
-      const enableYtDlp = task.transformations?.enableYtDlp === true;
-      const link = buildTweetLink(author.username || '', tweetItem.id);
-
-      for (const target of targets) {
-        let status: 'success' | 'failed' = 'success';
-        let errorMessage: string | undefined;
-        let responseData: Record<string, any> = { sourceTweetId: tweetItem.id, sourceUsername: author.username };
-
-        try {
-          if (target.platformId === 'telegram') {
-            debugLog('Twitter -> Telegram start', { taskId: task.id, targetId: target.id });
-            const chatId = target.credentials?.chatId;
-            if (!chatId) throw new Error('Missing Telegram target chat ID');
-            await sendToTelegram(
-              target.accessToken,
-              String(chatId),
-              message,
-              tweetItem.media,
-              includeMedia,
-              link,
-              enableYtDlp
-            );
-            debugLog('Twitter -> Telegram sent', { taskId: task.id, targetId: target.id });
-          } else if (target.platformId === 'twitter') {
-            debugLog('Twitter -> Twitter actions start', { taskId: task.id, targetId: target.id });
-            const actionResult = await executeTwitterActions({
-              target,
-              tweet: tweetItem,
-              template: task.transformations?.template,
-              accountInfo: { username: author.username, name: author.name },
-              actions: task.transformations?.twitterActions,
+      void executionQueue
+        .enqueue({
+          label: 'twitter:stream-event',
+          taskId,
+          dedupeKey: `twitter:stream:${taskId}:${tweetItem.id}`,
+          run: async () => {
+            await this.processMatchedTask(taskId, tweetItem, {
+              username: author.username,
+              name: author.name,
             });
-            responseData = { ...responseData, actions: actionResult.results, textUsed: actionResult.textUsed };
-            if (!actionResult.ok) {
-              throw new Error(actionResult.error || 'Twitter actions failed');
-            }
-            debugLog('Twitter -> Twitter actions success', { taskId: task.id, targetId: target.id });
-          } else {
-            continue;
-          }
-        } catch (error) {
-          status = 'failed';
-          errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          debugError('Twitter stream target failed', error, { taskId: task.id, targetId: target.id });
-        }
-
-        await db.createExecution({
-          taskId: task.id,
-          sourceAccount: task.sourceAccounts[0] || '',
-          targetAccount: target.id,
-          originalContent: tweetItem.text,
-          transformedContent: message,
-          status,
-          error: errorMessage,
-          executedAt: new Date(),
-          responseData,
+          },
+        })
+        .catch((error) => {
+          debugError('Twitter stream queued processing failed', error, { taskId, tweetId: tweetItem.id });
         });
-      }
     }
   }
 }

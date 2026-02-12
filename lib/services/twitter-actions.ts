@@ -1,6 +1,12 @@
-import type { PlatformAccount } from '@/lib/db';
-import { TwitterClient } from '@/platforms/twitter/client';
-import { buildMessage, clampTweetText, normalizeTwitterActions, type TweetItem, type TwitterActionConfig } from '@/lib/services/twitter-utils';
+import { db, type PlatformAccount } from '@/lib/db';
+import { TwitterClient, refreshTwitterToken } from '@/platforms/twitter/client';
+import { getOAuthClientCredentials } from '@/lib/platform-credentials';
+import {
+  buildMessage,
+  normalizeTwitterActions,
+  type TweetItem,
+  type TwitterActionConfig,
+} from '@/lib/services/twitter-utils';
 
 type ActionResult = {
   ok: boolean;
@@ -9,6 +15,12 @@ type ActionResult = {
   textUsed?: string;
 };
 
+function isTwitterUnauthorizedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const lower = message.toLowerCase();
+  return lower.includes('401') || lower.includes('unauthorized');
+}
+
 export async function executeTwitterActions(params: {
   target: PlatformAccount;
   tweet: TweetItem;
@@ -16,11 +28,43 @@ export async function executeTwitterActions(params: {
   accountInfo?: { username?: string; name?: string };
   actions?: TwitterActionConfig;
 }): Promise<ActionResult> {
-  const { target, tweet, template, accountInfo, actions } = params;
+  const {
+    target,
+    tweet,
+    template,
+    accountInfo,
+    actions,
+  } = params;
   const normalized = normalizeTwitterActions(actions);
-  const client = new TwitterClient(target.accessToken);
+  let currentAccessToken = target.accessToken;
+  let currentRefreshToken = target.refreshToken;
+  let hasRefreshed = false;
+
+  const runWithClientRetry = async <T>(operation: (client: TwitterClient) => Promise<T>): Promise<T> => {
+    try {
+      return await operation(new TwitterClient(currentAccessToken));
+    } catch (error) {
+      if (!currentRefreshToken || hasRefreshed || !isTwitterUnauthorizedError(error)) {
+        throw error;
+      }
+
+      const oauthCreds = await getOAuthClientCredentials(target.userId, 'twitter');
+      const refreshed = await refreshTwitterToken(currentRefreshToken, oauthCreds);
+      currentAccessToken = refreshed.accessToken;
+      currentRefreshToken = refreshed.refreshToken ?? currentRefreshToken;
+      hasRefreshed = true;
+
+      await db.updateAccount(target.id, {
+        accessToken: currentAccessToken,
+        refreshToken: currentRefreshToken,
+      });
+
+      return operation(new TwitterClient(currentAccessToken));
+    }
+  };
+
   const message = buildMessage(template, tweet, accountInfo).trim();
-  const text = clampTweetText(message || tweet.text || '');
+  const text = message || tweet.text || '';
 
   const needsText = Boolean(normalized.post || normalized.reply || normalized.quote);
   if (needsText && !text) {
@@ -32,7 +76,7 @@ export async function executeTwitterActions(params: {
 
   if (normalized.post) {
     try {
-      results.post = await client.tweet({ text });
+      results.post = await runWithClientRetry(client => client.tweet({ text }));
     } catch (error) {
       errors.push(error instanceof Error ? error.message : 'Failed to post tweet');
     }
@@ -40,7 +84,7 @@ export async function executeTwitterActions(params: {
 
   if (normalized.reply) {
     try {
-      results.reply = await client.replyTweet(text, tweet.id);
+      results.reply = await runWithClientRetry(client => client.replyTweet(text, tweet.id));
     } catch (error) {
       errors.push(error instanceof Error ? error.message : 'Failed to reply to tweet');
     }
@@ -48,7 +92,7 @@ export async function executeTwitterActions(params: {
 
   if (normalized.quote) {
     try {
-      results.quote = await client.quoteTweet(text, tweet.id);
+      results.quote = await runWithClientRetry(client => client.quoteTweet(text, tweet.id));
     } catch (error) {
       errors.push(error instanceof Error ? error.message : 'Failed to quote tweet');
     }
@@ -58,9 +102,13 @@ export async function executeTwitterActions(params: {
     if (!target.accountId) {
       errors.push('Missing Twitter target account ID for retweet');
     } else {
-      const ok = await client.retweet(target.accountId, tweet.id);
-      if (!ok) errors.push('Failed to retweet');
-      results.retweet = ok;
+      try {
+        const ok = await runWithClientRetry(client => client.retweet(target.accountId, tweet.id));
+        if (!ok) errors.push('Failed to retweet');
+        results.retweet = ok;
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : 'Failed to retweet');
+      }
     }
   }
 
@@ -68,9 +116,13 @@ export async function executeTwitterActions(params: {
     if (!target.accountId) {
       errors.push('Missing Twitter target account ID for like');
     } else {
-      const ok = await client.likeTweet(target.accountId, tweet.id);
-      if (!ok) errors.push('Failed to like tweet');
-      results.like = ok;
+      try {
+        const ok = await runWithClientRetry(client => client.likeTweet(target.accountId, tweet.id));
+        if (!ok) errors.push('Failed to like tweet');
+        results.like = ok;
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : 'Failed to like tweet');
+      }
     }
   }
 

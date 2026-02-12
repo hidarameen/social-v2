@@ -3,14 +3,19 @@ import { taskProcessor } from '@/lib/services/task-processor';
 import { db } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { getClientKey, rateLimit } from '@/lib/rate-limit';
+import { executionQueue } from '@/lib/services/execution-queue';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
 
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const idCheck = z.string().min(1).safeParse(params.id);
+    const { id } = await params;
+    const idCheck = z.string().min(1).safeParse(id);
     if (!idCheck.success) {
       return NextResponse.json({ success: false, error: 'Invalid task id' }, { status: 400 });
     }
@@ -22,12 +27,18 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const task = await db.getTask(params.id);
+    const task = await db.getTask(id);
     if (!task || task.userId !== user.id) {
       return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
     }
 
-    const executions = await taskProcessor.processTask(params.id);
+    const executions = await executionQueue.enqueue({
+      label: 'api:task-run',
+      userId: user.id,
+      taskId: task.id,
+      dedupeKey: `api:task-run:${user.id}:${task.id}`,
+      run: async () => taskProcessor.processTask(id),
+    });
     return NextResponse.json({ success: true, executions });
   } catch (error) {
     console.error('[API] Error running task:', error);

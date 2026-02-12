@@ -83,11 +83,11 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background control-app">
       <Sidebar />
       <Header />
 
-      <main className="ml-64 mt-16 p-8">
+      <main className="control-main">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
             Analytics & Insights

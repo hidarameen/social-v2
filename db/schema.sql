@@ -4,10 +4,26 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
+  profile_image_url TEXT,
   password_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS user_platform_credentials (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  platform_id TEXT NOT NULL,
+  credentials JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, platform_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_platform_credentials_user
+  ON user_platform_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_platform_credentials_platform
+  ON user_platform_credentials(platform_id);
 
 CREATE TABLE IF NOT EXISTS platform_accounts (
   id TEXT PRIMARY KEY,
@@ -68,6 +84,27 @@ CREATE TABLE IF NOT EXISTS task_executions (
 
 CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status);
+
+CREATE TABLE IF NOT EXISTS telegram_webhook_updates (
+  account_id TEXT NOT NULL,
+  update_id BIGINT NOT NULL,
+  first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (account_id, update_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_webhook_updates_first_seen
+  ON telegram_webhook_updates(first_seen);
+
+CREATE TABLE IF NOT EXISTS telegram_processed_messages (
+  account_id TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  message_id BIGINT NOT NULL,
+  first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (account_id, chat_id, message_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_processed_messages_first_seen
+  ON telegram_processed_messages(first_seen);
 
 CREATE TABLE IF NOT EXISTS analytics (
   id TEXT PRIMARY KEY,

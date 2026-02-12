@@ -5,6 +5,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  profileImageUrl?: string;
   passwordHash?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -21,6 +22,15 @@ export interface PlatformAccount {
   refreshToken?: string;
   credentials?: Record<string, any>;
   isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserPlatformCredential {
+  id: string;
+  userId: string;
+  platformId: string;
+  credentials: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +78,27 @@ export interface Task {
       quote?: boolean;
       retweet?: boolean;
       like?: boolean;
+    };
+    youtubeActions?: {
+      uploadVideo?: boolean;
+      uploadVideoToPlaylist?: boolean;
+      playlistId?: string;
+    };
+    youtubeVideo?: {
+      titleTemplate?: string;
+      descriptionTemplate?: string;
+      tags?: string[];
+      categoryId?: string;
+      privacyStatus?: 'private' | 'unlisted' | 'public';
+      embeddable?: boolean;
+      license?: 'youtube' | 'creativeCommon';
+      publicStatsViewable?: boolean;
+      selfDeclaredMadeForKids?: boolean;
+      notifySubscribers?: boolean;
+      publishAt?: string;
+      defaultLanguage?: string;
+      defaultAudioLanguage?: string;
+      recordingDate?: string;
     };
   };
   createdAt: Date;
@@ -120,6 +151,7 @@ function mapUser(row: any): User {
     id: row.id,
     email: row.email,
     name: row.name,
+    profileImageUrl: row.profile_image_url ?? undefined,
     passwordHash: row.password_hash ?? undefined,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
@@ -168,6 +200,17 @@ function mapTask(row: any): Task {
   };
 }
 
+function mapUserPlatformCredential(row: any): UserPlatformCredential {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    platformId: row.platform_id,
+    credentials: row.credentials ?? {},
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
 function mapExecution(row: any): TaskExecution {
   return {
     id: row.id,
@@ -199,23 +242,155 @@ function mapAnalytics(row: any): Analytics {
 }
 
 class Database {
+  private telegramMediaGroupSchemaReady = false;
+  private telegramWebhookUpdatesSchemaReady = false;
+  private telegramProcessedMessagesSchemaReady = false;
+  private platformCredentialsSchemaReady = false;
+  private usersSchemaReady = false;
+
+  private async ensureUsersSchema() {
+    if (this.usersSchemaReady) return;
+
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS profile_image_url TEXT
+    `);
+
+    this.usersSchemaReady = true;
+  }
+
+  private async ensurePlatformCredentialsSchema() {
+    if (this.platformCredentialsSchemaReady) return;
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_platform_credentials (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        platform_id TEXT NOT NULL,
+        credentials JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (user_id, platform_id)
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_platform_credentials_user
+      ON user_platform_credentials(user_id)
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_platform_credentials_platform
+      ON user_platform_credentials(platform_id)
+    `);
+
+    this.platformCredentialsSchemaReady = true;
+  }
+
+  private async ensureTelegramMediaGroupSchema() {
+    if (this.telegramMediaGroupSchemaReady) return;
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS telegram_media_groups (
+        group_key TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        media_group_id TEXT NOT NULL,
+        first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        processing_owner TEXT,
+        processing_started_at TIMESTAMPTZ,
+        processed_at TIMESTAMPTZ
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS telegram_media_group_items (
+        group_key TEXT NOT NULL,
+        message_id BIGINT NOT NULL,
+        payload JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (group_key, message_id),
+        FOREIGN KEY (group_key) REFERENCES telegram_media_groups(group_key) ON DELETE CASCADE
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_telegram_media_groups_last_seen
+      ON telegram_media_groups(last_seen)
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_telegram_media_groups_processed_at
+      ON telegram_media_groups(processed_at)
+    `);
+
+    this.telegramMediaGroupSchemaReady = true;
+  }
+
+  private async ensureTelegramWebhookUpdatesSchema() {
+    if (this.telegramWebhookUpdatesSchemaReady) return;
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS telegram_webhook_updates (
+        account_id TEXT NOT NULL,
+        update_id BIGINT NOT NULL,
+        first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (account_id, update_id)
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_telegram_webhook_updates_first_seen
+      ON telegram_webhook_updates(first_seen)
+    `);
+
+    this.telegramWebhookUpdatesSchemaReady = true;
+  }
+
+  private async ensureTelegramProcessedMessagesSchema() {
+    if (this.telegramProcessedMessagesSchemaReady) return;
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS telegram_processed_messages (
+        account_id TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        message_id BIGINT NOT NULL,
+        first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (account_id, chat_id, message_id)
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_telegram_processed_messages_first_seen
+      ON telegram_processed_messages(first_seen)
+    `);
+
+    this.telegramProcessedMessagesSchemaReady = true;
+  }
+
   // User Methods
   async createUser(user: Omit<User, 'createdAt' | 'updatedAt'>): Promise<User> {
+    await this.ensureUsersSchema();
     const result = await pool.query(
       `
-      INSERT INTO users (id, email, name, password_hash)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name
-      RETURNING id, email, name, password_hash, created_at, updated_at
+      INSERT INTO users (id, email, name, profile_image_url, password_hash)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (id) DO UPDATE SET
+        email = EXCLUDED.email,
+        name = EXCLUDED.name,
+        profile_image_url = EXCLUDED.profile_image_url
+      RETURNING id, email, name, profile_image_url, password_hash, created_at, updated_at
       `,
-      [user.id, user.email, user.name, user.passwordHash ?? null]
+      [user.id, user.email, user.name, user.profileImageUrl ?? null, user.passwordHash ?? null]
     );
     return mapUser(result.rows[0]);
   }
 
   async getUser(id: string): Promise<User | undefined> {
+    await this.ensureUsersSchema();
     const result = await pool.query(
-      `SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE id = $1`,
+      `SELECT id, email, name, profile_image_url, password_hash, created_at, updated_at FROM users WHERE id = $1`,
       [id]
     );
     if (result.rowCount === 0) return undefined;
@@ -223,8 +398,9 @@ class Database {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
+    await this.ensureUsersSchema();
     const result = await pool.query(
-      `SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = $1`,
+      `SELECT id, email, name, profile_image_url, password_hash, created_at, updated_at FROM users WHERE email = $1`,
       [email]
     );
     if (result.rowCount === 0) return undefined;
@@ -232,35 +408,105 @@ class Database {
   }
 
   async getAllUsers(): Promise<User[]> {
+    await this.ensureUsersSchema();
     const result = await pool.query(
-      `SELECT id, email, name, password_hash, created_at, updated_at FROM users ORDER BY created_at DESC`
+      `SELECT id, email, name, profile_image_url, password_hash, created_at, updated_at FROM users ORDER BY created_at DESC`
     );
     return result.rows.map(mapUser);
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    await this.ensureUsersSchema();
     const current = await this.getUser(id);
     if (!current) return undefined;
     const next = { ...current, ...updates };
     const result = await pool.query(
       `
       UPDATE users
-      SET email = $2, name = $3, password_hash = $4, updated_at = NOW()
+      SET email = $2, name = $3, profile_image_url = $4, password_hash = $5, updated_at = NOW()
       WHERE id = $1
-      RETURNING id, email, name, password_hash, created_at, updated_at
+      RETURNING id, email, name, profile_image_url, password_hash, created_at, updated_at
       `,
-      [id, next.email, next.name, next.passwordHash ?? null]
+      [id, next.email, next.name, next.profileImageUrl ?? null, next.passwordHash ?? null]
     );
     return mapUser(result.rows[0]);
   }
 
   async getUserByEmailWithPassword(email: string): Promise<User | undefined> {
+    await this.ensureUsersSchema();
     const result = await pool.query(
-      `SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = $1`,
+      `SELECT id, email, name, profile_image_url, password_hash, created_at, updated_at FROM users WHERE email = $1`,
       [email]
     );
     if (result.rowCount === 0) return undefined;
     return mapUser(result.rows[0]);
+  }
+
+  // User Platform Credentials Methods
+  async getUserPlatformCredential(
+    userId: string,
+    platformId: string
+  ): Promise<UserPlatformCredential | undefined> {
+    await this.ensurePlatformCredentialsSchema();
+    const result = await pool.query(
+      `
+      SELECT id, user_id, platform_id, credentials, created_at, updated_at
+      FROM user_platform_credentials
+      WHERE user_id = $1 AND platform_id = $2
+      `,
+      [userId, platformId]
+    );
+    if ((result.rowCount ?? 0) === 0) return undefined;
+    return mapUserPlatformCredential(result.rows[0]);
+  }
+
+  async getUserPlatformCredentials(userId: string): Promise<UserPlatformCredential[]> {
+    await this.ensurePlatformCredentialsSchema();
+    const result = await pool.query(
+      `
+      SELECT id, user_id, platform_id, credentials, created_at, updated_at
+      FROM user_platform_credentials
+      WHERE user_id = $1
+      ORDER BY platform_id ASC
+      `,
+      [userId]
+    );
+    return result.rows.map(mapUserPlatformCredential);
+  }
+
+  async getAnyPlatformCredential(platformId: string): Promise<UserPlatformCredential | undefined> {
+    await this.ensurePlatformCredentialsSchema();
+    const result = await pool.query(
+      `
+      SELECT id, user_id, platform_id, credentials, created_at, updated_at
+      FROM user_platform_credentials
+      WHERE platform_id = $1
+      ORDER BY updated_at DESC
+      LIMIT 1
+      `,
+      [platformId]
+    );
+    if ((result.rowCount ?? 0) === 0) return undefined;
+    return mapUserPlatformCredential(result.rows[0]);
+  }
+
+  async upsertUserPlatformCredential(params: {
+    userId: string;
+    platformId: string;
+    credentials: Record<string, any>;
+  }): Promise<UserPlatformCredential> {
+    await this.ensurePlatformCredentialsSchema();
+    const result = await pool.query(
+      `
+      INSERT INTO user_platform_credentials (id, user_id, platform_id, credentials)
+      VALUES ($1, $2, $3, $4::jsonb)
+      ON CONFLICT (user_id, platform_id)
+      DO UPDATE SET credentials = EXCLUDED.credentials, updated_at = NOW()
+      RETURNING id, user_id, platform_id, credentials, created_at, updated_at
+      `,
+      [randomUUID(), params.userId, params.platformId, JSON.stringify(params.credentials ?? {})]
+    );
+    return mapUserPlatformCredential(result.rows[0]);
   }
 
   // Platform Account Methods
@@ -882,6 +1128,184 @@ class Database {
       [userId, startDate, endDate]
     );
     return result.rows.map(mapExecution);
+  }
+
+  async addTelegramMediaGroupMessage(params: {
+    groupKey: string;
+    accountId: string;
+    chatId: string;
+    mediaGroupId: string;
+    messageId: number;
+    payload: Record<string, any>;
+  }): Promise<void> {
+    await this.ensureTelegramMediaGroupSchema();
+    await pool.query(
+      `
+      INSERT INTO telegram_media_groups (
+        group_key, account_id, chat_id, media_group_id, first_seen, last_seen
+      )
+      VALUES ($1, $2, $3, $4, NOW(), NOW())
+      ON CONFLICT (group_key)
+      DO UPDATE SET last_seen = NOW()
+      `,
+      [params.groupKey, params.accountId, params.chatId, params.mediaGroupId]
+    );
+
+    await pool.query(
+      `
+      INSERT INTO telegram_media_group_items (group_key, message_id, payload)
+      VALUES ($1, $2, $3::jsonb)
+      ON CONFLICT (group_key, message_id) DO NOTHING
+      `,
+      [params.groupKey, params.messageId, JSON.stringify(params.payload ?? {})]
+    );
+  }
+
+  async tryClaimTelegramMediaGroup(params: {
+    groupKey: string;
+    ownerId: string;
+    quietWindowMs: number;
+    staleClaimMs: number;
+  }): Promise<boolean> {
+    await this.ensureTelegramMediaGroupSchema();
+    const result = await pool.query(
+      `
+      UPDATE telegram_media_groups
+      SET processing_owner = $2,
+          processing_started_at = NOW()
+      WHERE group_key = $1
+        AND processed_at IS NULL
+        AND last_seen <= NOW() - ($3 * INTERVAL '1 millisecond')
+        AND (
+          processing_started_at IS NULL
+          OR processing_started_at <= NOW() - ($4 * INTERVAL '1 millisecond')
+        )
+      RETURNING group_key
+      `,
+      [params.groupKey, params.ownerId, params.quietWindowMs, params.staleClaimMs]
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async isTelegramMediaGroupPending(groupKey: string): Promise<boolean> {
+    await this.ensureTelegramMediaGroupSchema();
+    const result = await pool.query(
+      `
+      SELECT processed_at
+      FROM telegram_media_groups
+      WHERE group_key = $1
+      `,
+      [groupKey]
+    );
+
+    if ((result.rowCount ?? 0) === 0) return false;
+    return !Boolean(result.rows[0]?.processed_at);
+  }
+
+  async getTelegramMediaGroupMessages(groupKey: string): Promise<Record<string, any>[]> {
+    await this.ensureTelegramMediaGroupSchema();
+    const result = await pool.query(
+      `
+      SELECT payload
+      FROM telegram_media_group_items
+      WHERE group_key = $1
+      ORDER BY message_id ASC
+      `,
+      [groupKey]
+    );
+    return result.rows.map((row: any) => row.payload as Record<string, any>);
+  }
+
+  async markTelegramMediaGroupProcessed(groupKey: string, ownerId: string): Promise<void> {
+    await this.ensureTelegramMediaGroupSchema();
+    await pool.query(
+      `
+      UPDATE telegram_media_groups
+      SET processed_at = NOW()
+      WHERE group_key = $1 AND processing_owner = $2
+      `,
+      [groupKey, ownerId]
+    );
+  }
+
+  async releaseTelegramMediaGroupClaim(groupKey: string, ownerId: string): Promise<void> {
+    await this.ensureTelegramMediaGroupSchema();
+    await pool.query(
+      `
+      UPDATE telegram_media_groups
+      SET processing_owner = NULL,
+          processing_started_at = NULL
+      WHERE group_key = $1 AND processing_owner = $2 AND processed_at IS NULL
+      `,
+      [groupKey, ownerId]
+    );
+  }
+
+  async cleanupTelegramMediaGroups(olderThanHours = 24): Promise<void> {
+    await this.ensureTelegramMediaGroupSchema();
+    await pool.query(
+      `
+      DELETE FROM telegram_media_groups
+      WHERE (processed_at IS NOT NULL AND processed_at < NOW() - ($1 * INTERVAL '1 hour'))
+         OR (processed_at IS NULL AND last_seen < NOW() - ($1 * INTERVAL '1 hour'))
+      `,
+      [olderThanHours]
+    );
+  }
+
+  async registerTelegramWebhookUpdate(params: { accountId: string; updateId: number }): Promise<boolean> {
+    await this.ensureTelegramWebhookUpdatesSchema();
+    const result = await pool.query(
+      `
+      INSERT INTO telegram_webhook_updates (account_id, update_id, first_seen)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (account_id, update_id) DO NOTHING
+      RETURNING update_id
+      `,
+      [params.accountId, params.updateId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async cleanupTelegramWebhookUpdates(olderThanHours = 72): Promise<void> {
+    await this.ensureTelegramWebhookUpdatesSchema();
+    await pool.query(
+      `
+      DELETE FROM telegram_webhook_updates
+      WHERE first_seen < NOW() - ($1 * INTERVAL '1 hour')
+      `,
+      [olderThanHours]
+    );
+  }
+
+  async registerTelegramProcessedMessage(params: {
+    accountId: string;
+    chatId: string;
+    messageId: number;
+  }): Promise<boolean> {
+    await this.ensureTelegramProcessedMessagesSchema();
+    const result = await pool.query(
+      `
+      INSERT INTO telegram_processed_messages (account_id, chat_id, message_id, first_seen)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (account_id, chat_id, message_id) DO NOTHING
+      RETURNING message_id
+      `,
+      [params.accountId, params.chatId, params.messageId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async cleanupTelegramProcessedMessages(olderThanHours = 72): Promise<void> {
+    await this.ensureTelegramProcessedMessagesSchema();
+    await pool.query(
+      `
+      DELETE FROM telegram_processed_messages
+      WHERE first_seen < NOW() - ($1 * INTERVAL '1 hour')
+      `,
+      [olderThanHours]
+    );
   }
 
   // Analytics Methods

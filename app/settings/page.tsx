@@ -13,14 +13,148 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Save, Bell, Lock, Palette, Database } from 'lucide-react';
-import { useState } from 'react';
+import { Save, Bell, Lock, Palette, Database, KeyRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { useTheme } from 'next-themes';
+import { useSession } from 'next-auth/react';
+
+const MANAGED_PLATFORM_IDS = [
+  'twitter',
+  'facebook',
+  'instagram',
+  'youtube',
+  'tiktok',
+  'linkedin',
+  'telegram',
+] as const;
+
+type ManagedPlatformId = (typeof MANAGED_PLATFORM_IDS)[number];
+
+type PlatformCredentialForm = {
+  clientId: string;
+  clientSecret: string;
+  apiKey: string;
+  apiSecret: string;
+  bearerToken: string;
+  webhookSecret: string;
+  accessToken: string;
+  accessTokenSecret: string;
+  botToken: string;
+};
+
+type CredentialField = {
+  key: keyof PlatformCredentialForm;
+  label: string;
+  placeholder: string;
+  secret?: boolean;
+};
+
+const EMPTY_CREDENTIAL_FORM: PlatformCredentialForm = {
+  clientId: '',
+  clientSecret: '',
+  apiKey: '',
+  apiSecret: '',
+  bearerToken: '',
+  webhookSecret: '',
+  accessToken: '',
+  accessTokenSecret: '',
+  botToken: '',
+};
+
+const PLATFORM_LABELS: Record<ManagedPlatformId, string> = {
+  twitter: 'Twitter / X',
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+  linkedin: 'LinkedIn',
+  telegram: 'Telegram',
+};
+
+const PLATFORM_FIELDS: Record<ManagedPlatformId, CredentialField[]> = {
+  twitter: [
+    { key: 'clientId', label: 'OAuth Client ID', placeholder: 'Twitter app client id' },
+    { key: 'clientSecret', label: 'OAuth Client Secret', placeholder: 'Twitter app client secret', secret: true },
+    { key: 'apiKey', label: 'API Key (OAuth1)', placeholder: 'Twitter API key' },
+    { key: 'apiSecret', label: 'API Secret (OAuth1)', placeholder: 'Twitter API secret', secret: true },
+    { key: 'accessToken', label: 'Access Token (OAuth1)', placeholder: 'Twitter access token', secret: true },
+    { key: 'accessTokenSecret', label: 'Access Token Secret (OAuth1)', placeholder: 'Twitter access token secret', secret: true },
+    { key: 'bearerToken', label: 'Bearer Token (Streaming)', placeholder: 'Twitter bearer token', secret: true },
+    { key: 'webhookSecret', label: 'Webhook Secret', placeholder: 'Twitter webhook/API secret', secret: true },
+  ],
+  facebook: [
+    { key: 'clientId', label: 'App ID / Client ID', placeholder: 'Facebook app id' },
+    { key: 'clientSecret', label: 'App Secret / Client Secret', placeholder: 'Facebook app secret', secret: true },
+  ],
+  instagram: [
+    { key: 'clientId', label: 'Client ID', placeholder: 'Instagram client id' },
+    { key: 'clientSecret', label: 'Client Secret', placeholder: 'Instagram client secret', secret: true },
+  ],
+  youtube: [
+    { key: 'clientId', label: 'Google Client ID', placeholder: 'Google OAuth client id' },
+    { key: 'clientSecret', label: 'Google Client Secret', placeholder: 'Google OAuth client secret', secret: true },
+  ],
+  tiktok: [
+    { key: 'clientId', label: 'Client Key', placeholder: 'TikTok client key' },
+    { key: 'clientSecret', label: 'Client Secret', placeholder: 'TikTok client secret', secret: true },
+  ],
+  linkedin: [
+    { key: 'clientId', label: 'Client ID', placeholder: 'LinkedIn client id' },
+    { key: 'clientSecret', label: 'Client Secret', placeholder: 'LinkedIn client secret', secret: true },
+  ],
+  telegram: [
+    { key: 'botToken', label: 'Bot Token', placeholder: '123456:ABC-DEF...', secret: true },
+    { key: 'webhookSecret', label: 'Webhook Secret (Optional)', placeholder: 'Telegram webhook secret', secret: true },
+  ],
+};
+
+function buildEmptyCredentialMap(): Record<ManagedPlatformId, PlatformCredentialForm> {
+  return MANAGED_PLATFORM_IDS.reduce((acc, id) => {
+    acc[id] = { ...EMPTY_CREDENTIAL_FORM };
+    return acc;
+  }, {} as Record<ManagedPlatformId, PlatformCredentialForm>);
+}
+
+function normalizeCredentialForm(raw: any): PlatformCredentialForm {
+  return {
+    clientId: typeof raw?.clientId === 'string' ? raw.clientId : '',
+    clientSecret: typeof raw?.clientSecret === 'string' ? raw.clientSecret : '',
+    apiKey: typeof raw?.apiKey === 'string' ? raw.apiKey : '',
+    apiSecret: typeof raw?.apiSecret === 'string' ? raw.apiSecret : '',
+    bearerToken: typeof raw?.bearerToken === 'string' ? raw.bearerToken : '',
+    webhookSecret: typeof raw?.webhookSecret === 'string' ? raw.webhookSecret : '',
+    accessToken: typeof raw?.accessToken === 'string' ? raw.accessToken : '',
+    accessTokenSecret: typeof raw?.accessTokenSecret === 'string' ? raw.accessTokenSecret : '',
+    botToken: typeof raw?.botToken === 'string' ? raw.botToken : '',
+  };
+}
+
+function sanitizeForSave(form: PlatformCredentialForm): Record<string, string> {
+  const output: Record<string, string> = {};
+  for (const [key, value] of Object.entries(form)) {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      output[key] = trimmed;
+    }
+  }
+  return output;
+}
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<ManagedPlatformId>('twitter');
+  const [credentialsSaving, setCredentialsSaving] = useState(false);
+  const [credentialsLoading, setCredentialsLoading] = useState(true);
+  const [credentialMap, setCredentialMap] = useState<Record<ManagedPlatformId, PlatformCredentialForm>>(
+    buildEmptyCredentialMap()
+  );
+
   const [settings, setSettings] = useState({
-    email: 'demo@example.com',
+    email: '',
     timezone: 'UTC',
-    theme: 'dark',
     notifications: {
       emailOnSuccess: true,
       emailOnError: true,
@@ -32,27 +166,170 @@ export default function SettingsPage() {
     },
   });
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user?.email) return;
+    setSettings(prev => ({ ...prev, email: session.user.email || '' }));
+  }, [session?.user?.email]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCredentials() {
+      try {
+        const res = await fetch('/api/platform-credentials', { cache: 'no-store' });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to load platform credentials');
+        }
+        if (cancelled) return;
+
+        const next = buildEmptyCredentialMap();
+        for (const platformId of MANAGED_PLATFORM_IDS) {
+          next[platformId] = normalizeCredentialForm(data.credentials?.[platformId] ?? {});
+        }
+        setCredentialMap(next);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : 'Failed to load platform credentials');
+        }
+      } finally {
+        if (!cancelled) setCredentialsLoading(false);
+      }
+    }
+    loadCredentials();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedTheme = mounted ? (theme ?? 'system') : 'system';
+  const activeCredentials = useMemo(
+    () => credentialMap[selectedPlatform] ?? { ...EMPTY_CREDENTIAL_FORM },
+    [credentialMap, selectedPlatform]
+  );
+
+  const updateCredentialField = (key: keyof PlatformCredentialForm, value: string) => {
+    setCredentialMap(prev => ({
+      ...prev,
+      [selectedPlatform]: {
+        ...prev[selectedPlatform],
+        [key]: value,
+      },
+    }));
+  };
+
+  const savePlatformCredentials = async () => {
+    try {
+      setCredentialsSaving(true);
+      const payload = sanitizeForSave(activeCredentials);
+      const res = await fetch('/api/platform-credentials', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platformId: selectedPlatform,
+          credentials: payload,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to save credentials');
+      }
+      setCredentialMap(prev => ({
+        ...prev,
+        [selectedPlatform]: normalizeCredentialForm(data.credentials ?? {}),
+      }));
+      toast.success(`${PLATFORM_LABELS[selectedPlatform]} credentials saved`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save credentials');
+    } finally {
+      setCredentialsSaving(false);
+    }
+  };
+
   const handleSave = () => {
-    alert('Settings saved successfully!');
+    toast.success('Settings saved successfully');
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background control-app">
       <Sidebar />
       <Header />
 
-      <main className="ml-64 mt-16 p-8">
+      <main className="control-main">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
             Settings
           </h1>
           <p className="text-muted-foreground">
-            Manage your account and application preferences
+            Manage your account, themes, and platform API credentials
           </p>
         </div>
 
-        <div className="max-w-3xl space-y-6">
-          {/* Account Settings */}
+        <div className="max-w-4xl space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound size={20} />
+                Platform API Credentials
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                OAuth and API keys are stored per-user in the database and isolated between accounts.
+              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Platform
+                </label>
+                <Select
+                  value={selectedPlatform}
+                  onValueChange={(value) => setSelectedPlatform(value as ManagedPlatformId)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MANAGED_PLATFORM_IDS.map((platformId) => (
+                      <SelectItem key={platformId} value={platformId}>
+                        {PLATFORM_LABELS[platformId]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {credentialsLoading ? (
+                <div className="rounded-lg border border-border/60 bg-card/40 p-4 text-sm text-muted-foreground">
+                  Loading credentials...
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {PLATFORM_FIELDS[selectedPlatform].map((field) => (
+                    <div key={field.key}>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        {field.label}
+                      </label>
+                      <Input
+                        type={field.secret ? 'password' : 'text'}
+                        placeholder={field.placeholder}
+                        value={activeCredentials[field.key]}
+                        onChange={(e) => updateCredentialField(field.key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button onClick={savePlatformCredentials} disabled={credentialsLoading || credentialsSaving}>
+                {credentialsSaving ? 'Saving...' : 'Save Platform Credentials'}
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -106,7 +383,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Appearance Settings */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -120,13 +396,11 @@ export default function SettingsPage() {
                   Theme
                 </label>
                 <Select
-                  value={settings.theme}
-                  onValueChange={(value) =>
-                    setSettings(prev => ({
-                      ...prev,
-                      theme: value,
-                    }))
-                  }
+                  value={selectedTheme}
+                  onValueChange={(value) => {
+                    setTheme(value);
+                    toast.success('Theme updated');
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -134,14 +408,13 @@ export default function SettingsPage() {
                   <SelectContent>
                     <SelectItem value="light">Light</SelectItem>
                     <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="auto">Auto (System)</SelectItem>
+                    <SelectItem value="system">Auto (System)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </CardContent>
           </Card>
 
-          {/* Notification Settings */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -221,7 +494,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Privacy Settings */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -278,7 +550,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Database Settings */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -292,7 +563,7 @@ export default function SettingsPage() {
                   Database Status: <span className="font-semibold text-green-600">Connected</span>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Using in-memory database (Demo Mode). In production, this connects to Neon PostgreSQL.
+                  Platform API credentials and user data are now persisted in PostgreSQL per user.
                 </p>
               </div>
 
@@ -305,7 +576,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Save Button */}
           <div className="flex gap-3">
             <Button size="lg" onClick={handleSave}>
               <Save size={20} className="mr-2" />

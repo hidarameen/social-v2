@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthUser } from '@/lib/auth';
+import { getTwitterBearerTokenForUser } from '@/lib/platform-credentials';
 
 export const runtime = 'nodejs';
 
 export async function GET(_request: NextRequest) {
-  const bearer = process.env.TWITTER_BEARER_TOKEN;
+  const user = await getAuthUser();
+  if (!user?.id) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const bearer = await getTwitterBearerTokenForUser(user.id);
   if (!bearer) {
-    return NextResponse.json({ success: false, error: 'Missing TWITTER_BEARER_TOKEN' }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: 'Missing Twitter bearer token in Settings.' },
+      { status: 400 }
+    );
   }
 
   const params = new URLSearchParams({

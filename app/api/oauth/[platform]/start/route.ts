@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { getAuthUser } from '@/lib/auth';
 import { getOAuthPlatform } from '@/lib/oauth/platforms';
 import { generateCodeChallenge, generateCodeVerifier, generateState } from '@/lib/oauth/utils';
+import { getOAuthClientCredentials } from '@/lib/platform-credentials';
 
 export const runtime = 'nodejs';
 
@@ -28,10 +29,12 @@ export async function GET(
     );
   }
 
-  const clientId = platform.clientIdEnv ? process.env[platform.clientIdEnv] : undefined;
-  if (!clientId) {
+  let clientId: string;
+  try {
+    ({ clientId } = await getOAuthClientCredentials(user.id, platform.id));
+  } catch (error) {
     return NextResponse.json(
-      { success: false, error: `Missing ${platform.clientIdEnv} in environment` },
+      { success: false, error: error instanceof Error ? error.message : 'Missing OAuth credentials' },
       { status: 400 }
     );
   }
@@ -59,6 +62,10 @@ export async function GET(
     for (const [key, value] of Object.entries(platform.authParams)) {
       paramsOut.set(key, value);
     }
+  }
+  if (platform.id === 'facebook') {
+    // Force FB to re-check permissions and avoid silently reusing old grants.
+    paramsOut.set('auth_type', 'rerequest');
   }
 
   const cookieStore = await cookies();

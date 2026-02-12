@@ -43,21 +43,30 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background control-app">
       <Sidebar />
       <Header />
 
-      <main className="ml-64 mt-16 p-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
+      <main className="control-main">
+        <div className="page-header animate-fade-up">
+          <div>
+            <span className="kpi-pill">Live Operations</span>
+            <h1 className="page-title mt-3">
             Welcome to SocialFlow
-          </h1>
-          <p className="text-muted-foreground">
-            Manage and automate your social media content across multiple platforms
-          </p>
+            </h1>
+            <p className="page-subtitle">
+              Manage and automate your social media content across multiple platforms
+            </p>
+          </div>
+          <Link href="/tasks?create=1">
+            <Button size="lg" className="animate-float-soft">
+              <Plus size={18} />
+              Launch New Automation
+            </Button>
+          </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             title="Total Tasks"
             value={stats.totalTasks}
@@ -87,8 +96,8 @@ export default function DashboardPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <Card className="animate-fade-up">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Recent Tasks</CardTitle>
               <Link href="/tasks">
@@ -103,7 +112,7 @@ export default function DashboardPage() {
                   <p className="text-muted-foreground mb-4">
                     No tasks created yet
                   </p>
-                  <Link href="/tasks/new">
+                  <Link href="/tasks?create=1">
                     <Button>
                       <Plus size={18} className="mr-2" />
                       Create First Task
@@ -115,7 +124,7 @@ export default function DashboardPage() {
                   {recentTasks.map((task) => (
                     <div
                       key={task.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-card/50 hover:bg-card transition-colors"
+                      className="flex items-center justify-between rounded-xl border border-border/50 bg-card/45 p-4 transition-colors hover:bg-card/75"
                     >
                       <div className="flex-1">
                         <h4 className="font-semibold text-foreground">
@@ -127,10 +136,10 @@ export default function DashboardPage() {
                         </p>
                       </div>
                       <span
-                        className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+                        className={`status-pill ${
                           task.status === 'active'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                            ? 'status-pill--success'
+                            : 'status-pill--neutral'
                         }`}
                       >
                         {task.status}
@@ -142,7 +151,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="animate-fade-up-delay">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Recent Executions</CardTitle>
               <Link href="/executions">
@@ -163,7 +172,7 @@ export default function DashboardPage() {
                   {recentExecutions.map((execution, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between p-3 rounded-lg bg-card/50 border border-border/50"
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-card/55 p-3"
                     >
                       <div className="flex items-center gap-3 flex-1">
                         <ArrowRight
@@ -180,10 +189,10 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <span
-                        className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                        className={`status-pill ${
                           execution.status === 'success'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                            ? 'status-pill--success'
+                            : 'status-pill--error'
                         }`}
                       >
                         {execution.status}
@@ -196,19 +205,19 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="mt-8 p-8 rounded-lg bg-gradient-to-r from-primary/20 via-accent/20 to-secondary/20 border border-primary/20">
-          <div className="flex items-center justify-between">
+        <div className="surface-card mt-8 rounded-2xl border-primary/20 p-8">
+          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
             <div>
               <h3 className="text-lg font-bold text-foreground mb-2">
                 Ready to Automate?
               </h3>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground md:max-w-lg">
                 Create your first task to start syncing content across platforms
               </p>
             </div>
-            <Link href="/tasks/new">
+            <Link href="/tasks?create=1">
               <Button size="lg">
-                <Plus size={20} className="mr-2" />
+                <Plus size={18} />
                 Create New Task
               </Button>
             </Link>

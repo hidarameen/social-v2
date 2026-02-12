@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { getAnyTwitterWebhookSecret } from '@/lib/platform-credentials';
 
 export const runtime = 'nodejs';
 
@@ -8,10 +9,10 @@ export async function GET(req: NextRequest) {
   const crc_token = req.nextUrl.searchParams.get('crc_token');
   
   if (crc_token) {
-    const consumerSecret = process.env.TWITTER_CONSUMER_SECRET;
+    const consumerSecret = await getAnyTwitterWebhookSecret();
     if (!consumerSecret) {
-      console.error('[TwitterWebhook] Missing TWITTER_CONSUMER_SECRET for CRC');
-      return NextResponse.json({ error: 'Missing TWITTER_CONSUMER_SECRET' }, { status: 500 });
+      console.error('[TwitterWebhook] Missing webhook secret for CRC');
+      return NextResponse.json({ error: 'Missing Twitter webhook secret in DB' }, { status: 500 });
     }
 
     const hash = crypto

@@ -13,6 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import type { PlatformAccount } from '@/lib/db'
+import {
+  DEFAULT_YOUTUBE_CATEGORY_ID,
+  resolveYouTubeCategoryId,
+  YOUTUBE_VIDEO_CATEGORIES,
+} from '@/lib/youtube-categories'
 import { ArrowRight, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -62,6 +67,27 @@ export default function CreateTaskPage() {
     retweet: false,
     like: false,
   })
+  const [youtubeActions, setYoutubeActions] = useState({
+    uploadVideo: true,
+    uploadVideoToPlaylist: false,
+    playlistId: '',
+  })
+  const [youtubeVideo, setYoutubeVideo] = useState({
+    titleTemplate: '',
+    descriptionTemplate: '',
+    tagsText: '',
+    privacyStatus: 'public',
+    categoryId: DEFAULT_YOUTUBE_CATEGORY_ID,
+    embeddable: true,
+    license: 'youtube',
+    publicStatsViewable: true,
+    selfDeclaredMadeForKids: false,
+    notifySubscribers: true,
+    publishAt: '',
+    defaultLanguage: '',
+    defaultAudioLanguage: '',
+    recordingDate: '',
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -85,17 +111,43 @@ export default function CreateTaskPage() {
   const hasTwitterTarget = targetAccounts.some(
     id => accounts.find(a => a.id === id)?.platformId === 'twitter'
   )
+  const youtubeTargets = targetAccounts
+    .map(id => accounts.find(a => a.id === id))
+    .filter((a): a is PlatformAccount => Boolean(a && a.platformId === 'youtube'))
+  const hasYouTubeTarget = youtubeTargets.length > 0
+  const youtubePlaylists: Array<{ id: string; title: string }> = []
+  const youtubePlaylistSeen = new Set<string>()
+  for (const target of youtubeTargets) {
+    const available = Array.isArray((target.credentials as any)?.availablePlaylists)
+      ? (target.credentials as any).availablePlaylists
+      : []
+    for (const item of available) {
+      const id = String(item?.id || '')
+      const title = String(item?.title || item?.id || '')
+      if (!id || !title || youtubePlaylistSeen.has(id)) continue
+      youtubePlaylistSeen.add(id)
+      youtubePlaylists.push({ id, title })
+    }
+  }
 
   const handleToggleSource = (accountId: string) => {
+    const willSelect = !sourceAccounts.includes(accountId)
     setSourceAccounts(prev =>
       prev.includes(accountId) ? prev.filter(id => id !== accountId) : [...prev, accountId]
     )
+    if (willSelect) {
+      setTargetAccounts(prev => prev.filter(id => id !== accountId))
+    }
   }
 
   const handleToggleTarget = (accountId: string) => {
+    const willSelect = !targetAccounts.includes(accountId)
     setTargetAccounts(prev =>
       prev.includes(accountId) ? prev.filter(id => id !== accountId) : [...prev, accountId]
     )
+    if (willSelect) {
+      setSourceAccounts(prev => prev.filter(id => id !== accountId))
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,6 +169,11 @@ export default function CreateTaskPage() {
       toast.error('Select at least one destination account')
       return
     }
+    const overlappingAccounts = sourceAccounts.filter(id => targetAccounts.includes(id))
+    if (overlappingAccounts.length > 0) {
+      toast.error('A single account cannot be both source and destination in the same task')
+      return
+    }
     if (twitterSourceType === 'username' && !twitterUsername.trim()) {
       toast.error('Please enter a Twitter username for the source')
       return
@@ -132,7 +189,10 @@ export default function CreateTaskPage() {
       toast.error('Please enter a trigger value for the selected trigger type')
       return
     }
-
+    if (hasYouTubeTarget && youtubeActions.uploadVideoToPlaylist && !youtubeActions.playlistId) {
+      toast.error('Please select a YouTube playlist or disable "Upload video to playlist"')
+      return
+    }
     const recurringPattern =
       frequency === 'daily' || frequency === 'weekly' || frequency === 'monthly'
         ? frequency
@@ -165,6 +225,37 @@ export default function CreateTaskPage() {
             includeMedia,
             enableYtDlp,
             twitterActions,
+            youtubeActions: {
+              uploadVideo: youtubeActions.uploadVideo,
+              uploadVideoToPlaylist: youtubeActions.uploadVideoToPlaylist,
+              playlistId: youtubeActions.uploadVideoToPlaylist
+                ? youtubeActions.playlistId || undefined
+                : undefined,
+            },
+            youtubeVideo: {
+              titleTemplate: youtubeVideo.titleTemplate || undefined,
+              descriptionTemplate: youtubeVideo.descriptionTemplate || undefined,
+              tags: youtubeVideo.tagsText
+                .split(/[\n,]/)
+                .map(tag => tag.trim())
+                .filter(Boolean),
+              privacyStatus: youtubeVideo.privacyStatus as 'private' | 'unlisted' | 'public',
+              categoryId:
+                resolveYouTubeCategoryId(youtubeVideo.categoryId) || DEFAULT_YOUTUBE_CATEGORY_ID,
+              embeddable: youtubeVideo.embeddable,
+              license: youtubeVideo.license as 'youtube' | 'creativeCommon',
+              publicStatsViewable: youtubeVideo.publicStatsViewable,
+              selfDeclaredMadeForKids: youtubeVideo.selfDeclaredMadeForKids,
+              notifySubscribers: youtubeVideo.notifySubscribers,
+              publishAt: youtubeVideo.publishAt
+                ? new Date(youtubeVideo.publishAt).toISOString()
+                : undefined,
+              defaultLanguage: youtubeVideo.defaultLanguage || undefined,
+              defaultAudioLanguage: youtubeVideo.defaultAudioLanguage || undefined,
+              recordingDate: youtubeVideo.recordingDate
+                ? new Date(`${youtubeVideo.recordingDate}T00:00:00.000Z`).toISOString()
+                : undefined,
+            },
           },
           filters: {
             twitterSourceType,
@@ -203,6 +294,23 @@ export default function CreateTaskPage() {
       setTriggerType('on_tweet')
       setTriggerValue('')
       setTwitterActions({ post: true, reply: false, quote: false, retweet: false, like: false })
+      setYoutubeActions({ uploadVideo: true, uploadVideoToPlaylist: false, playlistId: '' })
+      setYoutubeVideo({
+        titleTemplate: '',
+        descriptionTemplate: '',
+        tagsText: '',
+        privacyStatus: 'public',
+        categoryId: DEFAULT_YOUTUBE_CATEGORY_ID,
+        embeddable: true,
+        license: 'youtube',
+        publicStatsViewable: true,
+        selfDeclaredMadeForKids: false,
+        notifySubscribers: true,
+        publishAt: '',
+        defaultLanguage: '',
+        defaultAudioLanguage: '',
+        recordingDate: '',
+      })
       setFrequency('daily')
       setScheduleTime('')
       setIsActive(true)
@@ -445,113 +553,112 @@ export default function CreateTaskPage() {
           </Card>
 
           {sourceAccounts.some(id => accounts.find(a => a.id === id)?.platformId === 'twitter') && (
-          {/* Twitter Source */}
-          <Card className="border-border/40">
-            <CardHeader>
-              <CardTitle>Twitter Source</CardTitle>
-              <CardDescription>Choose where tweets come from</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="twitterSourceType">Source Type</Label>
-                <Select value={twitterSourceType} onValueChange={(v: any) => setTwitterSourceType(v)}>
-                  <SelectTrigger id="twitterSourceType">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="account">My connected account</SelectItem>
-                    <SelectItem value="username">Another user by username</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="twitterTriggerType">Trigger Type</Label>
-                <Select value={triggerType} onValueChange={(v: any) => setTriggerType(v)}>
-                  <SelectTrigger id="twitterTriggerType">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="on_tweet">New tweet by source</SelectItem>
-                    <SelectItem value="on_retweet">New retweet by source</SelectItem>
-                    <SelectItem value="on_like">New liked tweet by source</SelectItem>
-                    <SelectItem value="on_mention">New mention of source</SelectItem>
-                    <SelectItem value="on_search">New tweet from search</SelectItem>
-                    <SelectItem value="on_keyword">New tweet with keyword</SelectItem>
-                    <SelectItem value="on_hashtag">New tweet with hashtag</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {(triggerType === 'on_keyword' || triggerType === 'on_hashtag' || triggerType === 'on_search') && (
+            <Card className="border-border/40">
+              <CardHeader>
+                <CardTitle>Twitter Source</CardTitle>
+                <CardDescription>Choose where tweets come from</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="twitterTriggerValue">Trigger Value</Label>
-                  <Input
-                    id="twitterTriggerValue"
-                    placeholder="e.g., #AI, crypto, from:news"
-                    value={triggerValue}
-                    onChange={(e) => setTriggerValue(e.target.value)}
-                  />
+                  <Label htmlFor="twitterSourceType">Source Type</Label>
+                  <Select value={twitterSourceType} onValueChange={(v: any) => setTwitterSourceType(v)}>
+                    <SelectTrigger id="twitterSourceType">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="account">My connected account</SelectItem>
+                      <SelectItem value="username">Another user by username</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-              {twitterSourceType === 'username' && (
                 <div>
-                  <Label htmlFor="twitterUsername">Twitter Username</Label>
-                  <Input
-                    id="twitterUsername"
-                    placeholder="e.g., jack"
-                    value={twitterUsername}
-                    onChange={(e) => setTwitterUsername(e.target.value)}
-                  />
+                  <Label htmlFor="twitterTriggerType">Trigger Type</Label>
+                  <Select value={triggerType} onValueChange={(v: any) => setTriggerType(v)}>
+                    <SelectTrigger id="twitterTriggerType">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="on_tweet">New tweet by source</SelectItem>
+                      <SelectItem value="on_retweet">New retweet by source</SelectItem>
+                      <SelectItem value="on_like">New liked tweet by source</SelectItem>
+                      <SelectItem value="on_mention">New mention of source</SelectItem>
+                      <SelectItem value="on_search">New tweet from search</SelectItem>
+                      <SelectItem value="on_keyword">New tweet with keyword</SelectItem>
+                      <SelectItem value="on_hashtag">New tweet with hashtag</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label>Filters</Label>
-                <div>
-                  <Label htmlFor="pollIntervalSeconds">Poll Interval (seconds)</Label>
-                  <Input
-                    id="pollIntervalSeconds"
-                    type="number"
-                    min={10}
-                    value={pollIntervalSeconds}
-                    onChange={(e) => setPollIntervalSeconds(Math.max(10, Number(e.target.value || 10)))}
-                  />
+                {(triggerType === 'on_keyword' || triggerType === 'on_hashtag' || triggerType === 'on_search') && (
+                  <div>
+                    <Label htmlFor="twitterTriggerValue">Trigger Value</Label>
+                    <Input
+                      id="twitterTriggerValue"
+                      placeholder="e.g., #AI, crypto, from:news"
+                      value={triggerValue}
+                      onChange={(e) => setTriggerValue(e.target.value)}
+                    />
+                  </div>
+                )}
+                {twitterSourceType === 'username' && (
+                  <div>
+                    <Label htmlFor="twitterUsername">Twitter Username</Label>
+                    <Input
+                      id="twitterUsername"
+                      placeholder="e.g., jack"
+                      value={twitterUsername}
+                      onChange={(e) => setTwitterUsername(e.target.value)}
+                    />
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>Filters</Label>
+                  <div>
+                    <Label htmlFor="pollIntervalSeconds">Poll Interval (seconds)</Label>
+                    <Input
+                      id="pollIntervalSeconds"
+                      type="number"
+                      min={10}
+                      value={pollIntervalSeconds}
+                      onChange={(e) => setPollIntervalSeconds(Math.max(10, Number(e.target.value || 10)))}
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={originalOnly}
+                      disabled={triggerType === 'on_retweet'}
+                      onChange={(e) => setOriginalOnly(e.target.checked)}
+                    />
+                    Original only (exclude replies/retweets/quotes)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={excludeReplies}
+                      onChange={(e) => setExcludeReplies(e.target.checked)}
+                    />
+                    Exclude replies
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={excludeRetweets}
+                      disabled={triggerType === 'on_retweet'}
+                      onChange={(e) => setExcludeRetweets(e.target.checked)}
+                    />
+                    Exclude retweets
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={excludeQuotes}
+                      onChange={(e) => setExcludeQuotes(e.target.checked)}
+                    />
+                    Exclude quote tweets
+                  </label>
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={originalOnly}
-                    disabled={triggerType === 'on_retweet'}
-                    onChange={(e) => setOriginalOnly(e.target.checked)}
-                  />
-                  Original only (exclude replies/retweets/quotes)
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={excludeReplies}
-                    onChange={(e) => setExcludeReplies(e.target.checked)}
-                  />
-                  Exclude replies
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={excludeRetweets}
-                    disabled={triggerType === 'on_retweet'}
-                    onChange={(e) => setExcludeRetweets(e.target.checked)}
-                  />
-                  Exclude retweets
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={excludeQuotes}
-                    onChange={(e) => setExcludeQuotes(e.target.checked)}
-                  />
-                  Exclude quote tweets
-                </label>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
           )}
 
           {hasTwitterTarget && (
@@ -614,6 +721,272 @@ export default function CreateTaskPage() {
                 <p className="text-xs text-muted-foreground">
                   If none are selected, a tweet will be posted by default.
                 </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {hasYouTubeTarget && (
+            <Card className="border-border/40">
+              <CardHeader>
+                <CardTitle>YouTube Actions</CardTitle>
+                <CardDescription>Upload videos to YouTube with optional playlist and full metadata</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={youtubeActions.uploadVideo}
+                    onChange={(e) =>
+                      setYoutubeActions(prev => ({ ...prev, uploadVideo: e.target.checked }))
+                    }
+                  />
+                  Upload video
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={youtubeActions.uploadVideoToPlaylist}
+                    onChange={(e) =>
+                      setYoutubeActions(prev => ({
+                        ...prev,
+                        uploadVideoToPlaylist: e.target.checked,
+                      }))
+                    }
+                  />
+                  Upload video to playlist
+                </label>
+
+                {youtubeActions.uploadVideoToPlaylist && (
+                  <div>
+                    <Label htmlFor="youtubePlaylist">Playlist</Label>
+                    {youtubePlaylists.length > 0 ? (
+                      <Select
+                        value={youtubeActions.playlistId}
+                        onValueChange={(value: string) =>
+                          setYoutubeActions(prev => ({ ...prev, playlistId: value }))
+                        }
+                      >
+                        <SelectTrigger id="youtubePlaylist">
+                          <SelectValue placeholder="Select a YouTube playlist" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {youtubePlaylists.map(playlist => (
+                            <SelectItem key={playlist.id} value={playlist.id}>
+                              {playlist.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        No playlists detected for selected YouTube target. Reconnect the account to refresh playlists.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <Label htmlFor="youtubeTitleTemplate">Video Title Template</Label>
+                  <Input
+                    id="youtubeTitleTemplate"
+                    placeholder="%text%"
+                    value={youtubeVideo.titleTemplate}
+                    onChange={(e) =>
+                      setYoutubeVideo(prev => ({ ...prev, titleTemplate: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="youtubeDescriptionTemplate">Video Description Template</Label>
+                  <Textarea
+                    id="youtubeDescriptionTemplate"
+                    placeholder="%text%\n\n%link%"
+                    rows={4}
+                    value={youtubeVideo.descriptionTemplate}
+                    onChange={(e) =>
+                      setYoutubeVideo(prev => ({ ...prev, descriptionTemplate: e.target.value }))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Placeholders: %text%, %username%, %name%, %date%, %link%, %media%
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="youtubeTags">Tags (comma or new line separated)</Label>
+                  <Textarea
+                    id="youtubeTags"
+                    rows={3}
+                    placeholder="automation, social media, news"
+                    value={youtubeVideo.tagsText}
+                    onChange={(e) =>
+                      setYoutubeVideo(prev => ({ ...prev, tagsText: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="youtubePrivacy">Privacy</Label>
+                    <Select
+                      value={youtubeVideo.privacyStatus}
+                      onValueChange={(value: string) =>
+                        setYoutubeVideo(prev => ({ ...prev, privacyStatus: value }))
+                      }
+                    >
+                      <SelectTrigger id="youtubePrivacy">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="public">Public</SelectItem>
+                        <SelectItem value="unlisted">Unlisted</SelectItem>
+                        <SelectItem value="private">Private</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="youtubeLicense">License</Label>
+                    <Select
+                      value={youtubeVideo.license}
+                      onValueChange={(value: string) =>
+                        setYoutubeVideo(prev => ({ ...prev, license: value }))
+                      }
+                    >
+                      <SelectTrigger id="youtubeLicense">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="youtube">Standard YouTube License</SelectItem>
+                        <SelectItem value="creativeCommon">Creative Commons</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="youtubeCategory">Category</Label>
+                    <Select
+                      value={youtubeVideo.categoryId}
+                      onValueChange={(value: string) =>
+                        setYoutubeVideo(prev => ({ ...prev, categoryId: value }))
+                      }
+                    >
+                      <SelectTrigger id="youtubeCategory">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {YOUTUBE_VIDEO_CATEGORIES.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="youtubePublishAt">Schedule Publish At (optional)</Label>
+                    <Input
+                      id="youtubePublishAt"
+                      type="datetime-local"
+                      value={youtubeVideo.publishAt}
+                      onChange={(e) =>
+                        setYoutubeVideo(prev => ({ ...prev, publishAt: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="youtubeDefaultLanguage">Default Language</Label>
+                    <Input
+                      id="youtubeDefaultLanguage"
+                      placeholder="en"
+                      value={youtubeVideo.defaultLanguage}
+                      onChange={(e) =>
+                        setYoutubeVideo(prev => ({ ...prev, defaultLanguage: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="youtubeDefaultAudioLanguage">Audio Language</Label>
+                    <Input
+                      id="youtubeDefaultAudioLanguage"
+                      placeholder="en"
+                      value={youtubeVideo.defaultAudioLanguage}
+                      onChange={(e) =>
+                        setYoutubeVideo(prev => ({ ...prev, defaultAudioLanguage: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="youtubeRecordingDate">Recording Date (optional)</Label>
+                  <Input
+                    id="youtubeRecordingDate"
+                    type="date"
+                    value={youtubeVideo.recordingDate}
+                    onChange={(e) =>
+                      setYoutubeVideo(prev => ({ ...prev, recordingDate: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={youtubeVideo.embeddable}
+                      onChange={(e) =>
+                        setYoutubeVideo(prev => ({ ...prev, embeddable: e.target.checked }))
+                      }
+                    />
+                    Allow embedding
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={youtubeVideo.publicStatsViewable}
+                      onChange={(e) =>
+                        setYoutubeVideo(prev => ({
+                          ...prev,
+                          publicStatsViewable: e.target.checked,
+                        }))
+                      }
+                    />
+                    Public stats viewable
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={youtubeVideo.selfDeclaredMadeForKids}
+                      onChange={(e) =>
+                        setYoutubeVideo(prev => ({
+                          ...prev,
+                          selfDeclaredMadeForKids: e.target.checked,
+                        }))
+                      }
+                    />
+                    Made for kids
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={youtubeVideo.notifySubscribers}
+                      onChange={(e) =>
+                        setYoutubeVideo(prev => ({
+                          ...prev,
+                          notifySubscribers: e.target.checked,
+                        }))
+                      }
+                    />
+                    Notify subscribers
+                  </label>
+                </div>
               </CardContent>
             </Card>
           )}

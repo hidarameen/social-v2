@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { taskProcessor } from '@/lib/services/task-processor';
+import { executionQueue } from '@/lib/services/execution-queue';
 
 const DEFAULT_SCHEDULER_INTERVAL_SECONDS = 30;
 
@@ -38,24 +39,65 @@ export class TaskScheduler {
     try {
       const tasks = await db.getAllTasks();
       const now = new Date();
+      const active = tasks.filter((task) => task.status === 'active');
+      const jobs: Array<Promise<unknown>> = [];
 
-      for (const task of tasks) {
-        if (task.status !== 'active') continue;
-
+      for (const task of active) {
         if (task.executionType === 'scheduled' && task.scheduleTime) {
           const alreadyExecuted = task.lastExecuted && task.lastExecuted >= task.scheduleTime;
           if (!alreadyExecuted && task.scheduleTime <= now) {
-            await taskProcessor.processTask(task.id);
-            await db.updateTask(task.id, { status: 'completed' });
+            jobs.push(
+              executionQueue.enqueue({
+                label: 'scheduler:scheduled-task',
+                userId: task.userId,
+                taskId: task.id,
+                dedupeKey: `scheduler:scheduled:${task.id}`,
+                run: async () => {
+                  await taskProcessor.processTask(task.id);
+                  await db.updateTask(task.id, { status: 'completed' });
+                },
+              })
+            );
           }
         }
 
-        if (task.executionType === 'recurring') {
-          await taskProcessor.processRecurringTasks();
+        if (task.executionType === 'recurring' && this.shouldExecuteRecurring(task, now)) {
+          jobs.push(
+            executionQueue.enqueue({
+              label: 'scheduler:recurring-task',
+              userId: task.userId,
+              taskId: task.id,
+              dedupeKey: `scheduler:recurring:${task.id}`,
+              run: async () => {
+                await taskProcessor.processTask(task.id);
+              },
+            })
+          );
         }
+      }
+      if (jobs.length > 0) {
+        await Promise.allSettled(jobs);
       }
     } finally {
       this.running = false;
+    }
+  }
+
+  private shouldExecuteRecurring(task: { lastExecuted?: Date; recurringPattern?: string }, now: Date): boolean {
+    if (!task.lastExecuted) return true;
+
+    const lastExec = new Date(task.lastExecuted);
+    const elapsed = now.getTime() - lastExec.getTime();
+
+    switch (task.recurringPattern) {
+      case 'daily':
+        return elapsed >= 24 * 60 * 60 * 1000;
+      case 'weekly':
+        return elapsed >= 7 * 24 * 60 * 60 * 1000;
+      case 'monthly':
+        return elapsed >= 30 * 24 * 60 * 60 * 1000;
+      default:
+        return false;
     }
   }
 }

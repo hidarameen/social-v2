@@ -8,6 +8,7 @@ import { buildBasicAuth, decodeJwtPayload, safeJsonParse } from '@/lib/oauth/uti
 import { ensureTwitterPollingStarted } from '@/lib/services/twitter-poller';
 import { ensureTwitterStreamStarted } from '@/lib/services/twitter-stream';
 import { ensureSchedulerStarted } from '@/lib/services/task-scheduler';
+import { getOAuthClientCredentials, type ManagedPlatformId } from '@/lib/platform-credentials';
 
 export const runtime = 'nodejs';
 
@@ -19,15 +20,20 @@ type TokenResponse = {
   scope?: string;
   id_token?: string;
   open_id?: string;
+  error?: string;
+  error_description?: string;
 };
 
-async function exchangeToken(platformId: string, code: string, redirectUri: string, codeVerifier?: string) {
+async function exchangeToken(
+  userId: string,
+  platformId: string,
+  code: string,
+  redirectUri: string,
+  codeVerifier?: string
+) {
   const platform = getOAuthPlatform(platformId);
   if (!platform?.tokenUrl) throw new Error('Missing token URL');
-
-  const clientId = platform.clientIdEnv ? process.env[platform.clientIdEnv] : undefined;
-  const clientSecret = platform.clientSecretEnv ? process.env[platform.clientSecretEnv] : undefined;
-  if (!clientId) throw new Error(`Missing ${platform.clientIdEnv} in environment`);
+  const { clientId, clientSecret } = await getOAuthClientCredentials(userId, platform.id as ManagedPlatformId);
 
   const body = new URLSearchParams();
   const headers: Record<string, string> = {
@@ -47,7 +53,7 @@ async function exchangeToken(platformId: string, code: string, redirectUri: stri
       break;
     }
     case 'facebook': {
-      if (!clientSecret) throw new Error(`Missing ${platform.clientSecretEnv} in environment`);
+      if (!clientSecret) throw new Error('Missing Facebook client secret in platform credentials');
       body.set('client_id', clientId);
       body.set('client_secret', clientSecret);
       body.set('redirect_uri', redirectUri);
@@ -55,7 +61,7 @@ async function exchangeToken(platformId: string, code: string, redirectUri: stri
       break;
     }
     case 'instagram': {
-      if (!clientSecret) throw new Error(`Missing ${platform.clientSecretEnv} in environment`);
+      if (!clientSecret) throw new Error('Missing Instagram client secret in platform credentials');
       body.set('client_id', clientId);
       body.set('client_secret', clientSecret);
       body.set('grant_type', 'authorization_code');
@@ -64,7 +70,7 @@ async function exchangeToken(platformId: string, code: string, redirectUri: stri
       break;
     }
     case 'youtube': {
-      if (!clientSecret) throw new Error(`Missing ${platform.clientSecretEnv} in environment`);
+      if (!clientSecret) throw new Error('Missing YouTube client secret in platform credentials');
       body.set('client_id', clientId);
       body.set('client_secret', clientSecret);
       body.set('code', code);
@@ -73,7 +79,7 @@ async function exchangeToken(platformId: string, code: string, redirectUri: stri
       break;
     }
     case 'tiktok': {
-      if (!clientSecret) throw new Error(`Missing ${platform.clientSecretEnv} in environment`);
+      if (!clientSecret) throw new Error('Missing TikTok client secret in platform credentials');
       body.set('client_key', clientId);
       body.set('client_secret', clientSecret);
       body.set('code', code);
@@ -103,35 +109,211 @@ async function fetchAccountInfo(platformId: string, accessToken?: string, tokenR
   switch (platformId) {
     case 'twitter': {
       if (!accessToken) return null;
-      const res = await fetch('https://api.x.com/2/users/me', {
+      const res = await fetch('https://api.x.com/2/users/me?user.fields=profile_image_url', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) return null;
       const data = await res.json();
-      return data?.data ? { id: data.data.id, username: data.data.username, name: data.data.name } : null;
+      return data?.data
+        ? {
+            id: data.data.id,
+            username: data.data.username,
+            name: data.data.name,
+            profileImageUrl: data.data.profile_image_url,
+          }
+        : null;
     }
     case 'facebook': {
       if (!accessToken) return null;
-      const res = await fetch(`https://graph.facebook.com/v22.0/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data?.id ? { id: data.id, name: data.name } : null;
+      let me: any = null;
+      try {
+        const meRes = await fetch(
+          `https://graph.facebook.com/v22.0/me?fields=id,name,picture.width(256).height(256)&access_token=${encodeURIComponent(accessToken)}`
+        );
+        if (meRes.ok) {
+          me = await meRes.json();
+        }
+      } catch {
+        me = null;
+      }
+
+      let pages: Array<{
+        id: string;
+        name: string;
+        accessToken?: string;
+        profileImageUrl?: string;
+        followers?: number;
+      }> = [];
+      try {
+        const pagesRes = await fetch(
+          `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,access_token,picture.width(256).height(256),fan_count&limit=200&access_token=${encodeURIComponent(accessToken)}`
+        );
+        if (pagesRes.ok) {
+          const pagesData = await pagesRes.json();
+          pages = Array.isArray(pagesData?.data)
+            ? pagesData.data
+                .map((page: any) => ({
+                  id: page?.id ? String(page.id) : '',
+                  name: page?.name ? String(page.name) : '',
+                  accessToken: page?.access_token ? String(page.access_token) : undefined,
+                  profileImageUrl: page?.picture?.data?.url ? String(page.picture.data.url) : undefined,
+                  followers:
+                    typeof page?.fan_count === 'number' && Number.isFinite(page.fan_count)
+                      ? page.fan_count
+                      : undefined,
+                }))
+                .filter((page: { id: string; name: string }) => page.id.length > 0 && page.name.length > 0)
+            : [];
+        }
+      } catch {
+        pages = [];
+      }
+
+      if (pages.length === 0 && !me?.id) return null;
+      return {
+        id: me?.id || pages[0]?.id,
+        name: me?.name || pages[0]?.name || 'Facebook',
+        profileImageUrl: me?.picture?.data?.url || pages[0]?.profileImageUrl,
+        pages,
+      };
     }
     case 'instagram': {
       if (!accessToken) return null;
-      const res = await fetch(`https://graph.instagram.com/me?fields=id,username&access_token=${encodeURIComponent(accessToken)}`);
+      const res = await fetch(`https://graph.instagram.com/me?fields=id,username,profile_picture_url&access_token=${encodeURIComponent(accessToken)}`);
       if (!res.ok) return null;
       const data = await res.json();
-      return data?.id ? { id: data.id, username: data.username, name: data.username } : null;
+      return data?.id
+        ? {
+            id: data.id,
+            username: data.username,
+            name: data.username,
+            profileImageUrl: data.profile_picture_url,
+          }
+        : null;
     }
     case 'youtube': {
+      if (accessToken) {
+        try {
+          const channelsRes = await fetch(
+            'https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true&maxResults=50',
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }
+          );
+          if (channelsRes.ok) {
+            const channelsData = await channelsRes.json();
+            const channels = Array.isArray(channelsData?.items)
+              ? channelsData.items
+                  .map((item: any) => ({
+                    id: item?.id ? String(item.id) : '',
+                    title: item?.snippet?.title ? String(item.snippet.title) : '',
+                    customUrl: item?.snippet?.customUrl ? String(item.snippet.customUrl) : undefined,
+                    avatarUrl:
+                      item?.snippet?.thumbnails?.high?.url ||
+                      item?.snippet?.thumbnails?.medium?.url ||
+                      item?.snippet?.thumbnails?.default?.url,
+                  }))
+                  .filter((item: { id: string }) => item.id.length > 0)
+              : [];
+
+            let playlists: Array<{
+              id: string;
+              title: string;
+              description?: string;
+              itemCount?: number;
+              channelId?: string;
+            }> = [];
+
+            try {
+              const playlistsRes = await fetch(
+                'https://www.googleapis.com/youtube/v3/playlists?part=id,snippet,contentDetails&mine=true&maxResults=50',
+                {
+                  headers: { Authorization: `Bearer ${accessToken}` },
+                }
+              );
+              if (playlistsRes.ok) {
+                const playlistsData = await playlistsRes.json();
+                playlists = Array.isArray(playlistsData?.items)
+                  ? playlistsData.items
+                      .map((item: any) => ({
+                        id: item?.id ? String(item.id) : '',
+                        title: item?.snippet?.title ? String(item.snippet.title) : '',
+                        description: item?.snippet?.description
+                          ? String(item.snippet.description)
+                          : undefined,
+                        itemCount:
+                          typeof item?.contentDetails?.itemCount === 'number'
+                            ? item.contentDetails.itemCount
+                            : undefined,
+                        channelId: item?.snippet?.channelId
+                          ? String(item.snippet.channelId)
+                          : undefined,
+                      }))
+                      .filter((item: { id: string; title: string }) => item.id.length > 0 && item.title.length > 0)
+                  : [];
+              }
+            } catch {
+              playlists = [];
+            }
+
+            if (channels.length > 0) {
+              const primary = channels[0];
+              const username = primary.customUrl || primary.title || primary.id;
+              return {
+                id: primary.id,
+                username,
+                name: primary.title || username,
+                profileImageUrl: primary.avatarUrl,
+                channels,
+                playlists,
+              };
+            }
+          }
+        } catch {
+          // Fall back to id_token identity below.
+        }
+      }
+
       const payload = decodeJwtPayload(tokenResponse?.id_token);
       if (!payload) return null;
-      return { id: payload.sub, username: payload.email, name: payload.name || payload.email };
+      return {
+        id: payload.sub,
+        username: payload.email,
+        name: payload.name || payload.email,
+        profileImageUrl: payload.picture,
+      };
     }
     case 'tiktok': {
+      if (accessToken && tokenResponse?.open_id) {
+        try {
+          const infoRes = await fetch(
+            'https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,username,avatar_url',
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }
+          );
+          if (infoRes.ok) {
+            const infoData = await infoRes.json();
+            const user = infoData?.data?.user;
+            if (user?.open_id) {
+              return {
+                id: user.open_id,
+                username: user.username || user.open_id,
+                name: user.display_name || user.username || 'TikTok Account',
+                profileImageUrl: user.avatar_url,
+              };
+            }
+          }
+        } catch {
+          // Fallback below.
+        }
+      }
       if (tokenResponse?.open_id) {
-        return { id: tokenResponse.open_id, username: tokenResponse.open_id, name: 'TikTok Account' };
+        return {
+          id: tokenResponse.open_id,
+          username: tokenResponse.open_id,
+          name: 'TikTok Account',
+        };
       }
       return null;
     }
@@ -182,34 +364,162 @@ export async function GET(
 
     const appBaseUrl = (process.env.APP_URL || request.nextUrl.origin).replace(/\/+$/, '');
     const redirectUri = `${appBaseUrl}/api/oauth/${platform.id}/callback`;
-    const tokenResponse = await exchangeToken(platform.id, code, redirectUri, parsed.codeVerifier);
+    const tokenResponse = await exchangeToken(user.id, platform.id, code, redirectUri, parsed.codeVerifier);
     const accessToken = tokenResponse.access_token;
     const refreshToken = tokenResponse.refresh_token;
 
     const accountInfo = await fetchAccountInfo(platform.id, accessToken, tokenResponse);
-    const accountId = accountInfo?.id || `${platform.id}_${Date.now()}`;
-    const accountName = accountInfo?.name || `${platform.name} Account`;
-    const accountUsername = accountInfo?.username || accountName;
+    const userAccounts = await db.getUserAccounts(user.id);
 
-    const existing = (await db.getUserAccounts(user.id)).find(
-      a => a.platformId === platform.id && a.accountId === accountId
-    );
-    if (!existing) {
-      await db.createAccount({
-        id: randomUUID(),
-        userId: user.id,
-        platformId: platform.id,
-        accountName,
-        accountUsername,
-        accountId,
-        accessToken: accessToken || 'oauth',
-        refreshToken: refreshToken,
-        credentials: {
+    if (platform.id === 'facebook') {
+      const pages = Array.isArray((accountInfo as any)?.pages)
+        ? (accountInfo as any).pages.filter((page: any) => page?.id && page?.name)
+        : [];
+
+      if (pages.length === 0) {
+        throw new Error(
+          'No Facebook Pages were returned for this account. Ensure pages_show_list and pages_manage_posts permissions are approved, then reconnect.'
+        );
+      }
+
+      for (const page of pages) {
+        const pageId = String(page.id);
+        const pageName = String(page.name);
+        const pageToken = String(page.accessToken || accessToken || '').trim();
+        if (!pageToken) continue;
+
+        const existing = userAccounts.find(
+          (item) => item.platformId === 'facebook' && String(item.accountId) === pageId
+        );
+        const profileImageUrl = page.profileImageUrl || (accountInfo as any)?.profileImageUrl;
+        const pageAccountInfo = {
+          id: pageId,
+          name: pageName,
+          profileImageUrl,
+          followers: page.followers,
+        };
+        const nextCredentials = {
+          ...(existing?.credentials || {}),
           tokenResponse,
-          accountInfo,
-        },
-        isActive: true,
-      });
+          accountInfo: pageAccountInfo,
+          profileImageUrl,
+          pageId,
+          pageName,
+          pageAccessToken: pageToken,
+          oauthUser: {
+            id: (accountInfo as any)?.id,
+            name: (accountInfo as any)?.name,
+            profileImageUrl: (accountInfo as any)?.profileImageUrl,
+          },
+          availablePages: pages.map((item: any) => ({
+            id: String(item.id || ''),
+            name: String(item.name || ''),
+            profileImageUrl: item.profileImageUrl ? String(item.profileImageUrl) : undefined,
+            followers:
+              typeof item.followers === 'number' && Number.isFinite(item.followers)
+                ? item.followers
+                : undefined,
+          })),
+        };
+
+        if (existing) {
+          await db.updateAccount(existing.id, {
+            accountName: pageName,
+            accountUsername: pageName,
+            accessToken: pageToken,
+            refreshToken: refreshToken || existing.refreshToken,
+            credentials: nextCredentials,
+            isActive: true,
+          });
+          continue;
+        }
+
+        await db.createAccount({
+          id: randomUUID(),
+          userId: user.id,
+          platformId: 'facebook',
+          accountName: pageName,
+          accountUsername: pageName,
+          accountId: pageId,
+          accessToken: pageToken,
+          refreshToken: refreshToken,
+          credentials: nextCredentials,
+          isActive: true,
+        });
+      }
+    } else {
+      const accountId = accountInfo?.id || `${platform.id}_${Date.now()}`;
+      const accountName = accountInfo?.name || `${platform.name} Account`;
+      const accountUsername = accountInfo?.username || accountName;
+      const profileImageUrl = (accountInfo as any)?.profileImageUrl;
+
+      const existing = userAccounts.find(
+        a => a.platformId === platform.id && a.accountId === accountId
+      );
+      if (existing) {
+        const youtubeChannels =
+          platform.id === 'youtube' && Array.isArray((accountInfo as any)?.channels)
+            ? (accountInfo as any).channels
+            : undefined;
+        const youtubePlaylists =
+          platform.id === 'youtube' && Array.isArray((accountInfo as any)?.playlists)
+            ? (accountInfo as any).playlists
+            : undefined;
+        await db.updateAccount(existing.id, {
+          accountName,
+          accountUsername,
+          accessToken: accessToken || existing.accessToken,
+          refreshToken: refreshToken || existing.refreshToken,
+          credentials: {
+            ...(existing.credentials || {}),
+            tokenResponse,
+            accountInfo,
+            profileImageUrl,
+            ...(platform.id === 'youtube'
+              ? {
+                  channelId: accountInfo?.id,
+                  selectedChannelId: accountInfo?.id,
+                  availableChannels: youtubeChannels,
+                  availablePlaylists: youtubePlaylists,
+                }
+              : {}),
+          },
+          isActive: true,
+        });
+      } else {
+        const youtubeChannels =
+          platform.id === 'youtube' && Array.isArray((accountInfo as any)?.channels)
+            ? (accountInfo as any).channels
+            : undefined;
+        const youtubePlaylists =
+          platform.id === 'youtube' && Array.isArray((accountInfo as any)?.playlists)
+            ? (accountInfo as any).playlists
+            : undefined;
+        await db.createAccount({
+          id: randomUUID(),
+          userId: user.id,
+          platformId: platform.id,
+          accountName,
+          accountUsername,
+          accountId,
+          accessToken: accessToken || 'oauth',
+          refreshToken: refreshToken,
+          credentials: {
+            tokenResponse,
+            accountInfo,
+            profileImageUrl,
+            ...(platform.id === 'youtube'
+              ? {
+                  channelId: accountInfo?.id,
+                  selectedChannelId: accountInfo?.id,
+                  availableChannels: youtubeChannels,
+                  availablePlaylists: youtubePlaylists,
+                }
+              : {}),
+          },
+          isActive: true,
+        });
+      }
     }
 
     if (platform.id === 'twitter') {
@@ -225,9 +535,11 @@ export async function GET(
     return NextResponse.redirect(redirect.toString());
   } catch (error) {
     console.error('[OAuth Callback] Error:', error);
+    const message = error instanceof Error ? error.message : 'OAuth failed';
+    const status = message.toLowerCase().includes('missing') ? 400 : 500;
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'OAuth failed' },
-      { status: 500 }
+      { success: false, error: message },
+      { status }
     );
   }
 }

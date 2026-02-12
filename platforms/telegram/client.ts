@@ -1,14 +1,17 @@
 // Telegram Platform client
+import { buildTelegramBotMethodUrl, getTelegramApiBaseUrl } from '@/lib/telegram-api';
 
 export class TelegramClient {
   private botToken: string
+  private apiBaseUrl: string
 
-  constructor(botToken: string) {
+  constructor(botToken: string, apiBaseUrl?: string) {
     this.botToken = botToken
+    this.apiBaseUrl = getTelegramApiBaseUrl(apiBaseUrl)
   }
 
   private getTelegramUrl(method: string): string {
-    return `https://api.telegram.org/bot${this.botToken}/${method}`
+    return buildTelegramBotMethodUrl(this.botToken, method, this.apiBaseUrl)
   }
 
   /**

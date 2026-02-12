@@ -6,29 +6,57 @@ const PUBLIC_PATHS = new Set(['/login', '/register']);
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-request-id', requestId);
 
-  if (pathname.startsWith('/api/auth')) return NextResponse.next();
-  if (pathname.startsWith('/api/oauth')) return NextResponse.next();
-  if (pathname.startsWith('/api/twitter/webhook')) return NextResponse.next();
-  if (pathname.startsWith('/api/twitter/stream/sync')) return NextResponse.next();
-  if (pathname.startsWith('/api/twitter/stream/debug')) return NextResponse.next();
-  if (pathname.startsWith('/api/twitter/poll/now')) return NextResponse.next();
-  if (pathname.startsWith('/api/telegram/webhook')) return NextResponse.next();
-  if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
-  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/public')) {
-    return NextResponse.next();
+  const next = () => {
+    const response = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+    response.headers.set('x-request-id', requestId);
+    return response;
+  };
+
+  if (pathname.startsWith('/api/')) return next();
+  if (pathname.startsWith('/api/auth')) return next();
+  if (pathname.startsWith('/api/oauth')) return next();
+  if (pathname.startsWith('/api/twitter/webhook')) return next();
+  if (pathname.startsWith('/api/twitter/stream/sync')) return next();
+  if (pathname.startsWith('/api/twitter/stream/debug')) return next();
+  if (pathname.startsWith('/api/twitter/poll/now')) return next();
+  if (pathname.startsWith('/api/telegram/webhook')) return next();
+  if (PUBLIC_PATHS.has(pathname)) return next();
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/_vercel') ||
+    pathname.startsWith('/favicon') ||
+    pathname.startsWith('/public')
+  ) {
+    return next();
+  }
+
+  const taskDetailMatch = pathname.match(/^\/tasks\/([^/]+)$/);
+  if (taskDetailMatch && taskDetailMatch[1] !== 'new') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/tasks';
+    const response = NextResponse.redirect(url);
+    response.headers.set('x-request-id', requestId);
+    return response;
   }
 
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
   if (!token) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    return NextResponse.redirect(url);
+    const response = NextResponse.redirect(url);
+    response.headers.set('x-request-id', requestId);
+    return response;
   }
 
-  return NextResponse.next();
+  return next();
 }
 
 export const config = {
-  matcher: ['/((?!api/auth|api/oauth|api/telegram/webhook|api/twitter/webhook|api/twitter/stream/sync|api/twitter/stream/debug|api/twitter/poll/now|_next|static|public|favicon.ico).*)'],
+  matcher: ['/((?!api/auth|api/oauth|api/telegram/webhook|api/twitter/webhook|api/twitter/stream/sync|api/twitter/stream/debug|api/twitter/poll/now|_next|_vercel|static|public|favicon.ico).*)'],
 };
