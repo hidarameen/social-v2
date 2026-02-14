@@ -39,6 +39,10 @@ function buildRules(tasks: any[]) {
 export class TwitterStream {
   private abortController: AbortController | null = null;
   private running = false;
+  private connecting = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryDelayMs = 0;
+  private nextConnectAllowedAt = 0;
   private bearerToken = '';
 
   private async refreshBearerToken() {
@@ -46,11 +50,20 @@ export class TwitterStream {
   }
 
   async start() {
-    if (this.running) return;
+    if (this.running || this.connecting) return;
     if (!process.env.TWITTER_STREAM_ENABLED || process.env.TWITTER_STREAM_ENABLED === 'false') {
       console.log('[TwitterStream] Stream is disabled via TWITTER_STREAM_ENABLED');
       return;
     }
+
+    const now = Date.now();
+    if (this.nextConnectAllowedAt > now) {
+      const waitMs = this.nextConnectAllowedAt - now;
+      console.warn('[TwitterStream] Connect delayed by backoff', { waitMs });
+      this.scheduleReconnect(waitMs);
+      return;
+    }
+
     await this.refreshBearerToken();
     if (!this.bearerToken) {
       console.warn('[TwitterStream] Missing Twitter bearer token in DB credentials');
@@ -60,16 +73,51 @@ export class TwitterStream {
     console.log('[TwitterStream] Starting stream connection...');
     await this.syncRules();
     debugLog('Twitter stream started');
+    this.connecting = true;
     this.connect().catch(err => {
       console.error('[TwitterStream] Connection error:', err);
       this.running = false;
+      this.connecting = false;
+      this.scheduleReconnect();
     });
   }
 
   stop() {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     if (this.abortController) this.abortController.abort();
     this.abortController = null;
     this.running = false;
+    this.connecting = false;
+  }
+
+  private scheduleReconnect(delayMs?: number) {
+    if (!process.env.TWITTER_STREAM_ENABLED || process.env.TWITTER_STREAM_ENABLED === 'false') return;
+    if (this.reconnectTimer) return;
+
+    const base = typeof delayMs === 'number' ? delayMs : this.nextRetryDelayMs();
+    const jitter = Math.floor(Math.random() * 1500);
+    const waitMs = Math.max(5_000, base + jitter);
+    this.nextConnectAllowedAt = Date.now() + waitMs;
+
+    console.warn('[TwitterStream] Scheduling reconnect', { waitMs });
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.start();
+    }, waitMs);
+  }
+
+  private nextRetryDelayMs(): number {
+    // Exponential backoff up to 15 minutes.
+    const next = this.retryDelayMs > 0 ? Math.min(this.retryDelayMs * 2, 15 * 60_000) : 15_000;
+    this.retryDelayMs = next;
+    return next;
+  }
+
+  private setRateLimitBackoff(minMs: number) {
+    // For 429 / connection limit, use a larger minimum delay.
+    const next = Math.max(minMs, this.retryDelayMs || 0);
+    this.retryDelayMs = Math.min(next, 30 * 60_000);
   }
 
   private async syncRules() {
@@ -159,6 +207,15 @@ export class TwitterStream {
     if (!res.ok || !res.body) {
       const errorData = await res.json().catch(() => ({}));
       console.error('[TwitterStream] Stream connection failed:', res.statusText, JSON.stringify(errorData));
+      this.connecting = false;
+      this.running = false;
+
+      const connectionIssue = String((errorData as any)?.connection_issue || '');
+      if (res.status === 429 || connectionIssue.includes('TooMany')) {
+        // Twitter will keep rejecting new connections; don't hammer it.
+        this.setRateLimitBackoff(5 * 60_000);
+      }
+      this.scheduleReconnect();
       return;
     }
 
@@ -188,7 +245,13 @@ export class TwitterStream {
           console.warn('[TwitterStream] Failed to parse event:', err);
         }
       }
+      if (!this.running) break;
     }
+
+    // Connection ended; try again with backoff.
+    this.connecting = false;
+    this.running = false;
+    this.scheduleReconnect();
   }
 
   private async processMatchedTask(
