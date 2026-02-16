@@ -15,7 +15,7 @@ ARG ANDROID_ORG=com.socialflow.app
 ARG APP_URL
 
 WORKDIR /src
-RUN flutter create --platforms=android --org "${ANDROID_ORG}" app
+RUN flutter create --platforms=android,web --org "${ANDROID_ORG}" app
 
 WORKDIR /src/app
 
@@ -26,6 +26,7 @@ COPY flutter_app/lib ./lib
 RUN flutter pub get
 RUN test -n "${APP_URL}"
 RUN flutter build apk --release --dart-define=APP_URL="${APP_URL}"
+RUN flutter build web --release --dart-define=APP_URL="${APP_URL}"
 
 FROM base AS builder
 WORKDIR /app
@@ -33,6 +34,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=apk_builder /src/app/build/app/outputs/flutter-apk/app-release.apk ./public/app-release.apk
+COPY --from=apk_builder /src/app/build/web ./public/flutter-web
 RUN pnpm build
 RUN pnpm prune --prod
 

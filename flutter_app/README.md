@@ -36,6 +36,9 @@ flutter pub get
 flutter build web --release --dart-define=APP_URL=https://your-socialflow-domain.example.com/
 ```
 
+When using the root project Dockerfile, Flutter web output is published to:
+- `/flutter-web/index.html`
+
 ## Docker APK build
 
 ```bash
