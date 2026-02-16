@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -36,7 +35,6 @@ class WebShell extends StatefulWidget {
 
 class _WebShellState extends State<WebShell> {
   late final WebViewController _controller;
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   bool _isOffline = false;
   int _progress = 0;
@@ -55,15 +53,10 @@ class _WebShellState extends State<WebShell> {
         ),
       )
       ..loadRequest(Uri.parse(AppConfig.appUrl));
-
-    _connectivitySub = Connectivity()
-        .onConnectivityChanged
-        .listen((results) => setState(() => _isOffline = results.isEmpty || results.first == ConnectivityResult.none));
   }
 
   @override
   void dispose() {
-    _connectivitySub?.cancel();
     super.dispose();
   }
 
