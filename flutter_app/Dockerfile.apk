@@ -16,8 +16,11 @@ RUN flutter create --platforms=android --org "${ANDROID_ORG}" app
 
 WORKDIR /src/app
 
-# webview_flutter_android requires minSdkVersion >= 19. Flutter's default template can be 16.
-RUN sed -i -E 's/minSdkVersion[[:space:]]+flutter\\.minSdkVersion/minSdkVersion 19/g; s/minSdkVersion[[:space:]]+16/minSdkVersion 19/g' android/app/build.gradle
+# webview_flutter_android requires min SDK >= 19.
+# Patch both older and newer Flutter Android templates.
+RUN sed -i -E 's/minSdkVersion[[:space:]]+flutter\\.minSdkVersion/minSdkVersion 19/g; s/minSdkVersion[[:space:]]+16/minSdkVersion 19/g' android/app/build.gradle || true
+RUN sed -i -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\\.minSdkVersion/minSdk = 19/g; s/minSdk[[:space:]]*=[[:space:]]*16/minSdk = 19/g' android/app/build.gradle.kts || true
+RUN sed -i -E 's/android:minSdkVersion=\"16\"/android:minSdkVersion=\"19\"/g' android/app/src/main/AndroidManifest.xml || true
 
 COPY flutter_app/pubspec.yaml ./pubspec.yaml
 COPY flutter_app/analysis_options.yaml ./analysis_options.yaml
