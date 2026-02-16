@@ -35,6 +35,7 @@ class WebShell extends StatefulWidget {
 
 class _WebShellState extends State<WebShell> {
   late final WebViewController _controller;
+  late final Uri _entryUri;
 
   bool _isOffline = false;
   int _progress = 0;
@@ -42,6 +43,7 @@ class _WebShellState extends State<WebShell> {
   @override
   void initState() {
     super.initState();
+    _entryUri = _resolveEntryUri();
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -53,7 +55,15 @@ class _WebShellState extends State<WebShell> {
           onPageFinished: (_) => setState(() => _isOffline = false),
         ),
       )
-      ..loadRequest(Uri.parse(AppConfig.appUrl));
+      ..loadRequest(_entryUri);
+  }
+
+  Uri _resolveEntryUri() {
+    final parsed = Uri.parse(AppConfig.appUrl);
+    if (parsed.path.isEmpty || parsed.path == '/') {
+      return parsed.replace(path: '/login');
+    }
+    return parsed;
   }
 
   @override
@@ -90,7 +100,7 @@ class _WebShellState extends State<WebShell> {
                   child: _OfflineAuthOverlay(
                     onRetry: () async {
                       setState(() => _isOffline = false);
-                      await _controller.reload();
+                      await _controller.loadRequest(_entryUri);
                     },
                   ),
                 ),
