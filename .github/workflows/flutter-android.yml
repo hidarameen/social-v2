@@ -1,0 +1,53 @@
+name: Build Flutter Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build_flutter_apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android project from template
+        env:
+          FLUTTER_ANDROID_ORG: ${{ secrets.FLUTTER_ANDROID_ORG }}
+        run: |
+          set -euo pipefail
+          ORG="${FLUTTER_ANDROID_ORG:-com.socialflow.app}"
+          rm -rf _flutter_build_app
+          flutter create --platforms=android --org "$ORG" _flutter_build_app
+          cp -R flutter_app/lib _flutter_build_app/
+          cp flutter_app/pubspec.yaml _flutter_build_app/
+          cp flutter_app/analysis_options.yaml _flutter_build_app/
+
+      - name: Install deps
+        working-directory: _flutter_build_app
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: _flutter_build_app
+        env:
+          FLUTTER_APP_URL: ${{ secrets.FLUTTER_APP_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FLUTTER_APP_URL:-}" ]; then
+            echo "Set GitHub secret FLUTTER_APP_URL to your hosted https://... URL" >&2
+            exit 1
+          fi
+          flutter build apk --release --dart-define=APP_URL="$FLUTTER_APP_URL"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: socialflow-flutter-apk
+          path: _flutter_build_app/build/app/outputs/flutter-apk/app-release.apk
+
