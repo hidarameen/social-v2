@@ -10,11 +10,36 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 
+FROM cirrusci/flutter:stable AS apk_builder
+ARG ANDROID_ORG=com.socialflow.app
+ARG APP_URL=https://example.com/
+
+WORKDIR /src
+RUN flutter create --platforms=android --org "${ANDROID_ORG}" app
+
+WORKDIR /src/app
+RUN if [ -f android/local.properties ]; then \
+      grep -q '^flutter.minSdkVersion=' android/local.properties && \
+      sed -i -E 's/^flutter\\.minSdkVersion=.*/flutter.minSdkVersion=19/' android/local.properties || \
+      echo 'flutter.minSdkVersion=19' >> android/local.properties; \
+    fi
+RUN sed -i -E 's/minSdkVersion.*/minSdkVersion 19/g; s/minSdk[[:space:]]+flutter\\.minSdkVersion/minSdk 19/g; s/minSdk[[:space:]]+16/minSdk 19/g' android/app/build.gradle || true
+RUN sed -i -E 's/minSdk[[:space:]]*=.*/minSdk = 19/g' android/app/build.gradle.kts || true
+RUN sed -i -E 's/android:minSdkVersion=\"[0-9]+\"/android:minSdkVersion=\"19\"/g' android/app/src/main/AndroidManifest.xml || true
+
+COPY flutter_app/pubspec.yaml ./pubspec.yaml
+COPY flutter_app/analysis_options.yaml ./analysis_options.yaml
+COPY flutter_app/lib ./lib
+
+RUN flutter pub get
+RUN flutter build apk --release --dart-define=APP_URL="${APP_URL}"
+
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=apk_builder /src/app/build/app/outputs/flutter-apk/app-release.apk ./public/app-release.apk
 RUN pnpm build
 RUN pnpm prune --prod
 
