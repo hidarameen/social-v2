@@ -1,0 +1,28 @@
+# Builds a release APK and serves it over HTTP for easy download.
+# Usage (docker):
+#   docker build -f flutter_app/Dockerfile.apk --build-arg APP_URL=https://your-site/ -t socialflow-apk .
+#   docker run --rm -p 8080:80 socialflow-apk
+#   Then download: http://localhost:8080/app-release.apk
+
+FROM cirrusci/flutter:stable AS build
+
+ARG ANDROID_ORG=com.socialflow.app
+ARG APP_URL=https://example.com/
+
+WORKDIR /src
+
+# Generate a clean Flutter Android project and copy our wrapper code into it.
+RUN flutter create --platforms=android --org "${ANDROID_ORG}" app
+
+WORKDIR /src/app
+
+COPY flutter_app/pubspec.yaml ./pubspec.yaml
+COPY flutter_app/analysis_options.yaml ./analysis_options.yaml
+COPY flutter_app/lib ./lib
+
+RUN flutter pub get
+RUN flutter build apk --release --dart-define=APP_URL="${APP_URL}"
+
+FROM nginx:alpine
+COPY --from=build /src/app/build/app/outputs/flutter-apk/app-release.apk /usr/share/nginx/html/app-release.apk
+EXPOSE 80
