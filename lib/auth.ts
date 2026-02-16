@@ -1,9 +1,11 @@
 import type { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
+import { headers } from 'next/headers';
 import { db } from '@/lib/db';
 import { rateLimit } from '@/lib/rate-limit';
 import { isEmailVerificationEnabled } from '@/lib/auth/email-verification';
+import { verifyMobileAccessToken } from '@/lib/mobile-auth';
 
 function sanitizeSessionImage(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -128,6 +130,26 @@ export const authOptions: NextAuthOptions = {
 };
 
 export async function getAuthUser() {
+  try {
+    const headerStore = await headers();
+    const rawAuthorization = headerStore.get('authorization') || '';
+    const hasBearerPrefix = rawAuthorization.toLowerCase().startsWith('bearer ');
+    if (hasBearerPrefix) {
+      const token = rawAuthorization.slice(7).trim();
+      const mobileUser = verifyMobileAccessToken(token);
+      if (mobileUser?.id) {
+        return {
+          id: mobileUser.id,
+          email: mobileUser.email,
+          name: mobileUser.name,
+          image: undefined,
+        };
+      }
+    }
+  } catch {
+    // Non-fatal: continue to normal NextAuth session resolution.
+  }
+
   const { getServerSession } = await import('next-auth');
   const session = await getServerSession(authOptions);
   return session?.user ?? null;

@@ -18,14 +18,6 @@ WORKDIR /src
 RUN flutter create --platforms=android --org "${ANDROID_ORG}" app
 
 WORKDIR /src/app
-RUN if [ -f android/local.properties ]; then \
-      grep -q '^flutter.minSdkVersion=' android/local.properties && \
-      sed -i -E 's/^flutter\\.minSdkVersion=.*/flutter.minSdkVersion=19/' android/local.properties || \
-      echo 'flutter.minSdkVersion=19' >> android/local.properties; \
-    fi
-RUN sed -i -E 's/minSdkVersion.*/minSdkVersion 19/g; s/minSdk[[:space:]]+flutter\\.minSdkVersion/minSdk 19/g; s/minSdk[[:space:]]+16/minSdk 19/g' android/app/build.gradle || true
-RUN sed -i -E 's/minSdk[[:space:]]*=.*/minSdk = 19/g' android/app/build.gradle.kts || true
-RUN sed -i -E 's/android:minSdkVersion=\"[0-9]+\"/android:minSdkVersion=\"19\"/g' android/app/src/main/AndroidManifest.xml || true
 
 COPY flutter_app/pubspec.yaml ./pubspec.yaml
 COPY flutter_app/analysis_options.yaml ./analysis_options.yaml

@@ -1,24 +1,45 @@
-# SocialFlow Flutter Wrapper
+# SocialFlow Flutter App (Native UI)
 
-This is a minimal Flutter app that loads the hosted SocialFlow web app inside an Android WebView.
+This Flutter app is now a **real native UI** (no WebView). It supports:
+- Android APK
+- Flutter Web
 
-## Build (GitHub Actions)
+It connects directly to the existing SocialFlow backend APIs.
 
-Workflow: `.github/workflows/flutter-android.yml`
+## Architecture
 
-Required GitHub secret:
-- `FLUTTER_APP_URL`: your hosted HTTPS URL (example: `https://your-app.example.com/`)
+- Native Flutter screens: Login, Register, Dashboard, Tasks, Accounts, Executions, Analytics, Settings.
+- API authentication uses bearer token from:
+  - `POST /api/mobile/login`
+- Authenticated API calls use:
+  - `Authorization: Bearer <token>`
+- Backend compatibility:
+  - Existing API routes continue to work.
+  - `getAuthUser()` now accepts either NextAuth session (web) or mobile bearer token (Flutter).
 
-Optional GitHub secret:
-- `FLUTTER_ANDROID_ORG`: Android package org (default `com.socialflow.app`)
+## Required Build Variable
 
-After the workflow succeeds, download the artifact:
-- `socialflow-flutter-apk` -> `app-release.apk`
+- `APP_URL` (required in production)
+  - Example: `https://your-socialflow-domain.example.com/`
 
-## Local build
+## Build Android APK
 
 ```bash
 flutter pub get
-flutter build apk --release --dart-define=APP_URL=https://your-app.example.com/
+flutter build apk --release --dart-define=APP_URL=https://your-socialflow-domain.example.com/
 ```
 
+## Build Flutter Web
+
+```bash
+flutter pub get
+flutter build web --release --dart-define=APP_URL=https://your-socialflow-domain.example.com/
+```
+
+## Docker APK build
+
+```bash
+docker build -f flutter_app/Dockerfile.apk --build-arg APP_URL=https://your-socialflow-domain.example.com/ -t socialflow-apk .
+```
+
+Then copy the artifact from the image (`app-release.apk`) or serve it from nginx as configured in the Dockerfile.

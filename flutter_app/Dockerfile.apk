@@ -7,31 +7,21 @@
 FROM cirrusci/flutter:stable AS build
 
 ARG ANDROID_ORG=com.socialflow.app
-ARG APP_URL=https://bc26eb03-4b04-4690-b4c7-fba18b5b1c36-00-1d71ogh8n44b9.sisko.replit.dev/
+ARG APP_URL
 
 WORKDIR /src
 
-# Generate a clean Flutter Android project and copy our wrapper code into it.
+# Generate a clean Flutter Android project and copy our native app code into it.
 RUN flutter create --platforms=android --org "${ANDROID_ORG}" app
 
 WORKDIR /src/app
 
-# webview_flutter_android requires min SDK >= 19.
-# Patch both older and newer Flutter Android templates.
-RUN if [ -f android/local.properties ]; then \
-      grep -q '^flutter.minSdkVersion=' android/local.properties && \
-      sed -i -E 's/^flutter\\.minSdkVersion=.*/flutter.minSdkVersion=19/' android/local.properties || \
-      echo 'flutter.minSdkVersion=19' >> android/local.properties; \
-    fi
-RUN sed -i -E 's/minSdkVersion.*/minSdkVersion 19/g; s/minSdk[[:space:]]+flutter\\.minSdkVersion/minSdk 19/g; s/minSdk[[:space:]]+16/minSdk 19/g' android/app/build.gradle || true
-RUN sed -i -E 's/minSdk[[:space:]]*=.*/minSdk = 19/g' android/app/build.gradle.kts || true
-RUN sed -i -E 's/android:minSdkVersion=\"[0-9]+\"/android:minSdkVersion=\"19\"/g' android/app/src/main/AndroidManifest.xml || true
-
 COPY flutter_app/pubspec.yaml ./pubspec.yaml
 COPY flutter_app/analysis_options.yaml ./analysis_options.yaml
-COPY flutter_app/lib ./lib
 
 RUN flutter pub get
+COPY flutter_app/lib ./lib
+RUN test -n "${APP_URL}"
 RUN flutter build apk --release --dart-define=APP_URL="${APP_URL}"
 
 FROM nginx:alpine
