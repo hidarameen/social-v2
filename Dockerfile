@@ -29,7 +29,7 @@ RUN if [ -f android/gradle.properties ]; then \
 # Some Flutter templates/environments may not include INTERNET permission by default.
 RUN if [ -f android/app/src/main/AndroidManifest.xml ]; then \
       if ! grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml; then \
-        awk 'BEGIN{done=0} {print $0; if(!done && $0 ~ /<manifest/){print \"    <uses-permission android:name=\\\"android.permission.INTERNET\\\"/>\"; done=1}}' \
+        awk 'BEGIN{done=0} {print; if(!done && $0 ~ /<manifest/){print "    <uses-permission android:name=\\"android.permission.INTERNET\\"/>"; done=1}}' \
           android/app/src/main/AndroidManifest.xml > /tmp/AndroidManifest.xml && \
         mv /tmp/AndroidManifest.xml android/app/src/main/AndroidManifest.xml; \
       fi; \
