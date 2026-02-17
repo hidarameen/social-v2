@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_config.dart';
@@ -920,6 +921,9 @@ class _SocialShellState extends State<SocialShell> {
   int _selectedIndex = 0;
   String _tasksQuery = '';
   String _tasksStatusFilter = 'all';
+  String _tasksPlatformFilter = 'all';
+  String _tasksLastRunFilter = 'all';
+  String _tasksIssueFilter = 'all';
   String _tasksSortBy = 'createdAt';
   String _tasksSortDir = 'desc';
   bool _tasksLoadingMore = false;
@@ -1058,10 +1062,6 @@ class _SocialShellState extends State<SocialShell> {
     return int.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
-  Future<void> _reloadTasks() async {
-    await _loadTasksPage(reset: true, showPanelLoading: true);
-  }
-
   Future<void> _loadMoreTasks() async {
     if (_tasksLoadingMore) return;
     final state = _panelStates[PanelKind.tasks]!;
@@ -1134,6 +1134,29 @@ class _SocialShellState extends State<SocialShell> {
         state.loading = false;
         state.error = message;
       });
+      _toast(message);
+    }
+  }
+
+  void _onTasksQueryChanged(String value) {
+    final next = value.trim();
+    if (_tasksQuery == next) return;
+    setState(() => _tasksQuery = next);
+    _tasksDebounceTimer?.cancel();
+    _tasksDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      unawaited(_loadTasksPage(reset: true, showPanelLoading: true));
+    });
+  }
+
+  Future<void> _exportTasksCsv() async {
+    final i18n = _i18n(context);
+    try {
+      final csv = await widget.api.exportTasksCsv(widget.accessToken, limit: 5000);
+      await Clipboard.setData(ClipboardData(text: csv));
+      _toast(i18n.isArabic ? 'تم نسخ CSV إلى الحافظة.' : 'CSV copied to clipboard.');
+    } catch (error) {
+      final message = error is ApiException ? error.message : 'Failed to export tasks.';
       _toast(message);
     }
   }
@@ -1317,7 +1340,10 @@ class _SocialShellState extends State<SocialShell> {
     final data = panelState.data ?? <String, dynamic>{};
 
     return RefreshIndicator(
-      onRefresh: () => _loadPanel(kind, force: true),
+      onRefresh: () {
+        if (kind == PanelKind.tasks) return _loadTasksPage(reset: true, showPanelLoading: true);
+        return _loadPanel(kind, force: true);
+      },
       child: ListView(
         padding: const EdgeInsets.all(14),
         children: [
@@ -2303,76 +2329,786 @@ class _SocialShellState extends State<SocialShell> {
   }
 
   Widget _buildTasks(Map<String, dynamic> data) {
-    final tasks =
+    final i18n = _i18n(context);
+    final scheme = Theme.of(context).colorScheme;
+
+    final rawTasks =
         data['tasks'] is List ? (data['tasks'] as List) : const <dynamic>[];
+    final rawAccounts = data['accountsById'] is Map
+        ? (data['accountsById'] as Map)
+        : const <dynamic, dynamic>{};
 
-    final filtered = tasks.where((raw) {
-      final item = raw is Map<String, dynamic>
-          ? raw
-          : Map<String, dynamic>.from(raw as Map);
-      if (_tasksQuery.isEmpty) return true;
-      final query = _tasksQuery.toLowerCase();
-      final name = item['name']?.toString().toLowerCase() ?? '';
-      final status = item['status']?.toString().toLowerCase() ?? '';
-      return name.contains(query) || status.contains(query);
-    }).toList();
+    String normalizeTaskStatus(String raw) {
+      final value = raw.trim().toLowerCase();
+      if (value == 'active' || value == 'enabled' || value == 'running') return 'active';
+      if (value == 'paused' || value == 'inactive' || value == 'disabled') return 'paused';
+      if (value == 'completed' || value == 'done' || value == 'success') return 'completed';
+      if (value == 'error' || value == 'failed' || value == 'failure') return 'error';
+      return 'paused';
+    }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    String statusLabel(String normalized) {
+      if (normalized == 'active') return i18n.t('status.active', 'Active');
+      if (normalized == 'paused') return i18n.t('status.paused', 'Paused');
+      if (normalized == 'completed') return i18n.t('status.completed', 'Completed');
+      return i18n.t('status.error', 'Error');
+    }
+
+    Color statusTone(String normalized) {
+      if (normalized == 'active') return scheme.primary;
+      if (normalized == 'paused') return scheme.secondary;
+      if (normalized == 'completed') return Colors.green.shade700;
+      return scheme.error;
+    }
+
+    int successRate(dynamic executionCount, dynamic failureCount) {
+      final total = _readInt(executionCount, fallback: 0);
+      final failed = _readInt(failureCount, fallback: 0);
+      if (total <= 0) return 100;
+      final successful = (total - failed).clamp(0, total);
+      return ((successful / total) * 100).round();
+    }
+
+    DateTime? parseLastRun(Map<String, dynamic> task) {
+      final value = task['lastExecuted'] ?? task['lastExecutedAt'] ?? task['lastRunAt'];
+      if (value == null) return null;
+      if (value is DateTime) return value;
+      return DateTime.tryParse(value.toString());
+    }
+
+    String relativeLastRun(Map<String, dynamic> task) {
+      final date = parseLastRun(task);
+      if (date == null) return i18n.t('dashboard.never', 'Never');
+      final delta = DateTime.now().difference(date);
+      if (delta.inSeconds < 60) return i18n.t('dashboard.justNow', 'Just now');
+      if (delta.inMinutes < 60) return '${delta.inMinutes}m ago';
+      if (delta.inHours < 24) return '${delta.inHours}h ago';
+      final days = delta.inDays;
+      if (days < 7) return '${days}d ago';
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    }
+
+    bool taskHasAuthWarning(Map<String, dynamic> task) {
+      final ids = <dynamic>[
+        ...(task['sourceAccounts'] is List ? (task['sourceAccounts'] as List) : const <dynamic>[]),
+        ...(task['targetAccounts'] is List ? (task['targetAccounts'] as List) : const <dynamic>[]),
+      ];
+      for (final rawId in ids) {
+        final id = rawId?.toString() ?? '';
+        if (id.isEmpty) continue;
+        final rawAccount = rawAccounts[id];
+        if (rawAccount is Map) {
+          if (rawAccount['isActive'] == false) return true;
+        }
+      }
+      return false;
+    }
+
+    List<String> uniquePlatformsForTask(Map<String, dynamic> task) {
+      final seen = <String>{};
+      final ids = <dynamic>[
+        ...(task['sourceAccounts'] is List ? (task['sourceAccounts'] as List) : const <dynamic>[]),
+        ...(task['targetAccounts'] is List ? (task['targetAccounts'] as List) : const <dynamic>[]),
+      ];
+      for (final rawId in ids) {
+        final id = rawId?.toString() ?? '';
+        if (id.isEmpty) continue;
+        final rawAccount = rawAccounts[id];
+        if (rawAccount is Map) {
+          final platform = rawAccount['platformId']?.toString() ?? '';
+          if (platform.trim().isNotEmpty) seen.add(platform);
+        }
+      }
+      return seen.toList();
+    }
+
+    String platformLabel(String platformId) {
+      final normalized = platformId.trim().toLowerCase();
+      if (normalized == 'twitter') return 'X';
+      if (normalized.isEmpty) return platformId;
+      return platformId[0].toUpperCase() + platformId.substring(1);
+    }
+
+    IconData platformIcon(String platformId) {
+      final normalized = platformId.trim().toLowerCase();
+      if (normalized.contains('telegram')) return Icons.send_rounded;
+      if (normalized.contains('twitter')) return Icons.alternate_email_rounded;
+      if (normalized.contains('youtube')) return Icons.ondemand_video_rounded;
+      if (normalized.contains('tiktok')) return Icons.music_note_rounded;
+      if (normalized.contains('instagram')) return Icons.camera_alt_rounded;
+      if (normalized.contains('facebook')) return Icons.facebook_rounded;
+      if (normalized.contains('linkedin')) return Icons.work_rounded;
+      return Icons.public_rounded;
+    }
+
+    Widget badge(String text, {required Color tone, IconData? icon}) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: tone.withAlpha((0.12 * 255).round()),
+          border: Border.all(color: tone.withAlpha((0.24 * 255).round())),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Tasks',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            if (icon != null) Icon(icon, size: 14, color: tone),
+            if (icon != null) const SizedBox(width: 6),
+            Text(
+              text,
+              style: TextStyle(color: tone, fontWeight: FontWeight.w900, letterSpacing: 0.3),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search_rounded),
-                hintText: 'Search tasks by name or status',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) => setState(() => _tasksQuery = value.trim()),
-            ),
-            const SizedBox(height: 10),
-            if (filtered.isEmpty)
-              const Text('No tasks match your search.')
-            else
-              ...filtered.take(80).map((raw) {
-                final item = raw is Map<String, dynamic>
-                    ? raw
-                    : Map<String, dynamic>.from(raw as Map);
-                final statusText = item['status']?.toString() ?? 'unknown';
-                final statusColor = _statusColor(statusText);
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.task_alt_rounded),
-                    title: Text(item['name']?.toString() ?? 'Unnamed task'),
-                    subtitle: Text(item['description']?.toString() ?? ''),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withAlpha((0.16 * 255).round()),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        statusText,
-                        style: TextStyle(color: statusColor),
-                      ),
-                    ),
-                  ),
-                );
-              }),
           ],
         ),
-      ),
+      );
+    }
+
+    Widget platformBadge(String platformId) {
+      final tone = scheme.onSurface.withAlpha((0.10 * 255).round());
+      return Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          border: Border.all(color: tone),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(platformIcon(platformId), size: 18),
+      );
+    }
+
+    Future<void> toggleTaskStatus(Map<String, dynamic> task) async {
+      final id = task['id']?.toString() ?? '';
+      if (id.isEmpty) return;
+      if (_taskActionState.containsKey(id)) return;
+
+      final previous = normalizeTaskStatus(task['status']?.toString() ?? '');
+      final next = previous == 'active' ? 'paused' : 'active';
+
+      void applyStatus(String status) {
+        final panel = _panelStates[PanelKind.tasks]!;
+        final current = panel.data;
+        if (current == null) return;
+        final cloned = Map<String, dynamic>.from(current);
+        final list = cloned['tasks'];
+        if (list is List) {
+          cloned['tasks'] = list.map((raw) {
+            final item = raw is Map<String, dynamic>
+                ? Map<String, dynamic>.from(raw)
+                : Map<String, dynamic>.from(raw as Map);
+            if (item['id']?.toString() == id) {
+              item['status'] = status;
+            }
+            return item;
+          }).toList();
+        }
+        panel.data = cloned;
+      }
+
+      setState(() {
+        _taskActionState[id] = 'toggle';
+        applyStatus(next);
+      });
+
+      try {
+        await widget.api.updateTask(
+          widget.accessToken,
+          id,
+          body: <String, dynamic>{'status': next},
+        );
+        _toast(next == 'active' ? 'Task enabled' : 'Task paused');
+        await _loadPanel(PanelKind.tasks, force: true);
+        await _loadPanel(PanelKind.dashboard, force: true);
+      } catch (error) {
+        setState(() => applyStatus(previous));
+        final message = error is ApiException ? error.message : 'Failed to update task.';
+        _toast(message);
+      } finally {
+        if (!mounted) return;
+        setState(() {
+          _taskActionState.remove(id);
+        });
+      }
+    }
+
+    Future<void> deleteTask(Map<String, dynamic> task) async {
+      final id = task['id']?.toString() ?? '';
+      if (id.isEmpty) return;
+      if (_taskActionState.containsKey(id)) return;
+
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Delete task?'),
+            content: const Text('This action is permanent and cannot be undone.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: FilledButton.styleFrom(backgroundColor: scheme.error),
+                child: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      );
+      if (accepted != true) return;
+
+      setState(() {
+        _taskActionState[id] = 'delete';
+        final panel = _panelStates[PanelKind.tasks]!;
+        final current = panel.data;
+        if (current == null) return;
+        final cloned = Map<String, dynamic>.from(current);
+        final list = cloned['tasks'];
+        if (list is List) {
+          cloned['tasks'] = list.where((raw) {
+            final item = raw is Map ? raw : Map<String, dynamic>.from(raw as Map);
+            return item['id']?.toString() != id;
+          }).toList();
+        }
+        panel.data = cloned;
+      });
+
+      try {
+        await widget.api.deleteTask(widget.accessToken, id);
+        _toast('Task deleted');
+        await _loadPanel(PanelKind.tasks, force: true);
+        await _loadPanel(PanelKind.dashboard, force: true);
+      } catch (error) {
+        final message = error is ApiException ? error.message : 'Failed to delete task.';
+        _toast(message);
+        await _loadPanel(PanelKind.tasks, force: true);
+      } finally {
+        if (!mounted) return;
+        setState(() {
+          _taskActionState.remove(id);
+        });
+      }
+    }
+
+    final tasks = rawTasks
+        .map((raw) => raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw as Map))
+        .toList();
+
+    final availablePlatforms = <String>{
+      for (final task in tasks) ...uniquePlatformsForTask(task),
+    }.toList()
+      ..sort();
+
+    bool matchesPlatform(Map<String, dynamic> task) {
+      if (_tasksPlatformFilter == 'all') return true;
+      final platforms = uniquePlatformsForTask(task).map((p) => p.toLowerCase()).toList();
+      return platforms.contains(_tasksPlatformFilter.toLowerCase());
+    }
+
+    bool matchesLastRun(Map<String, dynamic> task) {
+      if (_tasksLastRunFilter == 'all') return true;
+      final date = parseLastRun(task);
+      if (_tasksLastRunFilter == 'never') return date == null;
+      if (date == null) return false;
+      final now = DateTime.now();
+      final delta = now.difference(date);
+      if (_tasksLastRunFilter == '24h') return delta.inHours <= 24;
+      if (_tasksLastRunFilter == '7d') return delta.inDays <= 7;
+      return true;
+    }
+
+    bool matchesIssue(Map<String, dynamic> task) {
+      if (_tasksIssueFilter == 'all') return true;
+      final normalized = normalizeTaskStatus(task['status']?.toString() ?? '');
+      if (_tasksIssueFilter == 'errors') return normalized == 'error';
+      if (_tasksIssueFilter == 'warnings') return taskHasAuthWarning(task);
+      return true;
+    }
+
+    final filtered = tasks.where((task) {
+      return matchesPlatform(task) && matchesLastRun(task) && matchesIssue(task);
+    }).toList();
+
+    final activeCount = filtered.where((t) => normalizeTaskStatus(t['status']?.toString() ?? '') == 'active').length;
+    final pausedCount = filtered.where((t) => normalizeTaskStatus(t['status']?.toString() ?? '') == 'paused').length;
+    final errorCount = filtered.where((t) => normalizeTaskStatus(t['status']?.toString() ?? '') == 'error').length;
+
+    final hasMore = data['hasMore'] == true;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          elevation: 0,
+          color: scheme.surface.withAlpha((0.55 * 255).round()),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                badge(
+                  i18n.isArabic ? 'أتمتة' : 'Automation Pipelines',
+                  tone: scheme.primary,
+                  icon: Icons.auto_awesome_rounded,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  i18n.isArabic ? 'مهامي' : 'My Tasks',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  i18n.isArabic ? 'إدارة ومراقبة مهام الأتمتة الخاصة بك.' : 'Manage and monitor your automation tasks.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    badge('$activeCount active', tone: scheme.primary),
+                    badge('$pausedCount paused', tone: scheme.secondary),
+                    badge('$errorCount failed', tone: scheme.error),
+                    badge('${filtered.length} tasks', tone: scheme.onSurface),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _exportTasksCsv,
+                      icon: const Icon(Icons.download_rounded),
+                      label: Text(i18n.isArabic ? 'تصدير CSV' : 'Export CSV'),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () => unawaited(_openCreateTaskSheet()),
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(i18n.isArabic ? 'إنشاء مهمة' : 'Create New Task'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  i18n.isArabic ? 'بحث وفلاتر' : 'Task Search & Filters',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: TextEditingController(text: _tasksQuery),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    hintText: i18n.isArabic ? 'ابحث بالاسم أو الوصف...' : 'Search by name or description...',
+                    border: const OutlineInputBorder(),
+                  ),
+                  onChanged: _onTasksQueryChanged,
+                ),
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final wide = constraints.maxWidth >= 900;
+                    final rowChildren = <Widget>[
+                      DropdownButtonFormField<String>(
+                        value: _tasksStatusFilter,
+                        decoration: InputDecoration(
+                          labelText: i18n.isArabic ? 'الحالة' : 'Status',
+                          prefixIcon: const Icon(Icons.filter_alt_rounded),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('All statuses')),
+                          DropdownMenuItem(value: 'active', child: Text('Active')),
+                          DropdownMenuItem(value: 'paused', child: Text('Paused')),
+                          DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                          DropdownMenuItem(value: 'error', child: Text('Error')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          if (_tasksStatusFilter == value) return;
+                          setState(() => _tasksStatusFilter = value);
+                          unawaited(_loadTasksPage(reset: true, showPanelLoading: true));
+                        },
+                      ),
+                      DropdownButtonFormField<String>(
+                        value: _tasksPlatformFilter,
+                        decoration: InputDecoration(
+                          labelText: i18n.isArabic ? 'المنصة' : 'Platform',
+                          prefixIcon: const Icon(Icons.public_rounded),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: 'all', child: Text('All platforms')),
+                          ...availablePlatforms.map(
+                            (p) => DropdownMenuItem(value: p, child: Text(platformLabel(p))),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _tasksPlatformFilter = value);
+                        },
+                      ),
+                      DropdownButtonFormField<String>(
+                        value: _tasksLastRunFilter,
+                        decoration: InputDecoration(
+                          labelText: i18n.isArabic ? 'آخر تشغيل' : 'Last run',
+                          prefixIcon: const Icon(Icons.schedule_rounded),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('Any run')),
+                          DropdownMenuItem(value: '24h', child: Text('Last 24h')),
+                          DropdownMenuItem(value: '7d', child: Text('Last 7d')),
+                          DropdownMenuItem(value: 'never', child: Text('Never ran')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _tasksLastRunFilter = value);
+                        },
+                      ),
+                      DropdownButtonFormField<String>(
+                        value: _tasksIssueFilter,
+                        decoration: InputDecoration(
+                          labelText: i18n.isArabic ? 'مشاكل' : 'Issues',
+                          prefixIcon: const Icon(Icons.report_problem_rounded),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('All tasks')),
+                          DropdownMenuItem(value: 'errors', child: Text('Errors only')),
+                          DropdownMenuItem(value: 'warnings', child: Text('Auth warnings')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _tasksIssueFilter = value);
+                        },
+                      ),
+                      DropdownButtonFormField<String>(
+                        value: _tasksSortBy,
+                        decoration: InputDecoration(
+                          labelText: i18n.isArabic ? 'ترتيب حسب' : 'Sort by',
+                          prefixIcon: const Icon(Icons.sort_rounded),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'createdAt', child: Text('Created')),
+                          DropdownMenuItem(value: 'status', child: Text('Status')),
+                          DropdownMenuItem(value: 'name', child: Text('Name')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          if (_tasksSortBy == value) return;
+                          setState(() => _tasksSortBy = value);
+                          unawaited(_loadTasksPage(reset: true, showPanelLoading: true));
+                        },
+                      ),
+                      DropdownButtonFormField<String>(
+                        value: _tasksSortDir,
+                        decoration: InputDecoration(
+                          labelText: i18n.isArabic ? 'الاتجاه' : 'Direction',
+                          prefixIcon: const Icon(Icons.swap_vert_rounded),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'desc', child: Text('Desc')),
+                          DropdownMenuItem(value: 'asc', child: Text('Asc')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          if (_tasksSortDir == value) return;
+                          setState(() => _tasksSortDir = value);
+                          unawaited(_loadTasksPage(reset: true, showPanelLoading: true));
+                        },
+                      ),
+                    ];
+
+                    if (!wide) {
+                      return Column(
+                        children: [
+                          for (final child in rowChildren) ...[
+                            child,
+                            const SizedBox(height: 10),
+                          ],
+                        ],
+                      );
+                    }
+
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: rowChildren
+                          .map((w) => SizedBox(width: 280, child: w))
+                          .toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                if (_tasksQuery.isNotEmpty ||
+                    _tasksStatusFilter != 'all' ||
+                    _tasksPlatformFilter != 'all' ||
+                    _tasksLastRunFilter != 'all' ||
+                    _tasksIssueFilter != 'all' ||
+                    _tasksSortBy != 'createdAt' ||
+                    _tasksSortDir != 'desc')
+                  OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _tasksQuery = '';
+                        _tasksStatusFilter = 'all';
+                        _tasksPlatformFilter = 'all';
+                        _tasksLastRunFilter = 'all';
+                        _tasksIssueFilter = 'all';
+                        _tasksSortBy = 'createdAt';
+                        _tasksSortDir = 'desc';
+                      });
+                      unawaited(_loadTasksPage(reset: true, showPanelLoading: true));
+                    },
+                    child: Text(i18n.isArabic ? 'مسح الفلاتر' : 'Clear Filters'),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (filtered.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 26),
+              child: Column(
+                children: [
+                  Icon(Icons.inbox_rounded, size: 40, color: scheme.onSurface.withAlpha((0.55 * 255).round())),
+                  const SizedBox(height: 10),
+                  Text(
+                    i18n.isArabic ? 'لا توجد مهام مطابقة.' : 'No tasks found.',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    i18n.isArabic
+                        ? 'قم بإنشاء مهمتك الأولى للبدء.'
+                        : 'Create your first task to get started.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => unawaited(_openCreateTaskSheet()),
+                    icon: const Icon(Icons.add_rounded),
+                    label: Text(i18n.isArabic ? 'إنشاء مهمة' : 'Create Task'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 1100;
+              final cardWidth = wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: filtered.map((task) {
+                  final id = task['id']?.toString() ?? '';
+                  final busy = _taskActionState.containsKey(id);
+                  final normalized = normalizeTaskStatus(task['status']?.toString() ?? '');
+                  final tone = statusTone(normalized);
+                  final rate = successRate(task['executionCount'], task['failureCount']);
+                  final lastRun = relativeLastRun(task);
+                  final authWarning = taskHasAuthWarning(task);
+
+                  final sourceIds = task['sourceAccounts'] is List ? (task['sourceAccounts'] as List) : const <dynamic>[];
+                  final targetIds = task['targetAccounts'] is List ? (task['targetAccounts'] as List) : const <dynamic>[];
+                  final routeCount = (sourceIds.isEmpty ? 1 : sourceIds.length) * (targetIds.isEmpty ? 1 : targetIds.length);
+
+                  final platforms = uniquePlatformsForTask(task);
+                  final description = (task['description']?.toString() ?? '').trim();
+                  final lastError = (task['lastError']?.toString() ?? '').trim();
+                  final showErrorText = normalized == 'error';
+                  final descText = showErrorText
+                      ? (lastError.isEmpty ? 'Error: Failed to fetch data' : 'Error: $lastError')
+                      : description;
+
+                  final sourcePlatforms = <String>{};
+                  for (final rawId in sourceIds) {
+                    final account = rawAccounts[rawId?.toString() ?? ''];
+                    if (account is Map) {
+                      final pid = account['platformId']?.toString() ?? '';
+                      if (pid.trim().isNotEmpty) sourcePlatforms.add(pid);
+                    }
+                  }
+                  final targetPlatforms = <String>{};
+                  for (final rawId in targetIds) {
+                    final account = rawAccounts[rawId?.toString() ?? ''];
+                    if (account is Map) {
+                      final pid = account['platformId']?.toString() ?? '';
+                      if (pid.trim().isNotEmpty) targetPlatforms.add(pid);
+                    }
+                  }
+
+                  return SizedBox(
+                    width: cardWidth,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                badge(statusLabel(normalized).toUpperCase(), tone: tone),
+                                badge('Success $rate%', tone: scheme.onSurface),
+                                if (authWarning) badge('OAuth Warning', tone: scheme.secondary, icon: Icons.shield_rounded),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        task['name']?.toString() ?? 'Task',
+                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                                      ),
+                                      if (descText.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          descText,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: showErrorText ? scheme.error : scheme.onSurface.withAlpha((0.75 * 255).round()),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: busy ? null : () => unawaited(toggleTaskStatus(task)),
+                                      tooltip: normalized == 'active' ? 'Disable task' : 'Enable task',
+                                      icon: Icon(
+                                        normalized == 'active' ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+                                        color: normalized == 'active' ? scheme.secondary : scheme.primary,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      onPressed: busy
+                                          ? null
+                                          : () {
+                                              _toast('Task editing is coming next.');
+                                            },
+                                      tooltip: 'Edit task',
+                                      icon: const Icon(Icons.edit_rounded),
+                                    ),
+                                    IconButton(
+                                      onPressed: busy
+                                          ? null
+                                          : () {
+                                              final idx = kPanelSpecs.indexWhere((p) => p.kind == PanelKind.executions);
+                                              if (idx < 0) return;
+                                              setState(() {
+                                                _executionsQuery = task['name']?.toString() ?? '';
+                                                _selectedIndex = idx;
+                                              });
+                                              unawaited(_loadPanel(PanelKind.executions, force: true));
+                                            },
+                                      tooltip: 'View logs',
+                                      icon: const Icon(Icons.receipt_long_rounded),
+                                    ),
+                                    IconButton(
+                                      onPressed: busy ? null : () => unawaited(deleteTask(task)),
+                                      tooltip: 'Delete task',
+                                      icon: Icon(Icons.delete_outline_rounded, color: scheme.error),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: scheme.surface.withAlpha((0.50 * 255).round()),
+                                border: Border.all(color: scheme.onSurface.withAlpha((0.12 * 255).round())),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: sourcePlatforms.isEmpty
+                                          ? [Text(i18n.isArabic ? 'بدون مصدر' : 'No source')]
+                                          : sourcePlatforms.map((p) => platformBadge(p)).toList(),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    child: Icon(Icons.arrow_forward_rounded, color: scheme.onSurface.withAlpha((0.55 * 255).round())),
+                                  ),
+                                  Expanded(
+                                    child: Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: targetPlatforms.isEmpty
+                                          ? [Text(i18n.isArabic ? 'بدون هدف' : 'No target')]
+                                          : targetPlatforms.map((p) => platformBadge(p)).toList(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                badge('Accounts: ${sourceIds.length + targetIds.length}', tone: scheme.onSurface),
+                                badge('Transfers: ${_readInt(task['executionCount'], fallback: 0)}', tone: scheme.onSurface),
+                                badge('Routes: $routeCount', tone: scheme.onSurface),
+                                badge('Last run: $lastRun', tone: scheme.onSurface, icon: Icons.schedule_rounded),
+                                if (platforms.isNotEmpty)
+                                  badge(
+                                    platforms.map(platformLabel).join(', '),
+                                    tone: scheme.onSurface,
+                                    icon: Icons.public_rounded,
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        if (hasMore) ...[
+          const SizedBox(height: 12),
+          Center(
+            child: OutlinedButton(
+              onPressed: _tasksLoadingMore ? null : () => unawaited(_loadMoreTasks()),
+              child: Text(_tasksLoadingMore ? (i18n.isArabic ? '...جاري التحميل' : 'Loading...') : (i18n.isArabic ? 'تحميل المزيد' : 'Load More')),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

@@ -374,4 +374,37 @@ class ApiClient {
       token: token,
     );
   }
+
+  Future<String> exportTasksCsv(String token, {int limit = 5000}) async {
+    final uri = _resolve('/api/tasks/export', {'limit': '$limit'});
+    final headers = <String, String>{
+      'accept': 'text/csv',
+    };
+    if (token.trim().isNotEmpty) {
+      headers['authorization'] = 'Bearer ${token.trim()}';
+    }
+
+    late final http.Response response;
+    try {
+      response = await _httpClient
+          .get(uri, headers: headers)
+          .timeout(_requestTimeout);
+    } catch (error) {
+      if (error is ApiException) rethrow;
+      throw ApiException('Export request failed: $error');
+    }
+
+    if (response.statusCode >= 400) {
+      throw ApiException(
+        'Failed to export tasks (${response.statusCode}).',
+        statusCode: response.statusCode,
+      );
+    }
+
+    try {
+      return utf8.decode(response.bodyBytes);
+    } catch (_) {
+      return response.body;
+    }
+  }
 }

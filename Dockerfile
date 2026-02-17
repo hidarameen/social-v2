@@ -50,10 +50,11 @@ RUN pkg="${ANDROID_PACKAGE:-${ANDROID_ORG}.app}" \
 
 RUN --mount=type=cache,id=flutter-pub-cache,target=/root/.pub-cache flutter pub get
 RUN test -n "${APP_URL}"
-RUN --mount=type=cache,id=flutter-gradle-cache,target=/tmp/nf-gradle \
+# NOTE: cache IDs are versioned to avoid reusing corrupted Gradle wrapper distributions in CI.
+RUN --mount=type=cache,id=flutter-gradle-cache-v2,target=/tmp/nf-gradle \
   --mount=type=cache,id=flutter-pub-cache,target=/root/.pub-cache \
   flutter build apk --release --dart-define=APP_URL="${APP_URL}"
-RUN --mount=type=cache,id=flutter-gradle-cache,target=/tmp/nf-gradle \
+RUN --mount=type=cache,id=flutter-gradle-cache-v2,target=/tmp/nf-gradle \
   --mount=type=cache,id=flutter-pub-cache,target=/root/.pub-cache \
   flutter build web --release --dart-define=APP_URL="${APP_URL}"
 RUN (cd android && ./gradlew --stop || true) && rm -rf /root/.gradle /src/app/.gradle || true
