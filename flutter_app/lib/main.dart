@@ -928,6 +928,7 @@ class _SocialShellState extends State<SocialShell> {
   String _tasksSortDir = 'desc';
   bool _tasksLoadingMore = false;
   Timer? _tasksDebounceTimer;
+  final TextEditingController _tasksSearchController = TextEditingController();
   String _accountsQuery = '';
   String _executionsQuery = '';
   final Map<String, String> _taskActionState = <String, String>{};
@@ -940,6 +941,7 @@ class _SocialShellState extends State<SocialShell> {
   @override
   void initState() {
     super.initState();
+    _tasksSearchController.text = _tasksQuery;
     unawaited(_loadCurrentPanel(force: true));
 
     _dashboardRefreshTimer = Timer.periodic(
@@ -956,6 +958,7 @@ class _SocialShellState extends State<SocialShell> {
   void dispose() {
     _dashboardRefreshTimer?.cancel();
     _tasksDebounceTimer?.cancel();
+    _tasksSearchController.dispose();
     super.dispose();
   }
 
@@ -1178,7 +1181,29 @@ class _SocialShellState extends State<SocialShell> {
 
     if (created == true) {
       await _loadPanel(PanelKind.dashboard, force: true);
-      await _loadPanel(PanelKind.tasks, force: true);
+      await _loadTasksPage(reset: true, showPanelLoading: true);
+    }
+  }
+
+  Future<void> _openEditTaskSheet(Map<String, dynamic> task) async {
+    final i18n = _i18n(context);
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return _TaskComposerSheet(
+          api: widget.api,
+          accessToken: widget.accessToken,
+          i18n: i18n,
+          initialTask: task,
+        );
+      },
+    );
+
+    if (updated == true) {
+      await _loadPanel(PanelKind.dashboard, force: true);
+      await _loadTasksPage(reset: true, showPanelLoading: true);
     }
   }
 
@@ -1884,7 +1909,7 @@ class _SocialShellState extends State<SocialShell> {
                                 ),
                                 IconButton(
                                   onPressed: () {
-                                    _toast(i18n.isArabic ? 'تعديل المهمة سيأتي في لوحة المهام.' : 'Task editing is coming in Tasks panel.');
+                                    unawaited(_openEditTaskSheet(task));
                                   },
                                   tooltip: i18n.t('dashboard.task.edit', 'Edit task'),
                                   icon: const Icon(Icons.open_in_new_rounded),
@@ -2704,7 +2729,7 @@ class _SocialShellState extends State<SocialShell> {
                 ),
                 const SizedBox(height: 10),
                 TextField(
-                  controller: TextEditingController(text: _tasksQuery),
+                  controller: _tasksSearchController,
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.search_rounded),
                     hintText: i18n.isArabic ? 'ابحث بالاسم أو الوصف...' : 'Search by name or description...',
@@ -2718,7 +2743,7 @@ class _SocialShellState extends State<SocialShell> {
                     final wide = constraints.maxWidth >= 900;
                     final rowChildren = <Widget>[
                       DropdownButtonFormField<String>(
-                        value: _tasksStatusFilter,
+                        initialValue: _tasksStatusFilter,
                         decoration: InputDecoration(
                           labelText: i18n.isArabic ? 'الحالة' : 'Status',
                           prefixIcon: const Icon(Icons.filter_alt_rounded),
@@ -2738,7 +2763,7 @@ class _SocialShellState extends State<SocialShell> {
                         },
                       ),
                       DropdownButtonFormField<String>(
-                        value: _tasksPlatformFilter,
+                        initialValue: _tasksPlatformFilter,
                         decoration: InputDecoration(
                           labelText: i18n.isArabic ? 'المنصة' : 'Platform',
                           prefixIcon: const Icon(Icons.public_rounded),
@@ -2755,7 +2780,7 @@ class _SocialShellState extends State<SocialShell> {
                         },
                       ),
                       DropdownButtonFormField<String>(
-                        value: _tasksLastRunFilter,
+                        initialValue: _tasksLastRunFilter,
                         decoration: InputDecoration(
                           labelText: i18n.isArabic ? 'آخر تشغيل' : 'Last run',
                           prefixIcon: const Icon(Icons.schedule_rounded),
@@ -2772,7 +2797,7 @@ class _SocialShellState extends State<SocialShell> {
                         },
                       ),
                       DropdownButtonFormField<String>(
-                        value: _tasksIssueFilter,
+                        initialValue: _tasksIssueFilter,
                         decoration: InputDecoration(
                           labelText: i18n.isArabic ? 'مشاكل' : 'Issues',
                           prefixIcon: const Icon(Icons.report_problem_rounded),
@@ -2788,7 +2813,7 @@ class _SocialShellState extends State<SocialShell> {
                         },
                       ),
                       DropdownButtonFormField<String>(
-                        value: _tasksSortBy,
+                        initialValue: _tasksSortBy,
                         decoration: InputDecoration(
                           labelText: i18n.isArabic ? 'ترتيب حسب' : 'Sort by',
                           prefixIcon: const Icon(Icons.sort_rounded),
@@ -2806,7 +2831,7 @@ class _SocialShellState extends State<SocialShell> {
                         },
                       ),
                       DropdownButtonFormField<String>(
-                        value: _tasksSortDir,
+                        initialValue: _tasksSortDir,
                         decoration: InputDecoration(
                           labelText: i18n.isArabic ? 'الاتجاه' : 'Direction',
                           prefixIcon: const Icon(Icons.swap_vert_rounded),
@@ -2856,6 +2881,7 @@ class _SocialShellState extends State<SocialShell> {
                     onPressed: () {
                       setState(() {
                         _tasksQuery = '';
+                        _tasksSearchController.text = '';
                         _tasksStatusFilter = 'all';
                         _tasksPlatformFilter = 'all';
                         _tasksLastRunFilter = 'all';
@@ -3008,9 +3034,7 @@ class _SocialShellState extends State<SocialShell> {
                                     IconButton(
                                       onPressed: busy
                                           ? null
-                                          : () {
-                                              _toast('Task editing is coming next.');
-                                            },
+                                          : () => unawaited(_openEditTaskSheet(task)),
                                       tooltip: 'Edit task',
                                       icon: const Icon(Icons.edit_rounded),
                                     ),
@@ -3518,11 +3542,13 @@ class _TaskComposerSheet extends StatefulWidget {
     required this.api,
     required this.accessToken,
     required this.i18n,
+    this.initialTask,
   });
 
   final ApiClient api;
   final String accessToken;
   final I18n i18n;
+  final Map<String, dynamic>? initialTask;
 
   @override
   State<_TaskComposerSheet> createState() => _TaskComposerSheetState();
@@ -3544,9 +3570,44 @@ class _TaskComposerSheetState extends State<_TaskComposerSheet> {
   final Set<String> _sourceAccountIds = <String>{};
   final Set<String> _targetAccountIds = <String>{};
 
+  bool get _isEdit {
+    final id = widget.initialTask?['id']?.toString() ?? '';
+    return id.trim().isNotEmpty;
+  }
+
+  String get _taskId {
+    return widget.initialTask?['id']?.toString() ?? '';
+  }
+
   @override
   void initState() {
     super.initState();
+    final initial = widget.initialTask;
+    if (initial != null) {
+      _nameController.text = initial['name']?.toString() ?? '';
+      _descController.text = initial['description']?.toString() ?? '';
+      final status = initial['status']?.toString() ?? '';
+      final normalizedStatus = status.trim().toLowerCase();
+      if (normalizedStatus == 'active' ||
+          normalizedStatus == 'paused' ||
+          normalizedStatus == 'completed' ||
+          normalizedStatus == 'error') {
+        _status = normalizedStatus;
+      }
+      final contentType = initial['contentType']?.toString() ?? '';
+      final normalizedContent = contentType.trim().toLowerCase();
+      if (normalizedContent == 'text' ||
+          normalizedContent == 'image' ||
+          normalizedContent == 'video' ||
+          normalizedContent == 'link') {
+        _contentType = normalizedContent;
+      }
+
+      final sources = initial['sourceAccounts'] is List ? (initial['sourceAccounts'] as List) : const <dynamic>[];
+      final targets = initial['targetAccounts'] is List ? (initial['targetAccounts'] as List) : const <dynamic>[];
+      _sourceAccountIds.addAll(sources.map((e) => e?.toString() ?? '').where((e) => e.trim().isNotEmpty));
+      _targetAccountIds.addAll(targets.map((e) => e?.toString() ?? '').where((e) => e.trim().isNotEmpty));
+    }
     unawaited(_loadAccounts());
   }
 
@@ -3649,24 +3710,33 @@ class _TaskComposerSheetState extends State<_TaskComposerSheet> {
 
     setState(() => _submitting = true);
     try {
-      await widget.api.createTask(
-        widget.accessToken,
-        body: <String, dynamic>{
-          'name': _nameController.text.trim(),
-          'description': _descController.text.trim(),
-          'sourceAccounts': _sourceAccountIds.toList(),
-          'targetAccounts': _targetAccountIds.toList(),
-          'status': _status,
-          'contentType': _contentType,
-          'executionType': 'immediate',
-        },
-      );
+      final body = <String, dynamic>{
+        'name': _nameController.text.trim(),
+        'description': _descController.text.trim(),
+        'sourceAccounts': _sourceAccountIds.toList(),
+        'targetAccounts': _targetAccountIds.toList(),
+        'status': _status,
+        'contentType': _contentType,
+      };
+
+      if (_isEdit) {
+        final id = _taskId.trim();
+        if (id.isEmpty) throw const ApiException('Missing task id.');
+        await widget.api.updateTask(widget.accessToken, id, body: body);
+      } else {
+        body['executionType'] = 'immediate';
+        await widget.api.createTask(widget.accessToken, body: body);
+      }
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error is ApiException ? error.message : 'Failed to create task.';
+        _error = error is ApiException
+            ? error.message
+            : _isEdit
+                ? 'Failed to update task.'
+                : 'Failed to create task.';
       });
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -3693,7 +3763,9 @@ class _TaskComposerSheetState extends State<_TaskComposerSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      widget.i18n.isArabic ? 'إنشاء مهمة' : 'Create Task',
+                      _isEdit
+                          ? (widget.i18n.isArabic ? 'تعديل مهمة' : 'Edit Task')
+                          : (widget.i18n.isArabic ? 'إنشاء مهمة' : 'Create Task'),
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
                     ),
                   ),
@@ -3758,7 +3830,7 @@ class _TaskComposerSheetState extends State<_TaskComposerSheet> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _status,
+                            initialValue: _status,
                             decoration: InputDecoration(
                               labelText: widget.i18n.isArabic ? 'الحالة' : 'Status',
                               prefixIcon: const Icon(Icons.toggle_on_rounded),
@@ -3766,6 +3838,8 @@ class _TaskComposerSheetState extends State<_TaskComposerSheet> {
                             items: const [
                               DropdownMenuItem(value: 'active', child: Text('Active')),
                               DropdownMenuItem(value: 'paused', child: Text('Paused')),
+                              DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                              DropdownMenuItem(value: 'error', child: Text('Error')),
                             ],
                             onChanged: _submitting ? null : (value) {
                               if (value == null) return;
@@ -3776,7 +3850,7 @@ class _TaskComposerSheetState extends State<_TaskComposerSheet> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _contentType,
+                            initialValue: _contentType,
                             decoration: InputDecoration(
                               labelText: widget.i18n.isArabic ? 'نوع المحتوى' : 'Content type',
                               prefixIcon: const Icon(Icons.article_rounded),
@@ -3914,8 +3988,12 @@ class _TaskComposerSheetState extends State<_TaskComposerSheet> {
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.add_rounded),
-                      label: Text(widget.i18n.isArabic ? 'إنشاء' : 'Create'),
+                          : Icon(_isEdit ? Icons.save_rounded : Icons.add_rounded),
+                      label: Text(
+                        _isEdit
+                            ? (widget.i18n.isArabic ? 'حفظ' : 'Save')
+                            : (widget.i18n.isArabic ? 'إنشاء' : 'Create'),
+                      ),
                     ),
                   ],
                 ),
