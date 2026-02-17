@@ -29,6 +29,7 @@ RUN if [ -f android/gradle.properties ]; then \
 COPY flutter_app/pubspec.yaml ./pubspec.yaml
 COPY flutter_app/analysis_options.yaml ./analysis_options.yaml
 COPY flutter_app/lib ./lib
+COPY flutter_app/assets ./assets
 COPY flutter_app/android/app/src/main/AndroidManifest.xml ./android/app/src/main/AndroidManifest.xml
 RUN pkg="${ANDROID_PACKAGE:-${ANDROID_ORG}.app}" \
   && sed -i "s|__PACKAGE__|${pkg}|g" android/app/src/main/AndroidManifest.xml \

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:socialflow_flutter/main.dart';
+import 'package:socialflow_flutter/api/api_client.dart';
 
 void main() {
   group('ApiClient auth flow', () {

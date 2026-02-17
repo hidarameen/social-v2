@@ -1,11 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_config.dart';
+import 'app_state.dart';
+import 'storage_keys.dart';
+import 'api/api_client.dart';
+import 'ui/auth/check_email_screen.dart';
+import 'ui/auth/forgot_password_screen.dart';
+import 'ui/auth/login_screen.dart';
+import 'ui/auth/register_screen.dart';
+import 'ui/auth/reset_password_screen.dart';
+import 'ui/auth/verify_email_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,30 +24,100 @@ class SocialFlowApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SocialFlow',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0D1422)),
-      ),
-      home: const AppBootstrap(),
+    return const _StateLoader();
+  }
+}
+
+class _StateLoader extends StatefulWidget {
+  const _StateLoader();
+
+  @override
+  State<_StateLoader> createState() => _StateLoaderState();
+}
+
+class _StateLoaderState extends State<_StateLoader> {
+  AppState? _state;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final state = await AppState.load();
+    if (!mounted) return;
+    setState(() => _state = state);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = _state;
+    if (state == null) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
+
+    final lightScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF0D1422),
+      brightness: Brightness.light,
+    );
+    final darkScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF0D1422),
+      brightness: Brightness.dark,
+      surface: const Color(0xFF0F162A),
+    );
+
+    return AnimatedBuilder(
+      animation: state,
+      builder: (context, _) {
+        final themeMode =
+            state.themeMode == AppThemeMode.dark ? ThemeMode.dark : ThemeMode.light;
+
+        return MaterialApp(
+          title: 'SocialFlow',
+          debugShowCheckedModeBanner: false,
+          themeMode: themeMode,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: lightScheme,
+            inputDecorationTheme: InputDecorationTheme(
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            colorScheme: darkScheme,
+            inputDecorationTheme: InputDecorationTheme(
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+          locale: Locale(state.locale),
+          builder: (context, child) {
+            return Directionality(
+              textDirection: state.dir,
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
+          home: AppBootstrap(state: state),
+        );
+      },
     );
   }
 }
 
 class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key});
+  const AppBootstrap({super.key, required this.state});
+
+  final AppState state;
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
 }
 
 class _AppBootstrapState extends State<AppBootstrap> {
-  static const String _tokenKey = 'flutter_mobile_access_token';
-  static const String _nameKey = 'flutter_mobile_user_name';
-  static const String _emailKey = 'flutter_mobile_user_email';
-
   final ApiClient _api = ApiClient(baseUri: AppConfig.baseUri);
 
   bool _loading = true;
@@ -56,9 +133,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   Future<void> _restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedToken = (prefs.getString(_tokenKey) ?? '').trim();
-    final savedName = prefs.getString(_nameKey) ?? '';
-    final savedEmail = prefs.getString(_emailKey) ?? '';
+    final savedToken = (prefs.getString(StorageKeys.mobileAccessToken) ?? '').trim();
+    final savedName = prefs.getString(StorageKeys.mobileUserName) ?? '';
+    final savedEmail = prefs.getString(StorageKeys.mobileUserEmail) ?? '';
 
     if (savedToken.isEmpty) {
       if (!mounted) return;
@@ -78,9 +155,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
         _loading = false;
       });
     } catch (_) {
-      await prefs.remove(_tokenKey);
-      await prefs.remove(_nameKey);
-      await prefs.remove(_emailKey);
+      await prefs.remove(StorageKeys.mobileAccessToken);
+      await prefs.remove(StorageKeys.mobileUserName);
+      await prefs.remove(StorageKeys.mobileUserEmail);
       if (!mounted) return;
       setState(() {
         _token = null;
@@ -93,9 +170,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   Future<void> _handleSignedIn(AuthSession session) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, session.accessToken);
-    await prefs.setString(_nameKey, session.name);
-    await prefs.setString(_emailKey, session.email);
+    await prefs.setString(StorageKeys.mobileAccessToken, session.accessToken);
+    await prefs.setString(StorageKeys.mobileUserName, session.name);
+    await prefs.setString(StorageKeys.mobileUserEmail, session.email);
 
     if (!mounted) return;
     setState(() {
@@ -107,9 +184,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   Future<void> _handleSignOut() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_nameKey);
-    await prefs.remove(_emailKey);
+    await prefs.remove(StorageKeys.mobileAccessToken);
+    await prefs.remove(StorageKeys.mobileUserName);
+    await prefs.remove(StorageKeys.mobileUserEmail);
 
     if (!mounted) return;
     setState(() {
@@ -126,7 +203,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
     }
 
     if (_token == null || _token!.isEmpty) {
-      return AuthScreen(api: _api, onSignedIn: _handleSignedIn);
+      return AuthFlow(state: widget.state, api: _api, onSignedIn: _handleSignedIn);
     }
 
     return SocialShell(
@@ -661,6 +738,96 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       ),
     );
+  }
+}
+
+enum _AuthView {
+  login,
+  register,
+  checkEmail,
+  verifyEmail,
+  forgotPassword,
+  resetPassword,
+}
+
+class AuthFlow extends StatefulWidget {
+  const AuthFlow({
+    super.key,
+    required this.state,
+    required this.api,
+    required this.onSignedIn,
+  });
+
+  final AppState state;
+  final ApiClient api;
+  final Future<void> Function(AuthSession session) onSignedIn;
+
+  @override
+  State<AuthFlow> createState() => _AuthFlowState();
+}
+
+class _AuthFlowState extends State<AuthFlow> {
+  _AuthView _view = _AuthView.login;
+  String _email = '';
+
+  void _go(_AuthView next, {String email = ''}) {
+    setState(() {
+      _view = next;
+      if (email.trim().isNotEmpty) {
+        _email = email.trim();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    switch (_view) {
+      case _AuthView.login:
+        return LoginScreen(
+          state: widget.state,
+          api: widget.api,
+          prefillEmail: _email.isEmpty ? null : _email,
+          onSignedIn: widget.onSignedIn,
+          onGoToRegister: () => _go(_AuthView.register, email: _email),
+          onGoToForgotPassword: () => _go(_AuthView.forgotPassword, email: _email),
+        );
+      case _AuthView.register:
+        return RegisterScreen(
+          state: widget.state,
+          api: widget.api,
+          onGoToLogin: () => _go(_AuthView.login, email: _email),
+          onRegisteredNeedingVerification: (email) =>
+              _go(_AuthView.checkEmail, email: email),
+        );
+      case _AuthView.checkEmail:
+        return CheckEmailScreen(
+          state: widget.state,
+          api: widget.api,
+          email: _email,
+          onEnterVerificationCode: () =>
+              _go(_AuthView.verifyEmail, email: _email),
+        );
+      case _AuthView.verifyEmail:
+        return VerifyEmailScreen(
+          state: widget.state,
+          api: widget.api,
+          prefilledEmail: _email,
+          onVerified: () => _go(_AuthView.login, email: _email),
+        );
+      case _AuthView.forgotPassword:
+        return ForgotPasswordScreen(
+          state: widget.state,
+          api: widget.api,
+          onBackToLogin: () => _go(_AuthView.login, email: _email),
+          onGoToResetPassword: (email) => _go(_AuthView.resetPassword, email: email),
+        );
+      case _AuthView.resetPassword:
+        return ResetPasswordScreen(
+          state: widget.state,
+          api: widget.api,
+          onDone: () => _go(_AuthView.login, email: _email),
+        );
+    }
   }
 }
 
@@ -1545,250 +1712,4 @@ class _SocialShellState extends State<SocialShell> {
   }
 }
 
-class AuthSession {
-  const AuthSession({
-    required this.accessToken,
-    required this.name,
-    required this.email,
-    required this.userId,
-  });
-
-  final String accessToken;
-  final String name;
-  final String email;
-  final String userId;
-}
-
-class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode});
-
-  final String message;
-  final int? statusCode;
-
-  @override
-  String toString() => 'ApiException($statusCode): $message';
-}
-
-class ApiClient {
-  ApiClient({required this.baseUri, http.Client? httpClient})
-      : _httpClient = httpClient ?? http.Client();
-
-  final Uri baseUri;
-  final http.Client _httpClient;
-  static const Duration _requestTimeout = Duration(seconds: 20);
-
-  Uri _resolve(String path, [Map<String, String>? query]) {
-    final target = AppConfig.resolvePath(path);
-    return target.replace(queryParameters: query);
-  }
-
-  Future<Map<String, dynamic>> _request({
-    required String method,
-    required String path,
-    String? token,
-    Map<String, String>? query,
-    Map<String, dynamic>? body,
-  }) async {
-    final uri = _resolve(path, query);
-    final headers = <String, String>{
-      'accept': 'application/json',
-      'content-type': 'application/json',
-    };
-
-    if (token != null && token.trim().isNotEmpty) {
-      headers['authorization'] = 'Bearer ${token.trim()}';
-    }
-
-    late final http.Response response;
-    try {
-      if (method == 'GET') {
-        response = await _httpClient
-            .get(uri, headers: headers)
-            .timeout(_requestTimeout);
-      } else if (method == 'POST') {
-        response = await _httpClient
-            .post(
-              uri,
-              headers: headers,
-              body: jsonEncode(body ?? <String, dynamic>{}),
-            )
-            .timeout(_requestTimeout);
-      } else if (method == 'PATCH') {
-        response = await _httpClient
-            .patch(
-              uri,
-              headers: headers,
-              body: jsonEncode(body ?? <String, dynamic>{}),
-            )
-            .timeout(_requestTimeout);
-      } else {
-        throw const ApiException('Unsupported request method');
-      }
-    } catch (error) {
-      final raw = error.toString().toLowerCase();
-      if (raw.contains('timed out')) {
-        throw const ApiException(
-          'Request timed out. Please check your server and network.',
-        );
-      }
-      if (raw.contains('socketexception') ||
-          raw.contains('failed host lookup') ||
-          raw.contains('connection refused') ||
-          raw.contains('clientexception') ||
-          raw.contains('handshake') ||
-          raw.contains('certificate') ||
-          raw.contains('permission denied') ||
-          raw.contains('operation not permitted')) {
-        final permissionHint = (raw.contains('permission denied') ||
-                raw.contains('operation not permitted'))
-            ? ' Android may be blocking network access (missing INTERNET permission).'
-            : '';
-        throw ApiException(
-          'Unable to reach ${baseUri.toString()}. '
-          'If testing on Android emulator locally, use APP_URL or 10.0.2.2.'
-          '$permissionHint',
-        );
-      }
-      if (error is ApiException) rethrow;
-      throw ApiException('Network request failed: $error');
-    }
-
-    Map<String, dynamic> decoded = <String, dynamic>{};
-    if (response.body.trim().isNotEmpty) {
-      try {
-        final raw = jsonDecode(response.body);
-        if (raw is Map<String, dynamic>) {
-          decoded = raw;
-        }
-      } catch (_) {
-        decoded = <String, dynamic>{};
-      }
-    }
-
-    if (response.statusCode >= 400 || decoded['success'] == false) {
-      final message = decoded['error']?.toString() ??
-          'Request failed (${response.statusCode}).';
-      throw ApiException(message, statusCode: response.statusCode);
-    }
-
-    return decoded;
-  }
-
-  Future<AuthSession> login({
-    required String email,
-    required String password,
-  }) async {
-    final payload = await _request(
-      method: 'POST',
-      path: '/api/mobile/login',
-      body: <String, dynamic>{'email': email, 'password': password},
-    );
-
-    final user = payload['user'] is Map<String, dynamic>
-        ? payload['user'] as Map<String, dynamic>
-        : <String, dynamic>{};
-
-    return AuthSession(
-      accessToken: payload['accessToken']?.toString() ?? '',
-      userId: user['id']?.toString() ?? '',
-      email: user['email']?.toString() ?? '',
-      name: user['name']?.toString() ?? '',
-    );
-  }
-
-  Future<Map<String, dynamic>> register({
-    required String name,
-    required String email,
-    required String password,
-  }) async {
-    return _request(
-      method: 'POST',
-      path: '/api/auth/register',
-      body: <String, dynamic>{
-        'name': name,
-        'email': email,
-        'password': password,
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>> fetchMobileMe(String token) async {
-    final payload = await _request(
-      method: 'GET',
-      path: '/api/mobile/me',
-      token: token,
-    );
-
-    final user = payload['user'] is Map<String, dynamic>
-        ? payload['user'] as Map<String, dynamic>
-        : <String, dynamic>{};
-
-    return user;
-  }
-
-  Future<Map<String, dynamic>> verifyEmail({
-    required String email,
-    required String code,
-  }) {
-    return _request(
-      method: 'POST',
-      path: '/api/auth/verify-email',
-      body: <String, dynamic>{
-        'email': email.toLowerCase().trim(),
-        'code': code.trim(),
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>> resendVerification({required String email}) {
-    return _request(
-      method: 'POST',
-      path: '/api/auth/resend-verification',
-      body: <String, dynamic>{'email': email.toLowerCase().trim()},
-    );
-  }
-
-  Future<Map<String, dynamic>> fetchDashboard(String token) {
-    return _request(method: 'GET', path: '/api/dashboard', token: token);
-  }
-
-  Future<Map<String, dynamic>> fetchTasks(String token, {int limit = 30}) {
-    return _request(
-      method: 'GET',
-      path: '/api/tasks',
-      token: token,
-      query: {'limit': '$limit'},
-    );
-  }
-
-  Future<Map<String, dynamic>> fetchAccounts(String token, {int limit = 30}) {
-    return _request(
-      method: 'GET',
-      path: '/api/accounts',
-      token: token,
-      query: {'limit': '$limit'},
-    );
-  }
-
-  Future<Map<String, dynamic>> fetchExecutions(String token, {int limit = 30}) {
-    return _request(
-      method: 'GET',
-      path: '/api/executions',
-      token: token,
-      query: {'limit': '$limit'},
-    );
-  }
-
-  Future<Map<String, dynamic>> fetchAnalytics(String token, {int limit = 30}) {
-    return _request(
-      method: 'GET',
-      path: '/api/analytics',
-      token: token,
-      query: {'limit': '$limit'},
-    );
-  }
-
-  Future<Map<String, dynamic>> fetchProfile(String token) {
-    return _request(method: 'GET', path: '/api/profile', token: token);
-  }
-}
+// API client lives in lib/api/api_client.dart
