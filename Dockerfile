@@ -10,7 +10,9 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 
-FROM cirrusci/flutter:stable AS apk_builder
+# cirrusci/flutter is no longer updated (stable is stuck on Flutter 3.7.x).
+# Use the maintained Cirrus Labs image from GHCR and pin for reproducible builds.
+FROM ghcr.io/cirruslabs/flutter:3.35.2 AS apk_builder
 ARG ANDROID_ORG=com.socialflow.app
 ARG ANDROID_PACKAGE
 ARG APP_URL
@@ -19,6 +21,7 @@ ENV GRADLE_USER_HOME=/tmp/nf-gradle
 ENV GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.caching=false"
 
 WORKDIR /src
+RUN flutter --version
 RUN flutter create --platforms=android,web --org "${ANDROID_ORG}" app
 
 WORKDIR /src/app
