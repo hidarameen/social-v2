@@ -29,6 +29,7 @@ COPY flutter_app/pubspec.yaml ./pubspec.yaml
 COPY flutter_app/analysis_options.yaml ./analysis_options.yaml
 COPY flutter_app/lib ./lib
 COPY flutter_app/android/app/src/main/AndroidManifest.xml ./android/app/src/main/AndroidManifest.xml
+RUN sed -i "s|__PACKAGE__|${ANDROID_ORG}.app|g" android/app/src/main/AndroidManifest.xml
 
 RUN --mount=type=cache,id=flutter-pub-cache,target=/root/.pub-cache flutter pub get
 RUN test -n "${APP_URL}"

@@ -1,4 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<!--
+  NOTE: This manifest is copied into the generated Flutter project during Docker builds.
+  The Dockerfile replaces the __PACKAGE__ placeholder with "${ANDROID_ORG}.app".
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="__PACKAGE__">
     <!-- Required for API requests (login, dashboard, etc.) in release builds. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -35,4 +40,3 @@
         </intent>
     </queries>
 </manifest>
-
