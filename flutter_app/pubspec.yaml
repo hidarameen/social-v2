@@ -1,5 +1,5 @@
 name: socialflow_flutter
-description: Flutter Android app wrapper for SocialFlow (WebView-based).
+description: Native Flutter app for SocialFlow (no WebView).
 publish_to: "none"
 
 version: 1.0.0+1
