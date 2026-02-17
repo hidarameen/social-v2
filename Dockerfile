@@ -12,6 +12,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lo
 
 FROM cirrusci/flutter:stable AS apk_builder
 ARG ANDROID_ORG=com.socialflow.app
+ARG ANDROID_PACKAGE
 ARG APP_URL
 ENV CI=true
 ENV GRADLE_USER_HOME=/tmp/nf-gradle
@@ -29,7 +30,7 @@ COPY flutter_app/pubspec.yaml ./pubspec.yaml
 COPY flutter_app/analysis_options.yaml ./analysis_options.yaml
 COPY flutter_app/lib ./lib
 COPY flutter_app/android/app/src/main/AndroidManifest.xml ./android/app/src/main/AndroidManifest.xml
-RUN sed -i "s|__PACKAGE__|${ANDROID_ORG}.app|g" android/app/src/main/AndroidManifest.xml
+RUN pkg="${ANDROID_PACKAGE:-${ANDROID_ORG}.app}" && sed -i "s|__PACKAGE__|${pkg}|g" android/app/src/main/AndroidManifest.xml
 
 RUN --mount=type=cache,id=flutter-pub-cache,target=/root/.pub-cache flutter pub get
 RUN test -n "${APP_URL}"

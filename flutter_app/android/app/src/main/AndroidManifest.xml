@@ -1,6 +1,7 @@
 <!--
   NOTE: This manifest is copied into the generated Flutter project during Docker builds.
-  The Dockerfile replaces the __PACKAGE__ placeholder with "${ANDROID_ORG}.app".
+  The Dockerfile replaces the __PACKAGE__ placeholder with ANDROID_PACKAGE if set,
+  otherwise it uses "${ANDROID_ORG}.app".
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="__PACKAGE__">
