@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 FROM node:20-bookworm-slim AS base
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
+# Avoid Corepack signature/key issues in CI by pinning pnpm explicitly.
+RUN npm i -g pnpm@9.15.9 --no-fund --no-audit
 
 FROM base AS deps
 WORKDIR /app
