@@ -1629,43 +1629,6 @@ class _SocialShellState extends State<SocialShell> {
     );
   }
 
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required IconData icon,
-  }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            CircleAvatar(child: Icon(icon)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildPanelFrame({
     required PanelKind kind,
     required I18n i18n,
@@ -3638,7 +3601,6 @@ class _SocialShellState extends State<SocialShell> {
 
   Widget _buildExecutions(Map<String, dynamic> data) {
     final i18n = _i18n(context);
-    final scheme = Theme.of(context).colorScheme;
     final executions = data['executions'] is List
         ? (data['executions'] as List)
         : const <dynamic>[];
@@ -4115,7 +4077,7 @@ class _SocialShellState extends State<SocialShell> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _settingsSelectedPlatform,
+              initialValue: _settingsSelectedPlatform,
               decoration: InputDecoration(
                 labelText: i18n.t('settings.platform', 'Platform'),
                 prefixIcon: const Icon(Icons.key_rounded),
@@ -4302,6 +4264,47 @@ class _SocialShellState extends State<SocialShell> {
               icon: Icons.dark_mode_rounded,
             ),
             const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: scheme.outline.withOpacity(isDark ? 0.65 : 0.70)),
+                color: scheme.surface.withOpacity(isDark ? 0.35 : 0.55),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: scheme.secondary.withOpacity(isDark ? 0.18 : 0.10),
+                      border: Border.all(color: scheme.secondary.withOpacity(isDark ? 0.26 : 0.18)),
+                    ),
+                    child: Icon(Icons.language_rounded, color: scheme.secondary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(i18n.t('settings.language', 'Language'), style: const TextStyle(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 4),
+                        Text(
+                          isArabic ? 'العربية' : 'English',
+                          style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => unawaited(widget.appState.toggleLocale()),
+                    child: Text(isArabic ? 'EN' : 'AR'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Text(
               i18n.t('settings.themePreset', 'Theme preset'),
               style: const TextStyle(fontWeight: FontWeight.w900),
@@ -4353,7 +4356,7 @@ class _SocialShellState extends State<SocialShell> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: widget.appState.density,
+              initialValue: widget.appState.density,
               decoration: InputDecoration(
                 labelText: i18n.t('settings.density', 'Density'),
                 prefixIcon: const Icon(Icons.format_line_spacing_rounded),
@@ -4451,7 +4454,7 @@ class _SocialShellState extends State<SocialShell> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: widget.appState.timezone,
+              initialValue: widget.appState.timezone,
               decoration: InputDecoration(
                 labelText: i18n.t('settings.timezone', 'Timezone'),
                 prefixIcon: const Icon(Icons.public_rounded),

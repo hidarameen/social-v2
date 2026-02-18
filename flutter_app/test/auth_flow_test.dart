@@ -60,6 +60,16 @@ void main() {
       locale: 'en',
       dir: TextDirection.ltr,
       themeMode: AppThemeMode.light,
+      themePreset: 'orbit',
+      sidebarCollapsed: false,
+      reducedMotion: false,
+      density: 'comfortable',
+      timezone: 'UTC',
+      emailOnSuccess: true,
+      emailOnError: true,
+      pushNotifications: false,
+      allowAnalytics: true,
+      shareErrorLogs: false,
     );
 
     await tester.pumpWidget(
@@ -110,6 +120,16 @@ void main() {
       locale: 'en',
       dir: TextDirection.ltr,
       themeMode: AppThemeMode.light,
+      themePreset: 'orbit',
+      sidebarCollapsed: false,
+      reducedMotion: false,
+      density: 'comfortable',
+      timezone: 'UTC',
+      emailOnSuccess: true,
+      emailOnError: true,
+      pushNotifications: false,
+      allowAnalytics: true,
+      shareErrorLogs: false,
     );
 
     await tester.pumpWidget(
