@@ -22,6 +22,8 @@ class I18n {
     'common.retry': 'Retry',
     'common.signOut': 'Sign out',
 
+    'tasks.task': 'Task',
+
     'status.active': 'Active',
     'status.paused': 'Paused',
     'status.completed': 'Completed',
@@ -120,6 +122,43 @@ class I18n {
         'Smart sign-in experience with callback routing and quick recovery flows.',
     'auth.uxTitle': 'Role-ready UX',
     'auth.uxDescription': 'Optimized for validation clarity and accessibility.',
+
+    'accounts.title': 'Accounts',
+    'accounts.subtitle': 'Search, monitor connection health, and review platforms.',
+    'accounts.kpi.total': 'Total',
+    'accounts.kpi.active': 'Active',
+    'accounts.kpi.inactive': 'Inactive',
+    'accounts.searchHint': 'Search by platform, name, or username',
+    'accounts.account': 'Account',
+    'accounts.active': 'Active',
+    'accounts.inactive': 'Inactive',
+    'accounts.empty.title': 'No accounts found',
+    'accounts.empty.subtitle': 'Try a different query or connect accounts from the web dashboard.',
+
+    'executions.title': 'Executions',
+    'executions.subtitle': 'Search recent runs and diagnose failures quickly.',
+    'executions.searchHint': 'Search by task name or status',
+    'executions.item': 'Task execution',
+    'executions.empty.title': 'No executions found',
+    'executions.empty.subtitle': 'Once tasks run, execution history will appear here.',
+
+    'analytics.title': 'Analytics',
+    'analytics.subtitle': 'KPIs and performance snapshots across your workspace.',
+    'analytics.kpi.totalExecutions': 'Total executions',
+    'analytics.kpi.successful': 'Successful',
+    'analytics.kpi.failed': 'Failed',
+    'analytics.successRate': 'Success rate',
+    'analytics.topTasks': 'Top task stats',
+    'analytics.empty': 'No analytics data yet.',
+    'analytics.executions': 'Executions',
+
+    'settings.title': 'Settings',
+    'settings.subtitle': 'Personalize the app experience.',
+    'settings.darkMode': 'Dark mode',
+    'settings.language': 'Language',
+    'settings.apiBaseUrl': 'API Base URL',
+    'settings.authMode': 'Auth mode',
+    'settings.authModeValue': 'Bearer token via /api/mobile/login',
   };
 
   static const Map<String, String> _ar = {
@@ -133,6 +172,8 @@ class I18n {
     'common.refresh': 'تحديث',
     'common.retry': 'إعادة المحاولة',
     'common.signOut': 'تسجيل الخروج',
+
+    'tasks.task': 'مهمة',
 
     'status.active': 'نشط',
     'status.paused': 'متوقف',
@@ -229,5 +270,42 @@ class I18n {
     'auth.sessionDescription': 'تجربة تسجيل دخول ذكية مع استعادة سريعة.',
     'auth.uxTitle': 'واجهة جاهزة للعمل',
     'auth.uxDescription': 'محسنة لوضوح التحقق وإمكانية الوصول.',
+
+    'accounts.title': 'الحسابات',
+    'accounts.subtitle': 'ابحث وراقب صحة الاتصال واستعرض المنصات.',
+    'accounts.kpi.total': 'الإجمالي',
+    'accounts.kpi.active': 'نشط',
+    'accounts.kpi.inactive': 'غير نشط',
+    'accounts.searchHint': 'ابحث بالمنصة أو الاسم أو اسم المستخدم',
+    'accounts.account': 'حساب',
+    'accounts.active': 'نشط',
+    'accounts.inactive': 'غير نشط',
+    'accounts.empty.title': 'لا توجد حسابات',
+    'accounts.empty.subtitle': 'جرّب بحثًا مختلفًا أو قم بربط الحسابات من لوحة الويب.',
+
+    'executions.title': 'التنفيذات',
+    'executions.subtitle': 'ابحث في آخر التشغيلات وشخّص الأعطال بسرعة.',
+    'executions.searchHint': 'ابحث باسم المهمة أو الحالة',
+    'executions.item': 'تنفيذ مهمة',
+    'executions.empty.title': 'لا توجد تنفيذات',
+    'executions.empty.subtitle': 'بعد تشغيل المهام ستظهر سجلات التنفيذ هنا.',
+
+    'analytics.title': 'التحليلات',
+    'analytics.subtitle': 'مؤشرات وأداء مساحة العمل.',
+    'analytics.kpi.totalExecutions': 'إجمالي التنفيذات',
+    'analytics.kpi.successful': 'ناجح',
+    'analytics.kpi.failed': 'فاشل',
+    'analytics.successRate': 'نسبة النجاح',
+    'analytics.topTasks': 'أفضل إحصائيات المهام',
+    'analytics.empty': 'لا توجد بيانات تحليلات بعد.',
+    'analytics.executions': 'التنفيذات',
+
+    'settings.title': 'الإعدادات',
+    'settings.subtitle': 'خصص تجربة التطبيق.',
+    'settings.darkMode': 'الوضع الداكن',
+    'settings.language': 'اللغة',
+    'settings.apiBaseUrl': 'رابط الـ API',
+    'settings.authMode': 'طريقة الدخول',
+    'settings.authModeValue': 'Bearer token عبر /api/mobile/login',
   };
 }

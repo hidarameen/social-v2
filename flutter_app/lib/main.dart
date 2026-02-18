@@ -17,6 +17,7 @@ import 'ui/auth/register_screen.dart';
 import 'ui/auth/reset_password_screen.dart';
 import 'ui/auth/verify_email_screen.dart';
 import 'ui/sf_theme.dart';
+import 'ui/widgets/sf_ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -190,6 +191,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
     return SocialShell(
       api: _api,
+      appState: widget.state,
       accessToken: _token!,
       userName: _name,
       userEmail: _email,
@@ -817,6 +819,7 @@ class SocialShell extends StatefulWidget {
   const SocialShell({
     super.key,
     required this.api,
+    required this.appState,
     required this.accessToken,
     required this.userName,
     required this.userEmail,
@@ -824,6 +827,7 @@ class SocialShell extends StatefulWidget {
   });
 
   final ApiClient api;
+  final AppState appState;
   final String accessToken;
   final String userName;
   final String userEmail;
@@ -1040,6 +1044,11 @@ class _SocialShellState extends State<SocialShell> {
   int _readInt(dynamic value, {int fallback = 0}) {
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  double _readDouble(dynamic value, {double fallback = 0}) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
   Future<void> _loadMoreTasks() async {
@@ -1439,17 +1448,16 @@ class _SocialShellState extends State<SocialShell> {
         ? data['accountsById'] as Map<String, dynamic>
         : <String, dynamic>{};
 
-    final totalTasks = (stats['totalTasks'] as num?)?.toInt() ?? 0;
-    final totalAccounts = (stats['totalAccounts'] as num?)?.toInt() ?? 0;
-    final totalExecutions = (stats['totalExecutions'] as num?)?.toInt() ?? 0;
+    final totalTasks = _readInt(stats['totalTasks'], fallback: 0);
+    final totalAccounts = _readInt(stats['totalAccounts'], fallback: 0);
+    final totalExecutions = _readInt(stats['totalExecutions'], fallback: 0);
     final isEmptyWorkspace =
         totalTasks == 0 && totalAccounts == 0 && totalExecutions == 0;
 
-    final activeTasks = (stats['activeTasksCount'] as num?)?.toInt() ?? 0;
-    final pausedTasks = (stats['pausedTasksCount'] as num?)?.toInt() ?? 0;
-    final errorTasks = (stats['errorTasksCount'] as num?)?.toInt() ?? 0;
-    final successRate =
-        (stats['executionSuccessRate'] as num?)?.toInt() ?? 0;
+    final activeTasks = _readInt(stats['activeTasksCount'], fallback: 0);
+    final pausedTasks = _readInt(stats['pausedTasksCount'], fallback: 0);
+    final errorTasks = _readInt(stats['errorTasksCount'], fallback: 0);
+    final successRate = _readInt(stats['executionSuccessRate'], fallback: 0);
     final hasAuthWarnings = health['hasAuthWarnings'] == true;
 
     final platformBreakdown = (() {
@@ -1993,10 +2001,10 @@ class _SocialShellState extends State<SocialShell> {
 
     Widget systemHealthCard() {
       final scheme = Theme.of(context).colorScheme;
-      final inactiveAccounts = (stats['inactiveAccounts'] as num?)?.toInt() ?? 0;
-      final activeAccounts = (stats['activeAccounts'] as num?)?.toInt() ?? 0;
+      final inactiveAccounts = _readInt(stats['inactiveAccounts'], fallback: 0);
+      final activeAccounts = _readInt(stats['activeAccounts'], fallback: 0);
 
-      int td(String key) => (taskBreakdown[key] as num?)?.toInt() ?? 0;
+      int td(String key) => _readInt(taskBreakdown[key], fallback: 0);
 
       return Card(
         child: Padding(
@@ -2227,7 +2235,7 @@ class _SocialShellState extends State<SocialShell> {
                   final item = raw is Map<String, dynamic>
                       ? Map<String, dynamic>.from(raw)
                       : Map<String, dynamic>.from(raw as Map);
-                  final rate = (item['successRate'] as num?)?.toDouble() ?? double.tryParse(item['successRate']?.toString() ?? '') ?? 0;
+                  final rate = _readDouble(item['successRate'], fallback: 0);
                   final color = rate >= 90
                       ? scheme.primary
                       : rate >= 70
@@ -3166,6 +3174,8 @@ class _SocialShellState extends State<SocialShell> {
   }
 
   Widget _buildAccounts(Map<String, dynamic> data) {
+    final i18n = _i18n(context);
+    final scheme = Theme.of(context).colorScheme;
     final accounts = data['accounts'] is List
         ? (data['accounts'] as List)
         : const <dynamic>[];
@@ -3184,60 +3194,132 @@ class _SocialShellState extends State<SocialShell> {
           platform.contains(query);
     }).toList();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+    final total = accounts.length;
+    final activeCount = accounts.where((raw) {
+      final item = raw is Map<String, dynamic>
+          ? raw
+          : Map<String, dynamic>.from(raw as Map);
+      return item['isActive'] == true;
+    }).length;
+    final inactiveCount = (total - activeCount).clamp(0, total);
+
+    Widget searchCard() {
+      return SfPanelCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Accounts',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search_rounded),
-                hintText: 'Search accounts by platform/name/username',
-                border: OutlineInputBorder(),
+            SfSectionHeader(
+              title: i18n.t('accounts.title', 'Accounts'),
+              subtitle: i18n.t(
+                'accounts.subtitle',
+                'Search, monitor connection health, and review platforms.',
               ),
-              onChanged: (value) =>
-                  setState(() => _accountsQuery = value.trim()),
+              trailing: IconButton(
+                tooltip: i18n.t('common.refresh', 'Refresh'),
+                onPressed: () => unawaited(_loadPanel(PanelKind.accounts, force: true)),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
             ),
             const SizedBox(height: 10),
-            if (filtered.isEmpty)
-              const Text('No accounts found.')
-            else
-              ...filtered.take(100).map((raw) {
-                final item = raw is Map<String, dynamic>
-                    ? raw
-                    : Map<String, dynamic>.from(raw as Map);
-                final active = item['isActive'] == true;
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.account_circle_rounded),
-                    title: Text(item['accountName']?.toString() ?? 'Account'),
-                    subtitle: Text(
-                      '${item['platformId'] ?? 'unknown'} • @${item['accountUsername'] ?? '-'}',
-                    ),
-                    trailing: Icon(
-                      active
-                          ? Icons.check_circle_rounded
-                          : Icons.cancel_rounded,
-                      color: active ? Colors.green : Colors.red,
-                    ),
-                  ),
-                );
-              }),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                SfBadge(
+                  i18n.t('accounts.kpi.total', 'Total') + ': $total',
+                  tone: scheme.onSurface,
+                  icon: Icons.groups_rounded,
+                ),
+                SfBadge(
+                  i18n.t('accounts.kpi.active', 'Active') + ': $activeCount',
+                  tone: Colors.green.shade700,
+                  icon: Icons.check_circle_rounded,
+                ),
+                SfBadge(
+                  i18n.t('accounts.kpi.inactive', 'Inactive') + ': $inactiveCount',
+                  tone: scheme.error,
+                  icon: Icons.cancel_rounded,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded),
+                hintText: i18n.t(
+                  'accounts.searchHint',
+                  'Search by platform, name, or username',
+                ),
+              ),
+              onChanged: (value) => setState(() => _accountsQuery = value.trim()),
+            ),
           ],
         ),
-      ),
+      );
+    }
+
+    Widget accountTile(Map<String, dynamic> account) {
+      final name = account['accountName']?.toString().trim();
+      final username = account['accountUsername']?.toString().trim();
+      final platformId = account['platformId']?.toString().trim() ?? '';
+      final active = account['isActive'] == true;
+      final title = (name == null || name.isEmpty) ? i18n.t('accounts.account', 'Account') : name;
+      final handle = (username == null || username.isEmpty) ? '-' : '@$username';
+      final platformLabel = _platformLabel(platformId);
+      final tone = active ? Colors.green.shade700 : scheme.error;
+
+      return Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: ListTile(
+          leading: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: scheme.surface.withOpacity(0.55),
+              border: Border.all(color: scheme.onSurface.withOpacity(0.10)),
+            ),
+            child: Icon(_platformIcon(platformId), color: scheme.onSurfaceVariant),
+          ),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          subtitle: Text('$platformLabel • $handle'),
+          trailing: SfBadge(
+            active ? i18n.t('accounts.active', 'Active') : i18n.t('accounts.inactive', 'Inactive'),
+            tone: tone,
+            icon: active ? Icons.check_rounded : Icons.close_rounded,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        searchCard(),
+        const SizedBox(height: 12),
+        if (filtered.isEmpty)
+          SfEmptyState(
+            icon: Icons.groups_rounded,
+            title: i18n.t('accounts.empty.title', 'No accounts found'),
+            subtitle: i18n.t(
+              'accounts.empty.subtitle',
+              'Try a different query or connect accounts from the web dashboard.',
+            ),
+          )
+        else
+          ...filtered.take(100).map((raw) {
+            final item = raw is Map<String, dynamic>
+                ? raw
+                : Map<String, dynamic>.from(raw as Map);
+            return accountTile(item);
+          }),
+      ],
     );
   }
 
   Widget _buildExecutions(Map<String, dynamic> data) {
+    final i18n = _i18n(context);
+    final scheme = Theme.of(context).colorScheme;
     final executions = data['executions'] is List
         ? (data['executions'] as List)
         : const <dynamic>[];
@@ -3253,69 +3335,98 @@ class _SocialShellState extends State<SocialShell> {
       return taskName.contains(query) || status.contains(query);
     }).toList();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+    Widget searchCard() {
+      return SfPanelCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Executions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search_rounded),
-                hintText: 'Search executions by task or status',
-                border: OutlineInputBorder(),
+            SfSectionHeader(
+              title: i18n.t('executions.title', 'Executions'),
+              subtitle: i18n.t(
+                'executions.subtitle',
+                'Search recent runs and diagnose failures quickly.',
               ),
-              onChanged: (value) =>
-                  setState(() => _executionsQuery = value.trim()),
+              trailing: IconButton(
+                tooltip: i18n.t('common.refresh', 'Refresh'),
+                onPressed: () => unawaited(_loadPanel(PanelKind.executions, force: true)),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
             ),
-            const SizedBox(height: 10),
-            if (filtered.isEmpty)
-              const Text('No executions found.')
-            else
-              ...filtered.take(120).map((raw) {
-                final item = raw is Map<String, dynamic>
-                    ? raw
-                    : Map<String, dynamic>.from(raw as Map);
-                final statusText = item['status']?.toString() ?? 'unknown';
-                final statusColor = _statusColor(statusText);
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.history_rounded),
-                    title: Text(
-                      item['taskName']?.toString() ?? 'Task execution',
-                    ),
-                    subtitle: Text(item['executedAt']?.toString() ?? ''),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withAlpha((0.16 * 255).round()),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        statusText,
-                        style: TextStyle(color: statusColor),
-                      ),
-                    ),
-                  ),
-                );
-              }),
+            const SizedBox(height: 12),
+            TextField(
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded),
+                hintText: i18n.t('executions.searchHint', 'Search by task name or status'),
+              ),
+              onChanged: (value) => setState(() => _executionsQuery = value.trim()),
+            ),
           ],
         ),
-      ),
+      );
+    }
+
+    Widget executionTile(Map<String, dynamic> execution) {
+      final statusText = execution['status']?.toString() ?? 'unknown';
+      final statusColor = _statusColor(statusText);
+      final taskName = execution['taskName']?.toString().trim();
+      final when = execution['executedAt']?.toString().trim();
+      final title = (taskName == null || taskName.isEmpty)
+          ? i18n.t('executions.item', 'Task execution')
+          : taskName;
+
+      return Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: ListTile(
+          leading: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: statusColor.withOpacity(0.12),
+              border: Border.all(color: statusColor.withOpacity(0.26)),
+            ),
+            child: Icon(Icons.history_rounded, color: statusColor),
+          ),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          subtitle: Text(when ?? ''),
+          trailing: SfBadge(
+            statusText,
+            tone: statusColor,
+            icon: statusText.toLowerCase().contains('fail') || statusText.toLowerCase().contains('error')
+                ? Icons.error_outline_rounded
+                : Icons.check_circle_outline_rounded,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        searchCard(),
+        const SizedBox(height: 12),
+        if (filtered.isEmpty)
+          SfEmptyState(
+            icon: Icons.history_rounded,
+            title: i18n.t('executions.empty.title', 'No executions found'),
+            subtitle: i18n.t(
+              'executions.empty.subtitle',
+              'Once tasks run, execution history will appear here.',
+            ),
+          )
+        else
+          ...filtered.take(120).map((raw) {
+            final item = raw is Map<String, dynamic>
+                ? raw
+                : Map<String, dynamic>.from(raw as Map);
+            return executionTile(item);
+          }),
+      ],
     );
   }
 
   Widget _buildAnalytics(Map<String, dynamic> data) {
+    final i18n = _i18n(context);
     final totals = data['totals'] is Map<String, dynamic>
         ? data['totals'] as Map<String, dynamic>
         : <String, dynamic>{};
@@ -3323,96 +3434,102 @@ class _SocialShellState extends State<SocialShell> {
         ? (data['taskStats'] as List)
         : const <dynamic>[];
 
-    final totalExecutions = (totals['executions'] as num?)?.toDouble() ?? 0;
-    final successfulExecutions =
-        (totals['successfulExecutions'] as num?)?.toDouble() ?? 0;
+    final totalExecutions = _readDouble(totals['executions'], fallback: 0);
+    final successfulExecutions = _readDouble(totals['successfulExecutions'], fallback: 0);
     final successRate =
         totalExecutions > 0 ? successfulExecutions / totalExecutions : 0.0;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        SfPanelCard(
+          child: SfSectionHeader(
+            title: i18n.t('analytics.title', 'Analytics'),
+            subtitle: i18n.t(
+              'analytics.subtitle',
+              'KPIs and performance snapshots across your workspace.',
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 10,
           runSpacing: 10,
           children: [
             SizedBox(
-              width: 260,
-              child: _buildStatCard(
-                title: 'Total Executions',
+              width: 280,
+              child: SfKpiTile(
+                label: i18n.t('analytics.kpi.totalExecutions', 'Total executions'),
                 value: '${totals['executions'] ?? 0}',
                 icon: Icons.sync_rounded,
               ),
             ),
             SizedBox(
-              width: 260,
-              child: _buildStatCard(
-                title: 'Successful',
+              width: 280,
+              child: SfKpiTile(
+                label: i18n.t('analytics.kpi.successful', 'Successful'),
                 value: '${totals['successfulExecutions'] ?? 0}',
                 icon: Icons.check_circle_rounded,
+                tone: Colors.green.shade700,
               ),
             ),
             SizedBox(
-              width: 260,
-              child: _buildStatCard(
-                title: 'Failed',
+              width: 280,
+              child: SfKpiTile(
+                label: i18n.t('analytics.kpi.failed', 'Failed'),
                 value: '${totals['failedExecutions'] ?? 0}',
                 icon: Icons.error_rounded,
+                tone: Theme.of(context).colorScheme.error,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 14),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Success Rate',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(value: successRate.clamp(0.0, 1.0)),
-                const SizedBox(height: 6),
-                Text('${(successRate * 100).toStringAsFixed(1)}%'),
-              ],
-            ),
+        const SizedBox(height: 12),
+        SfPanelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SfSectionHeader(
+                title: i18n.t('analytics.successRate', 'Success rate'),
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(value: successRate.clamp(0.0, 1.0)),
+              ),
+              const SizedBox(height: 8),
+              Text('${(successRate * 100).toStringAsFixed(1)}%'),
+            ],
           ),
         ),
-        const SizedBox(height: 14),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Top Task Stats',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                if (taskStats.isEmpty)
-                  const Text('No analytics data yet.')
-                else
-                  ...taskStats.take(50).map((raw) {
-                    final item = raw is Map<String, dynamic>
-                        ? raw
-                        : Map<String, dynamic>.from(raw as Map);
-                    final itemRate =
-                        (item['successRate'] as num?)?.toDouble() ?? 0;
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.bar_chart_rounded),
-                      title: Text(item['taskName']?.toString() ?? 'Task'),
-                      subtitle: Text(
-                        'Executions: ${item['totalExecutions'] ?? 0}',
-                      ),
-                      trailing: Text('${itemRate.toStringAsFixed(1)}%'),
-                    );
-                  }),
-              ],
-            ),
+        const SizedBox(height: 12),
+        SfPanelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SfSectionHeader(
+                title: i18n.t('analytics.topTasks', 'Top task stats'),
+              ),
+              const SizedBox(height: 10),
+              if (taskStats.isEmpty)
+                Text(i18n.t('analytics.empty', 'No analytics data yet.'))
+              else
+                ...taskStats.take(50).map((raw) {
+                  final item = raw is Map<String, dynamic>
+                      ? raw
+                      : Map<String, dynamic>.from(raw as Map);
+                  final itemRate = _readDouble(item['successRate'], fallback: 0);
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.bar_chart_rounded),
+                    title: Text(item['taskName']?.toString() ?? i18n.t('tasks.task', 'Task')),
+                    subtitle: Text(
+                      i18n.t('analytics.executions', 'Executions') + ': ${item['totalExecutions'] ?? 0}',
+                    ),
+                    trailing: Text('${itemRate.toStringAsFixed(1)}%'),
+                  );
+                }),
+            ],
           ),
         ),
       ],
@@ -3420,52 +3537,122 @@ class _SocialShellState extends State<SocialShell> {
   }
 
   Widget _buildSettings(Map<String, dynamic> data) {
+    final i18n = _i18n(context);
     final user = data['user'] is Map<String, dynamic>
         ? data['user'] as Map<String, dynamic>
         : <String, dynamic>{};
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Settings',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const CircleAvatar(child: Icon(Icons.person_rounded)),
-              title: Text(user['name']?.toString() ?? widget.userName),
-              subtitle: Text(user['email']?.toString() ?? widget.userEmail),
-            ),
-            const Divider(),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.link_rounded),
-              title: const Text('API Base URL'),
-              subtitle: Text(AppConfig.baseUri.toString()),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.security_rounded),
-              title: const Text('Auth Mode'),
-              subtitle: const Text('Bearer token via /api/mobile/login'),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () async {
-                await widget.onSignOut();
-              },
-              icon: const Icon(Icons.logout_rounded),
-              label: const Text('Sign Out'),
-            ),
-          ],
+    final isDark = widget.appState.themeMode == AppThemeMode.dark;
+    final isArabic = widget.appState.locale == 'ar';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SfPanelCard(
+          child: SfSectionHeader(
+            title: i18n.t('settings.title', 'Settings'),
+            subtitle: i18n.t('settings.subtitle', 'Personalize the app experience.'),
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        SfPanelCard(
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(child: Icon(Icons.person_rounded)),
+                title: Text(user['name']?.toString() ?? widget.userName),
+                subtitle: Text(user['email']?.toString() ?? widget.userEmail),
+              ),
+              const Divider(height: 18),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.dark_mode_rounded),
+                title: Text(i18n.t('settings.darkMode', 'Dark mode')),
+                value: isDark,
+                onChanged: (_) => unawaited(widget.appState.toggleThemeMode()),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.language_rounded),
+                title: Text(i18n.t('settings.language', 'Language')),
+                subtitle: Text(isArabic ? 'العربية' : 'English'),
+                trailing: OutlinedButton(
+                  onPressed: () => unawaited(widget.appState.toggleLocale()),
+                  child: Text(isArabic ? 'EN' : 'AR'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SfPanelCard(
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.link_rounded),
+                title: Text(i18n.t('settings.apiBaseUrl', 'API Base URL')),
+                subtitle: Text(AppConfig.baseUri.toString()),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.security_rounded),
+                title: Text(i18n.t('settings.authMode', 'Auth mode')),
+                subtitle: Text(i18n.t('settings.authModeValue', 'Bearer token via /api/mobile/login')),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: () async {
+              await widget.onSignOut();
+            },
+            icon: const Icon(Icons.logout_rounded),
+            label: Text(i18n.t('common.signOut', 'Sign out')),
+          ),
+        ),
+      ],
     );
+  }
+
+  IconData _platformIcon(String platformId) {
+    final normalized = platformId.trim().toLowerCase();
+    if (normalized.isEmpty) return Icons.public_rounded;
+    if (normalized.contains('telegram')) return Icons.send_rounded;
+    if (normalized.contains('twitter') || normalized == 'x' || normalized.contains('x.com')) {
+      return Icons.alternate_email_rounded;
+    }
+    if (normalized.contains('youtube')) return Icons.ondemand_video_rounded;
+    if (normalized.contains('tiktok')) return Icons.music_note_rounded;
+    if (normalized.contains('instagram')) return Icons.camera_alt_rounded;
+    if (normalized.contains('facebook')) return Icons.facebook_rounded;
+    if (normalized.contains('linkedin')) return Icons.work_rounded;
+    if (normalized.contains('snap')) return Icons.chat_bubble_rounded;
+    if (normalized.contains('threads')) return Icons.forum_rounded;
+    if (normalized.contains('reddit')) return Icons.forum_rounded;
+    if (normalized.contains('pinterest')) return Icons.push_pin_rounded;
+    return Icons.public_rounded;
+  }
+
+  String _platformLabel(String platformId) {
+    final normalized = platformId.trim().toLowerCase();
+    if (normalized.isEmpty) return 'Unknown';
+    if (normalized.contains('telegram')) return 'Telegram';
+    if (normalized.contains('twitter') || normalized == 'x' || normalized.contains('x.com')) return 'X';
+    if (normalized.contains('youtube')) return 'YouTube';
+    if (normalized.contains('tiktok')) return 'TikTok';
+    if (normalized.contains('instagram')) return 'Instagram';
+    if (normalized.contains('facebook')) return 'Facebook';
+    if (normalized.contains('linkedin')) return 'LinkedIn';
+    if (normalized.contains('snap')) return 'Snapchat';
+    if (normalized.contains('threads')) return 'Threads';
+    if (normalized.contains('reddit')) return 'Reddit';
+    if (normalized.contains('pinterest')) return 'Pinterest';
+    return platformId.trim().isEmpty ? 'Unknown' : platformId.trim();
   }
 
   Color _statusColor(String status) {
