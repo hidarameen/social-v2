@@ -44,6 +44,10 @@ class _LoginScreenState extends State<LoginScreen> {
   String _error = '';
   String _info = '';
 
+  static const _success = Color(0xFF10B981);
+  static const _danger = Color(0xFFEF4444);
+  static const _primary = Color(0xFF6366F1);
+
   @override
   void initState() {
     super.initState();
@@ -176,6 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             _LabeledField(
               label: i18n.t('auth.email', 'Email'),
+              icon: Icons.alternate_email_rounded,
               child: TextFormField(
                 key: const Key('login-email-field'),
                 controller: _emailController,
@@ -184,6 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 textDirection: TextDirection.ltr,
                 decoration: const InputDecoration(
                   hintText: 'you@example.com',
+                  prefixIcon: Icon(Icons.mail_outline_rounded),
                 ),
                 validator: (value) {
                   final v = (value ?? '').trim();
@@ -196,6 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 12),
             _LabeledField(
               label: i18n.t('auth.password', 'Password'),
+              icon: Icons.lock_outline_rounded,
               child: TextFormField(
                 key: const Key('login-password-field'),
                 controller: _passwordController,
@@ -204,6 +211,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 textDirection: TextDirection.ltr,
                 decoration: InputDecoration(
                   hintText: '••••••••',
+                  prefixIcon: const Icon(Icons.password_rounded),
                   suffixIcon: IconButton(
                     onPressed: _busy ? null : () => setState(() => _showPassword = !_showPassword),
                     icon: Icon(_showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded),
@@ -216,34 +224,37 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _rememberMe,
-                    onChanged: _busy ? null : (v) => setState(() => _rememberMe = v == true),
-                    title: Text(i18n.t('auth.rememberMe', 'Remember me'), style: TextStyle(color: muted)),
-                    controlAffinity: ListTileControlAffinity.leading,
+            Container(
+              decoration: BoxDecoration(
+                color: (isDark ? Colors.white : const Color(0xFF0D1422)).withOpacity(0.04),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: fg.withOpacity(0.08)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _rememberMe,
+                      onChanged: _busy ? null : (v) => setState(() => _rememberMe = v == true),
+                      title: Text(i18n.t('auth.rememberMe', 'Remember me'), style: TextStyle(color: muted)),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
                   ),
-                ),
-                TextButton(
-                  onPressed: _busy ? null : widget.onGoToForgotPassword,
-                  child: Text(i18n.t('auth.forgotPassword', 'Forgot password?')),
-                ),
-              ],
+                  TextButton.icon(
+                    onPressed: _busy ? null : widget.onGoToForgotPassword,
+                    icon: const Icon(Icons.help_outline_rounded, size: 16),
+                    label: Text(i18n.t('auth.forgotPassword', 'Forgot password?')),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
             if (_error.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(_error, style: const TextStyle(color: Colors.redAccent)),
-              ),
+              _StatusCard(icon: Icons.error_outline_rounded, text: _error, color: _danger),
             if (_info.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(_info, style: TextStyle(color: fg)),
-              ),
+              _StatusCard(icon: Icons.check_circle_outline_rounded, text: _info, color: _success),
             if (_needsVerification)
               Container(
                 decoration: BoxDecoration(
@@ -286,6 +297,11 @@ class _LoginScreenState extends State<LoginScreen> {
             FilledButton(
               key: const Key('login-submit-button'),
               onPressed: _busy ? null : _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: _busy
@@ -304,6 +320,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 '${i18n.t('auth.noAccount', "Don't have an account?")} ${i18n.t('auth.goToRegister', 'Create one')}',
                 textAlign: TextAlign.center,
               ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                _MetaPill(text: i18n.isArabic ? 'واجهات نظيفة' : 'Clean layouts', icon: Icons.grid_view_rounded, fg: fg),
+                _MetaPill(text: i18n.isArabic ? 'أيقونات حديثة' : 'Modern icons', icon: Icons.interests_rounded, fg: fg),
+                _MetaPill(text: i18n.isArabic ? 'UX أسرع' : 'Faster UX', icon: Icons.speed_rounded, fg: fg),
+              ],
             ),
             const SizedBox(height: 6),
             Text(
@@ -325,20 +352,85 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child});
+  const _LabeledField({required this.label, required this.child, this.icon});
 
   final String label;
   final Widget child;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 16),
+              const SizedBox(width: 6),
+            ],
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
         const SizedBox(height: 6),
         child,
       ],
+    );
+  }
+}
+
+class _StatusCard extends StatelessWidget {
+  const _StatusCard({required this.icon, required this.text, required this.color});
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.24)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: TextStyle(color: color))),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({required this.text, required this.icon, required this.fg});
+
+  final String text;
+  final IconData icon;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: fg.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: fg.withOpacity(0.10)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 6),
+          Text(text, style: TextStyle(fontSize: 11.5, color: fg, fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 }
