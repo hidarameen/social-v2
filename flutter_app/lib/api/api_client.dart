@@ -334,6 +334,55 @@ class ApiClient {
     return _request(method: 'GET', path: '/api/profile', token: token);
   }
 
+  Future<Map<String, dynamic>> updateProfile(
+    String token, {
+    String? name,
+    String? profileImageUrl,
+    String? currentPassword,
+    String? newPassword,
+  }) {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (profileImageUrl != null) body['profileImageUrl'] = profileImageUrl;
+    if (currentPassword != null) body['currentPassword'] = currentPassword;
+    if (newPassword != null) body['newPassword'] = newPassword;
+
+    return _request(
+      method: 'PATCH',
+      path: '/api/profile',
+      token: token,
+      body: body,
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchPlatformCredentials(String token, {String? platformId}) {
+    final query = <String, String>{};
+    final normalized = (platformId ?? '').trim();
+    if (normalized.isNotEmpty) query['platformId'] = normalized;
+    return _request(
+      method: 'GET',
+      path: '/api/platform-credentials',
+      token: token,
+      query: query.isEmpty ? null : query,
+    );
+  }
+
+  Future<Map<String, dynamic>> updatePlatformCredentials(
+    String token, {
+    required String platformId,
+    required Map<String, dynamic> credentials,
+  }) {
+    return _request(
+      method: 'PUT',
+      path: '/api/platform-credentials',
+      token: token,
+      body: <String, dynamic>{
+        'platformId': platformId,
+        'credentials': credentials,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> createTask(
     String token, {
     required Map<String, dynamic> body,

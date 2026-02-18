@@ -75,8 +75,16 @@ class _StateLoaderState extends State<_StateLoader> {
           title: 'SocialFlow',
           debugShowCheckedModeBanner: false,
           themeMode: themeMode,
-          theme: SfTheme.light(),
-          darkTheme: SfTheme.dark(),
+          theme: SfTheme.light(
+            preset: state.themePreset,
+            density: state.density,
+            reducedMotion: state.reducedMotion,
+          ),
+          darkTheme: SfTheme.dark(
+            preset: state.themePreset,
+            density: state.density,
+            reducedMotion: state.reducedMotion,
+          ),
           locale: Locale(state.locale),
           builder: (context, child) {
             return Directionality(
@@ -915,6 +923,27 @@ class _SocialShellState extends State<SocialShell> {
   final Map<String, String> _taskActionState = <String, String>{};
   Timer? _dashboardRefreshTimer;
 
+  // Settings: profile + platform credentials drafts.
+  String _settingsProfileSyncedUserId = '';
+  bool _settingsSavingProfile = false;
+  bool _settingsUpdatingPassword = false;
+  String _settingsProfileError = '';
+  final TextEditingController _settingsNameController = TextEditingController();
+  final TextEditingController _settingsImageUrlController = TextEditingController();
+  final TextEditingController _settingsCurrentPasswordController = TextEditingController();
+  final TextEditingController _settingsNewPasswordController = TextEditingController();
+  final TextEditingController _settingsConfirmPasswordController = TextEditingController();
+
+  String _settingsSelectedPlatform = 'twitter';
+  bool _settingsCredentialsLoading = false;
+  bool _settingsCredentialsSaving = false;
+  String _settingsCredentialsError = '';
+  bool _settingsCredentialsDirty = false;
+  Map<String, Map<String, String>> _settingsCredentialMap = <String, Map<String, String>>{};
+  Map<String, String> _settingsCredentialDraft = <String, String>{};
+  final Map<String, TextEditingController> _settingsCredentialControllers = <String, TextEditingController>{};
+  final Map<String, bool> _settingsRevealSecret = <String, bool>{};
+
   final Map<PanelKind, _PanelState> _panelStates = {
     for (final panel in kPanelSpecs) panel.kind: _PanelState(),
   };
@@ -940,6 +969,14 @@ class _SocialShellState extends State<SocialShell> {
     _dashboardRefreshTimer?.cancel();
     _tasksDebounceTimer?.cancel();
     _tasksSearchController.dispose();
+    _settingsNameController.dispose();
+    _settingsImageUrlController.dispose();
+    _settingsCurrentPasswordController.dispose();
+    _settingsNewPasswordController.dispose();
+    _settingsConfirmPasswordController.dispose();
+    for (final c in _settingsCredentialControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -997,6 +1034,7 @@ class _SocialShellState extends State<SocialShell> {
           break;
         case PanelKind.settings:
           payload = await widget.api.fetchProfile(widget.accessToken);
+          unawaited(_loadSettingsPlatformCredentials());
           break;
       }
 
@@ -1049,6 +1087,274 @@ class _SocialShellState extends State<SocialShell> {
   double _readDouble(dynamic value, {double fallback = 0}) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  void _syncProfileDraft(Map<String, dynamic> user) {
+    final id = user['id']?.toString() ?? '';
+    if (id.trim().isEmpty) return;
+    if (_settingsProfileSyncedUserId == id) return;
+    _settingsProfileSyncedUserId = id;
+    _settingsProfileError = '';
+    _settingsNameController.text = user['name']?.toString() ?? '';
+    _settingsImageUrlController.text = user['profileImageUrl']?.toString() ?? '';
+  }
+
+  static const List<String> _kManagedPlatformIds = <String>[
+    'twitter',
+    'facebook',
+    'instagram',
+    'youtube',
+    'tiktok',
+    'linkedin',
+  ];
+
+  static const Map<String, String> _kPlatformLabels = <String, String>{
+    'twitter': 'Twitter / X',
+    'facebook': 'Facebook',
+    'instagram': 'Instagram',
+    'youtube': 'YouTube',
+    'tiktok': 'TikTok',
+    'linkedin': 'LinkedIn',
+  };
+
+  static const Map<String, List<Map<String, dynamic>>> _kPlatformFields =
+      <String, List<Map<String, dynamic>>>{
+    'twitter': [
+      {'key': 'clientId', 'label': 'OAuth Client ID', 'hint': 'Twitter app client id', 'secret': false},
+      {'key': 'clientSecret', 'label': 'OAuth Client Secret', 'hint': 'Twitter app client secret', 'secret': true},
+      {'key': 'apiKey', 'label': 'API Key (OAuth1)', 'hint': 'Twitter API key', 'secret': false},
+      {'key': 'apiSecret', 'label': 'API Secret (OAuth1)', 'hint': 'Twitter API secret', 'secret': true},
+      {'key': 'accessToken', 'label': 'Access Token (OAuth1)', 'hint': 'Twitter access token', 'secret': true},
+      {'key': 'accessTokenSecret', 'label': 'Access Token Secret (OAuth1)', 'hint': 'Twitter access token secret', 'secret': true},
+      {'key': 'bearerToken', 'label': 'Bearer Token (Streaming)', 'hint': 'Twitter bearer token', 'secret': true},
+      {'key': 'webhookSecret', 'label': 'Webhook Secret', 'hint': 'Twitter webhook/API secret', 'secret': true},
+    ],
+    'facebook': [
+      {'key': 'clientId', 'label': 'App ID / Client ID', 'hint': 'Facebook app id', 'secret': false},
+      {'key': 'clientSecret', 'label': 'App Secret / Client Secret', 'hint': 'Facebook app secret', 'secret': true},
+    ],
+    'instagram': [
+      {'key': 'clientId', 'label': 'Client ID', 'hint': 'Instagram client id', 'secret': false},
+      {'key': 'clientSecret', 'label': 'Client Secret', 'hint': 'Instagram client secret', 'secret': true},
+    ],
+    'youtube': [
+      {'key': 'clientId', 'label': 'Google Client ID', 'hint': 'Google OAuth client id', 'secret': false},
+      {'key': 'clientSecret', 'label': 'Google Client Secret', 'hint': 'Google OAuth client secret', 'secret': true},
+    ],
+    'tiktok': [
+      {'key': 'clientId', 'label': 'Client Key', 'hint': 'TikTok client key', 'secret': false},
+      {'key': 'clientSecret', 'label': 'Client Secret', 'hint': 'TikTok client secret', 'secret': true},
+    ],
+    'linkedin': [
+      {'key': 'clientId', 'label': 'Client ID', 'hint': 'LinkedIn client id', 'secret': false},
+      {'key': 'clientSecret', 'label': 'Client Secret', 'hint': 'LinkedIn client secret', 'secret': true},
+    ],
+  };
+
+  Future<void> _loadSettingsPlatformCredentials({bool force = false}) async {
+    if (_settingsCredentialsLoading) return;
+    if (!force && _settingsCredentialMap.isNotEmpty) return;
+    setState(() {
+      _settingsCredentialsLoading = true;
+      _settingsCredentialsError = '';
+    });
+    try {
+      final payload = await widget.api.fetchPlatformCredentials(widget.accessToken);
+      final raw = payload['credentials'];
+      final map = <String, Map<String, String>>{};
+      if (raw is Map) {
+        for (final entry in raw.entries) {
+          final platformId = entry.key?.toString() ?? '';
+          if (platformId.trim().isEmpty) continue;
+          final value = entry.value;
+          if (value is Map) {
+            map[platformId] = value.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _settingsCredentialMap = map;
+        _settingsCredentialsLoading = false;
+      });
+
+      _setSettingsSelectedPlatform(_settingsSelectedPlatform, allowSetState: false);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _settingsCredentialsLoading = false;
+        _settingsCredentialsError =
+            error is ApiException ? error.message : 'Failed to load platform credentials.';
+      });
+    }
+  }
+
+  void _setSettingsSelectedPlatform(String platformId, {bool allowSetState = true}) {
+    final normalized = platformId.trim().toLowerCase();
+    final next = _kManagedPlatformIds.contains(normalized) ? normalized : 'twitter';
+    if (_settingsSelectedPlatform == next && _settingsCredentialControllers.isNotEmpty) return;
+
+    void apply() {
+      _settingsSelectedPlatform = next;
+      _settingsCredentialsDirty = false;
+      _settingsCredentialDraft = Map<String, String>.from(_settingsCredentialMap[next] ?? const <String, String>{});
+      for (final c in _settingsCredentialControllers.values) {
+        c.dispose();
+      }
+      _settingsCredentialControllers.clear();
+      for (final field in (_kPlatformFields[next] ?? const <Map<String, dynamic>>[])) {
+        final key = field['key']?.toString() ?? '';
+        if (key.isEmpty) continue;
+        _settingsCredentialControllers[key] = TextEditingController(text: _settingsCredentialDraft[key] ?? '');
+      }
+    }
+
+    if (!mounted || !allowSetState) {
+      apply();
+      return;
+    }
+    setState(apply);
+  }
+
+  Future<void> _saveSettingsPlatformCredentials() async {
+    if (_settingsCredentialsSaving) return;
+    final fields = _kPlatformFields[_settingsSelectedPlatform] ?? const <Map<String, dynamic>>[];
+    final payload = <String, dynamic>{};
+    for (final field in fields) {
+      final key = field['key']?.toString() ?? '';
+      if (key.isEmpty) continue;
+      final value = (_settingsCredentialControllers[key]?.text ?? '').trim();
+      if (value.isNotEmpty) payload[key] = value;
+    }
+
+    setState(() {
+      _settingsCredentialsSaving = true;
+      _settingsCredentialsError = '';
+    });
+    try {
+      final res = await widget.api.updatePlatformCredentials(
+        widget.accessToken,
+        platformId: _settingsSelectedPlatform,
+        credentials: payload,
+      );
+      final rawCreds = res['credentials'];
+      final updated = rawCreds is Map
+          ? rawCreds.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
+          : <String, String>{};
+
+      if (!mounted) return;
+      setState(() {
+        _settingsCredentialMap = <String, Map<String, String>>{
+          ..._settingsCredentialMap,
+          _settingsSelectedPlatform: updated,
+        };
+        _settingsCredentialsDirty = false;
+        _settingsCredentialsSaving = false;
+      });
+      _toast('${_kPlatformLabels[_settingsSelectedPlatform] ?? _settingsSelectedPlatform} credentials saved');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _settingsCredentialsSaving = false;
+        _settingsCredentialsError =
+            error is ApiException ? error.message : 'Failed to save credentials.';
+      });
+    }
+  }
+
+  Future<void> _saveSettingsProfile() async {
+    if (_settingsSavingProfile) return;
+    setState(() {
+      _settingsSavingProfile = true;
+      _settingsProfileError = '';
+    });
+
+    try {
+      final name = _settingsNameController.text.trim();
+      final img = _settingsImageUrlController.text.trim();
+      final res = await widget.api.updateProfile(
+        widget.accessToken,
+        name: name.isEmpty ? null : name,
+        profileImageUrl: img.isEmpty ? '' : img,
+      );
+      final user = res['user'] is Map<String, dynamic>
+          ? res['user'] as Map<String, dynamic>
+          : <String, dynamic>{};
+      _syncProfileDraft(user);
+
+      if (!mounted) return;
+      setState(() {
+        _settingsSavingProfile = false;
+      });
+      _toast('Profile saved');
+      unawaited(_loadPanel(PanelKind.settings, force: true));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _settingsSavingProfile = false;
+        _settingsProfileError =
+            error is ApiException ? error.message : 'Failed to save profile.';
+      });
+    }
+  }
+
+  Future<void> _updateSettingsPassword() async {
+    if (_settingsUpdatingPassword) return;
+    final current = _settingsCurrentPasswordController.text;
+    final next = _settingsNewPasswordController.text;
+    final confirm = _settingsConfirmPasswordController.text;
+
+    if (next.trim().length < 8) {
+      setState(() => _settingsProfileError = 'New password must be at least 8 characters.');
+      return;
+    }
+    if (next != confirm) {
+      setState(() => _settingsProfileError = 'Confirm password does not match.');
+      return;
+    }
+
+    setState(() {
+      _settingsUpdatingPassword = true;
+      _settingsProfileError = '';
+    });
+    try {
+      await widget.api.updateProfile(
+        widget.accessToken,
+        currentPassword: current,
+        newPassword: next,
+      );
+      if (!mounted) return;
+      _settingsCurrentPasswordController.clear();
+      _settingsNewPasswordController.clear();
+      _settingsConfirmPasswordController.clear();
+      setState(() {
+        _settingsUpdatingPassword = false;
+      });
+      _toast('Password updated');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _settingsUpdatingPassword = false;
+        _settingsProfileError =
+            error is ApiException ? error.message : 'Failed to update password.';
+      });
+    }
+  }
+
+  void _clearPanelCache() {
+    setState(() {
+      for (final state in _panelStates.values) {
+        state.data = null;
+        state.error = null;
+        state.loading = false;
+      }
+      _settingsCredentialMap = <String, Map<String, String>>{};
+      _settingsCredentialDraft = <String, String>{};
+      _settingsCredentialsError = '';
+      _settingsCredentialsDirty = false;
+    });
+    unawaited(_loadCurrentPanel(force: true));
   }
 
   Future<void> _loadMoreTasks() async {
@@ -1290,9 +1596,11 @@ class _SocialShellState extends State<SocialShell> {
   }
 
   Widget _buildRail(I18n i18n) {
+    final collapsed = widget.appState.sidebarCollapsed;
     return NavigationRail(
       selectedIndex: _selectedIndex,
-      labelType: NavigationRailLabelType.all,
+      extended: !collapsed,
+      labelType: collapsed ? NavigationRailLabelType.selected : NavigationRailLabelType.none,
       onDestinationSelected: (index) => unawaited(_onPanelSelected(index)),
       destinations: kPanelSpecs
           .map(
@@ -1407,15 +1715,29 @@ class _SocialShellState extends State<SocialShell> {
         if (kind == PanelKind.tasks) return _loadTasksPage(reset: true, showPanelLoading: true);
         return _loadPanel(kind, force: true);
       },
-      child: ListView(
-        padding: const EdgeInsets.all(14),
-        children: [
-          if (panelState.loading)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: LinearProgressIndicator(),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.all(SfTokens.pagePadding),
+            sliver: SliverToBoxAdapter(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1120),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (panelState.loading) ...[
+                        const LinearProgressIndicator(),
+                        const SizedBox(height: 12),
+                      ],
+                      builder(data),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          builder(data),
+          ),
         ],
       ),
     );
@@ -1529,35 +1851,38 @@ class _SocialShellState extends State<SocialShell> {
         runSpacing: 12,
         children: [
           SizedBox(
-            width: 260,
-            child: _buildStatCard(
-              title: 'Total Tasks',
+            width: 280,
+            child: SfKpiTile(
+              label: i18n.t('dashboard.kpi.totalTasks', 'Total tasks'),
               value: '$totalTasks',
               icon: Icons.task_rounded,
             ),
           ),
           SizedBox(
-            width: 260,
-            child: _buildStatCard(
-              title: 'Active Tasks',
+            width: 280,
+            child: SfKpiTile(
+              label: i18n.t('dashboard.kpi.activeTasks', 'Active tasks'),
               value: '$activeTasks',
               icon: Icons.play_circle_fill_rounded,
+              tone: Theme.of(context).colorScheme.primary,
             ),
           ),
           SizedBox(
-            width: 260,
-            child: _buildStatCard(
-              title: 'Connected Accounts',
+            width: 280,
+            child: SfKpiTile(
+              label: i18n.t('dashboard.kpi.connectedAccounts', 'Connected accounts'),
               value: '$totalAccounts',
               icon: Icons.groups_rounded,
+              tone: Theme.of(context).colorScheme.secondary,
             ),
           ),
           SizedBox(
-            width: 260,
-            child: _buildStatCard(
-              title: 'Execution Success',
+            width: 280,
+            child: SfKpiTile(
+              label: i18n.t('dashboard.kpi.executionSuccess', 'Execution success'),
               value: '$successRate%',
               icon: Icons.query_stats_rounded,
+              tone: Colors.green.shade700,
             ),
           ),
         ],
@@ -1566,81 +1891,77 @@ class _SocialShellState extends State<SocialShell> {
 
     Widget dashboardHeader() {
       final colorScheme = Theme.of(context).colorScheme;
-      return Card(
-        elevation: 0,
-        color: colorScheme.surface.withAlpha((0.55 * 255).round()),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              pill(
-                i18n.t('dashboard.liveOps', 'Live Operations'),
-                icon: Icons.bolt_rounded,
+      return SfPanelCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            pill(
+              i18n.t('dashboard.liveOps', 'Live Operations'),
+              icon: Icons.bolt_rounded,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              i18n.t('dashboard.title', 'SocialFlow Dashboard'),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              i18n.t(
+                'dashboard.subtitle',
+                'Unified control center for tasks, accounts, executions, and operational health.',
               ),
-              const SizedBox(height: 10),
-              Text(
-                i18n.t('dashboard.title', 'SocialFlow Dashboard'),
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                i18n.t(
-                  'dashboard.subtitle',
-                  'Unified control center for tasks, accounts, executions, and operational health.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                pill('$activeTasks ${i18n.t('dashboard.kpi.active', 'active')}'),
+                pill(
+                  '$pausedTasks ${i18n.t('dashboard.kpi.paused', 'paused')}',
+                  bg: colorScheme.secondary.withAlpha((0.16 * 255).round()),
+                  fg: colorScheme.secondary,
                 ),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  pill('$activeTasks ${i18n.t('dashboard.kpi.active', 'active')}'),
+                pill(
+                  '$errorTasks ${i18n.t('dashboard.kpi.errors', 'errors')}',
+                  bg: colorScheme.error.withAlpha((0.12 * 255).round()),
+                  fg: colorScheme.error,
+                ),
+                pill('$successRate% ${i18n.t('dashboard.kpi.successRate', 'success rate')}'),
+                if (hasAuthWarnings)
                   pill(
-                    '$pausedTasks ${i18n.t('dashboard.kpi.paused', 'paused')}',
-                    bg: colorScheme.secondary.withAlpha((0.16 * 255).round()),
-                    fg: colorScheme.secondary,
+                    i18n.t('dashboard.kpi.oauthAttention', 'OAuth attention needed'),
+                    bg: Colors.orange.shade700.withAlpha((0.18 * 255).round()),
+                    fg: Colors.orange.shade700,
+                    icon: Icons.shield_rounded,
                   ),
-                  pill(
-                    '$errorTasks ${i18n.t('dashboard.kpi.errors', 'errors')}',
-                    bg: colorScheme.error.withAlpha((0.12 * 255).round()),
-                    fg: colorScheme.error,
-                  ),
-                  pill('$successRate% ${i18n.t('dashboard.kpi.successRate', 'success rate')}'),
-                  if (hasAuthWarnings)
-                    pill(
-                      i18n.t('dashboard.kpi.oauthAttention', 'OAuth attention needed'),
-                      bg: Colors.orange.shade700.withAlpha((0.18 * 255).round()),
-                      fg: Colors.orange.shade700,
-                      icon: Icons.shield_rounded,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => unawaited(_loadPanel(PanelKind.dashboard, force: true)),
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: Text(i18n.t('common.refresh', 'Refresh')),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => unawaited(_onPanelSelected(kPanelSpecs.indexWhere((p) => p.kind == PanelKind.accounts))),
-                    icon: const Icon(Icons.groups_rounded),
-                    label: Text(i18n.t('dashboard.actions.connectAccount', 'Connect Account')),
-                  ),
-                  FilledButton.icon(
-                    onPressed: () async => _openCreateTaskSheet(),
-                    icon: const Icon(Icons.add_rounded),
-                    label: Text(i18n.t('dashboard.actions.createTask', 'Create New Task')),
-                  ),
-                ],
-              ),
-            ],
-          ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => unawaited(_loadPanel(PanelKind.dashboard, force: true)),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: Text(i18n.t('common.refresh', 'Refresh')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => unawaited(_onPanelSelected(kPanelSpecs.indexWhere((p) => p.kind == PanelKind.accounts))),
+                  icon: const Icon(Icons.groups_rounded),
+                  label: Text(i18n.t('dashboard.actions.connectAccount', 'Connect Account')),
+                ),
+                FilledButton.icon(
+                  onPressed: () async => _openCreateTaskSheet(),
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text(i18n.t('dashboard.actions.createTask', 'Create New Task')),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     }
@@ -2291,43 +2612,41 @@ class _SocialShellState extends State<SocialShell> {
     }
 
     Widget emptyWorkspaceCard() {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                i18n.t('dashboard.empty.title', 'Workspace is ready'),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-                textAlign: TextAlign.center,
+      return SfPanelCard(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              i18n.t('dashboard.empty.title', 'Workspace is ready'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              i18n.t(
+                'dashboard.empty.subtitle',
+                'Connect your first account and create your first automation to see live dashboard insights.',
               ),
-              const SizedBox(height: 8),
-              Text(
-                i18n.t(
-                  'dashboard.empty.subtitle',
-                  'Connect your first account and create your first automation to see live dashboard insights.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton(
+                  onPressed: () => unawaited(_onPanelSelected(kPanelSpecs.indexWhere((p) => p.kind == PanelKind.accounts))),
+                  child: Text(i18n.t('dashboard.empty.connect', 'Connect Account')),
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                alignment: WrapAlignment.center,
-                children: [
-                  OutlinedButton(
-                    onPressed: () => unawaited(_onPanelSelected(kPanelSpecs.indexWhere((p) => p.kind == PanelKind.accounts))),
-                    child: Text(i18n.t('dashboard.empty.connect', 'Connect Account')),
-                  ),
-                  FilledButton(
-                    onPressed: () => unawaited(_onPanelSelected(kPanelSpecs.indexWhere((p) => p.kind == PanelKind.tasks))),
-                    child: Text(i18n.t('dashboard.empty.create', 'Create First Task')),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                FilledButton(
+                  onPressed: () => unawaited(_onPanelSelected(kPanelSpecs.indexWhere((p) => p.kind == PanelKind.tasks))),
+                  child: Text(i18n.t('dashboard.empty.create', 'Create First Task')),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     }
@@ -3544,6 +3863,650 @@ class _SocialShellState extends State<SocialShell> {
 
     final isDark = widget.appState.themeMode == AppThemeMode.dark;
     final isArabic = widget.appState.locale == 'ar';
+    final scheme = Theme.of(context).colorScheme;
+
+    final profileName = user['name']?.toString() ?? widget.userName;
+    final profileEmail = user['email']?.toString() ?? widget.userEmail;
+    final profileImageUrl = user['profileImageUrl']?.toString() ?? '';
+
+    _syncProfileDraft(user);
+
+    final presetOptions = <Map<String, dynamic>>[
+      {
+        'id': 'orbit',
+        'name': 'Orbit',
+        'desc': i18n.t('settings.preset.orbit', 'Formal enterprise palette.'),
+        'swatches': const <Color>[Color(0xFF0F62FE), Color(0xFF0052CC), Color(0xFF57606A)],
+      },
+      {
+        'id': 'graphite',
+        'name': 'Graphite',
+        'desc': i18n.t('settings.preset.graphite', 'Minimal neutral scheme with subtle accents.'),
+        'swatches': const <Color>[Color(0xFF667086), Color(0xFF7F8EA4), Color(0xFFA6B0C2)],
+      },
+      {
+        'id': 'sunrise',
+        'name': 'Sunrise',
+        'desc': i18n.t('settings.preset.sunrise', 'Warm editorial palette with high contrast.'),
+        'swatches': const <Color>[Color(0xFFE57A39), Color(0xFFEDB84C), Color(0xFF46B8A8)],
+      },
+      {
+        'id': 'nord',
+        'name': 'Nord',
+        'desc': i18n.t('settings.preset.nord', 'Cool arctic blue-gray with clean contrast.'),
+        'swatches': const <Color>[Color(0xFF5E81AC), Color(0xFF88C0D0), Color(0xFF81A1C1)],
+      },
+      {
+        'id': 'ocean',
+        'name': 'Ocean',
+        'desc': i18n.t('settings.preset.ocean', 'Airy blue-gray background with frost surfaces.'),
+        'swatches': const <Color>[Color(0xFFEEF3F8), Color(0xFFF8F8FA), Color(0xFF2F84D4)],
+      },
+      {
+        'id': 'warmlux',
+        'name': 'Warm Luxe',
+        'desc': i18n.t('settings.preset.warmlux', 'Warm corporate beige with golden accents.'),
+        'swatches': const <Color>[Color(0xFFE9E6DF), Color(0xFFE5B73B), Color(0xFF2C2C2C)],
+      },
+    ];
+
+    Widget toggleRow({
+      required String title,
+      required String subtitle,
+      required bool value,
+      required ValueChanged<bool> onChanged,
+      required IconData icon,
+    }) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.outline.withOpacity(isDark ? 0.65 : 0.70)),
+          color: scheme.surface.withOpacity(isDark ? 0.35 : 0.55),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: scheme.primary.withOpacity(isDark ? 0.18 : 0.10),
+                border: Border.all(color: scheme.primary.withOpacity(isDark ? 0.26 : 0.18)),
+              ),
+              child: Icon(icon, color: scheme.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget presetCard(Map<String, dynamic> opt, {required bool selected}) {
+      final swatches = (opt['swatches'] as List).cast<Color>();
+      final border = selected
+          ? scheme.primary.withOpacity(isDark ? 0.55 : 0.50)
+          : scheme.outline.withOpacity(isDark ? 0.65 : 0.70);
+
+      return InkWell(
+        onTap: () => unawaited(widget.appState.setThemePreset(opt['id']?.toString() ?? 'orbit')),
+        borderRadius: BorderRadius.circular(18),
+        child: AnimatedContainer(
+          duration: widget.appState.reducedMotion ? Duration.zero : const Duration(milliseconds: 180),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: border, width: selected ? 1.4 : 1.0),
+            color: selected
+                ? scheme.primary.withOpacity(isDark ? 0.14 : 0.10)
+                : scheme.surface.withOpacity(isDark ? 0.35 : 0.55),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      opt['name']?.toString() ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  if (selected)
+                    SfBadge(
+                      i18n.t('settings.active', 'Active'),
+                      tone: scheme.primary,
+                      icon: Icons.check_rounded,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  for (final c in swatches) ...[
+                    Container(
+                      width: 14,
+                      height: 14,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: c,
+                        border: Border.all(color: scheme.outline.withOpacity(isDark ? 0.55 : 0.70)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                opt['desc']?.toString() ?? '',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget credentialsCard() {
+      final platformLabel = _kPlatformLabels[_settingsSelectedPlatform] ?? _settingsSelectedPlatform;
+      final fields = _kPlatformFields[_settingsSelectedPlatform] ?? const <Map<String, dynamic>>[];
+
+      Widget content;
+      if (_settingsCredentialsLoading) {
+        content = Text(i18n.t('settings.loadingCredentials', 'Loading credentials...'));
+      } else if (_settingsCredentialsError.trim().isNotEmpty) {
+        content = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _settingsCredentialsError,
+              style: TextStyle(color: scheme.error, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => unawaited(_loadSettingsPlatformCredentials(force: true)),
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text(i18n.t('common.retry', 'Retry')),
+            ),
+          ],
+        );
+      } else {
+        content = LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 760;
+            final width = wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: fields.map((field) {
+                final key = field['key']?.toString() ?? '';
+                final label = field['label']?.toString() ?? key;
+                final hint = field['hint']?.toString() ?? '';
+                final secret = field['secret'] == true;
+                final revealKey = '${_settingsSelectedPlatform}.$key';
+                final revealed = _settingsRevealSecret[revealKey] == true;
+
+                final controller = _settingsCredentialControllers[key] ?? TextEditingController();
+                _settingsCredentialControllers[key] = controller;
+
+                return SizedBox(
+                  width: width,
+                  child: TextField(
+                    controller: controller,
+                    obscureText: secret && !revealed,
+                    onChanged: (_) => setState(() => _settingsCredentialsDirty = true),
+                    decoration: InputDecoration(
+                      labelText: label,
+                      hintText: hint,
+                      suffixIcon: secret
+                          ? IconButton(
+                              tooltip: revealed ? 'Hide' : 'Show',
+                              onPressed: () => setState(() {
+                                _settingsRevealSecret[revealKey] = !revealed;
+                              }),
+                              icon: Icon(
+                                revealed ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        );
+      }
+
+      return SfPanelCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SfSectionHeader(
+              title: i18n.t('settings.platformCredentials', 'Platform API Credentials'),
+              subtitle: i18n.t(
+                'settings.platformCredentials.subtitle',
+                'OAuth and API keys are stored per-user on the server. Keep them private.',
+              ),
+              trailing: IconButton(
+                tooltip: i18n.t('common.refresh', 'Refresh'),
+                onPressed: () => unawaited(_loadSettingsPlatformCredentials(force: true)),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _settingsSelectedPlatform,
+              decoration: InputDecoration(
+                labelText: i18n.t('settings.platform', 'Platform'),
+                prefixIcon: const Icon(Icons.key_rounded),
+              ),
+              items: _kManagedPlatformIds
+                  .map((id) => DropdownMenuItem(value: id, child: Text(_kPlatformLabels[id] ?? id)))
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                _setSettingsSelectedPlatform(value);
+              },
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '${i18n.t('settings.selected', 'Selected')}: $platformLabel',
+              style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            content,
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: (_settingsCredentialsLoading || _settingsCredentialsSaving)
+                      ? null
+                      : () => unawaited(_saveSettingsPlatformCredentials()),
+                  icon: _settingsCredentialsSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_rounded),
+                  label: Text(_settingsCredentialsSaving
+                      ? i18n.t('settings.saving', 'Saving...')
+                      : i18n.t('settings.saveCredentials', 'Save Platform Credentials')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _settingsCredentialsDirty
+                      ? () => _setSettingsSelectedPlatform(_settingsSelectedPlatform)
+                      : null,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: Text(i18n.t('settings.resetDraft', 'Reset draft')),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget profileCard() {
+      final image = _settingsImageUrlController.text.trim().isNotEmpty
+          ? _settingsImageUrlController.text.trim()
+          : profileImageUrl;
+
+      return SfPanelCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SfSectionHeader(
+              title: i18n.t('settings.profile', 'Account & Profile'),
+              subtitle: i18n.t(
+                'settings.profile.subtitle',
+                'Update your name, profile image, and password.',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: scheme.surfaceVariant,
+                  foregroundImage: image.trim().isEmpty ? null : NetworkImage(image),
+                  child: const Icon(Icons.person_rounded),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(profileName, style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
+                      Text(profileEmail, style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (_settingsProfileError.trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(_settingsProfileError, style: TextStyle(color: scheme.error, fontWeight: FontWeight.w800)),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _settingsNameController,
+              decoration: InputDecoration(
+                labelText: i18n.t('settings.name', 'Name'),
+                prefixIcon: const Icon(Icons.badge_rounded),
+                hintText: i18n.t('settings.nameHint', 'Your display name'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _settingsImageUrlController,
+              decoration: InputDecoration(
+                labelText: i18n.t('settings.profileImageUrl', 'Profile image URL'),
+                prefixIcon: const Icon(Icons.image_rounded),
+                hintText: i18n.t('settings.profileImageUrlHint', 'https://...'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _settingsSavingProfile ? null : () => unawaited(_saveSettingsProfile()),
+              icon: _settingsSavingProfile
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.save_rounded),
+              label: Text(_settingsSavingProfile ? i18n.t('settings.saving', 'Saving...') : i18n.t('settings.saveProfile', 'Save Profile')),
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            Text(
+              i18n.t('settings.changePassword', 'Change Password'),
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _settingsCurrentPasswordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: i18n.t('settings.currentPassword', 'Current password'),
+                prefixIcon: const Icon(Icons.lock_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _settingsNewPasswordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: i18n.t('settings.newPassword', 'New password'),
+                prefixIcon: const Icon(Icons.lock_reset_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _settingsConfirmPasswordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: i18n.t('settings.confirmPassword', 'Confirm new password'),
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _settingsUpdatingPassword ? null : () => unawaited(_updateSettingsPassword()),
+              icon: _settingsUpdatingPassword
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.check_rounded),
+              label: Text(_settingsUpdatingPassword ? i18n.t('settings.updating', 'Updating...') : i18n.t('settings.updatePassword', 'Update Password')),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget appearanceCard() {
+      return SfPanelCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SfSectionHeader(
+              title: i18n.t('settings.appearance', 'Appearance'),
+              subtitle: i18n.t('settings.appearance.subtitle', 'Theme mode and preset palette (mirrors web presets).'),
+            ),
+            const SizedBox(height: 12),
+            toggleRow(
+              title: i18n.t('settings.darkMode', 'Dark mode'),
+              subtitle: i18n.t('settings.darkMode.subtitle', 'Use the dark color scheme across the app.'),
+              value: isDark,
+              onChanged: (_) => unawaited(widget.appState.toggleThemeMode()),
+              icon: Icons.dark_mode_rounded,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              i18n.t('settings.themePreset', 'Theme preset'),
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cols = constraints.maxWidth >= 980 ? 3 : (constraints.maxWidth >= 620 ? 2 : 1);
+                final w = (constraints.maxWidth - ((cols - 1) * 12)) / cols;
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: presetOptions.map((opt) {
+                    final selected = widget.appState.themePreset == opt['id'];
+                    return SizedBox(width: w, child: presetCard(opt, selected: selected));
+                  }).toList(),
+                );
+              },
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget experienceCard() {
+      return SfPanelCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SfSectionHeader(
+              title: i18n.t('settings.experience', 'Workspace Experience'),
+              subtitle: i18n.t('settings.experience.subtitle', 'Motion, navigation density, and ergonomics.'),
+            ),
+            const SizedBox(height: 12),
+            toggleRow(
+              title: i18n.t('settings.reducedMotion', 'Reduced motion'),
+              subtitle: i18n.t('settings.reducedMotion.subtitle', 'Minimize animation and transition effects.'),
+              value: widget.appState.reducedMotion,
+              onChanged: (v) => unawaited(widget.appState.setReducedMotion(v)),
+              icon: Icons.motion_photos_off_rounded,
+            ),
+            const SizedBox(height: 12),
+            toggleRow(
+              title: i18n.t('settings.compactNav', 'Collapsed sidebar by default'),
+              subtitle: i18n.t('settings.compactNav.subtitle', 'Keep navigation compact on large screens.'),
+              value: widget.appState.sidebarCollapsed,
+              onChanged: (v) => unawaited(widget.appState.setSidebarCollapsed(v)),
+              icon: Icons.space_dashboard_outlined,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: widget.appState.density,
+              decoration: InputDecoration(
+                labelText: i18n.t('settings.density', 'Density'),
+                prefixIcon: const Icon(Icons.format_line_spacing_rounded),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'comfortable', child: Text('Comfortable')),
+                DropdownMenuItem(value: 'compact', child: Text('Compact')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                unawaited(widget.appState.setDensity(value));
+              },
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget notificationsCard() {
+      return SfPanelCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SfSectionHeader(
+              title: i18n.t('settings.notifications', 'Notifications'),
+              subtitle: i18n.t('settings.notifications.subtitle', 'Local preferences for alerts and notices.'),
+            ),
+            const SizedBox(height: 12),
+            toggleRow(
+              title: i18n.t('settings.notifications.success', 'Email on success'),
+              subtitle: i18n.t('settings.notifications.success.subtitle', 'Get notified when tasks complete successfully.'),
+              value: widget.appState.emailOnSuccess,
+              onChanged: (v) => unawaited(widget.appState.setNotifications(emailOnSuccessValue: v)),
+              icon: Icons.mark_email_read_rounded,
+            ),
+            const SizedBox(height: 12),
+            toggleRow(
+              title: i18n.t('settings.notifications.error', 'Email on error'),
+              subtitle: i18n.t('settings.notifications.error.subtitle', 'Get notified when tasks fail.'),
+              value: widget.appState.emailOnError,
+              onChanged: (v) => unawaited(widget.appState.setNotifications(emailOnErrorValue: v)),
+              icon: Icons.mark_email_unread_rounded,
+            ),
+            const SizedBox(height: 12),
+            toggleRow(
+              title: i18n.t('settings.notifications.push', 'Push notifications'),
+              subtitle: i18n.t('settings.notifications.push.subtitle', 'Receive push notifications (if enabled).'),
+              value: widget.appState.pushNotifications,
+              onChanged: (v) => unawaited(widget.appState.setNotifications(pushNotificationsValue: v)),
+              icon: Icons.notifications_active_rounded,
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget privacyCard() {
+      return SfPanelCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SfSectionHeader(
+              title: i18n.t('settings.privacy', 'Privacy & Data'),
+              subtitle: i18n.t('settings.privacy.subtitle', 'Control analytics and error sharing.'),
+            ),
+            const SizedBox(height: 12),
+            toggleRow(
+              title: i18n.t('settings.privacy.analytics', 'Usage analytics'),
+              subtitle: i18n.t('settings.privacy.analytics.subtitle', 'Help improve the product by sharing anonymous usage data.'),
+              value: widget.appState.allowAnalytics,
+              onChanged: (v) => unawaited(widget.appState.setPrivacy(allowAnalyticsValue: v)),
+              icon: Icons.analytics_rounded,
+            ),
+            const SizedBox(height: 12),
+            toggleRow(
+              title: i18n.t('settings.privacy.errors', 'Share error logs'),
+              subtitle: i18n.t('settings.privacy.errors.subtitle', 'Share error logs to help debug issues faster.'),
+              value: widget.appState.shareErrorLogs,
+              onChanged: (v) => unawaited(widget.appState.setPrivacy(shareErrorLogsValue: v)),
+              icon: Icons.bug_report_rounded,
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget systemCard() {
+      return SfPanelCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SfSectionHeader(
+              title: i18n.t('settings.system', 'System'),
+              subtitle: i18n.t('settings.system.subtitle', 'Diagnostics and storage actions.'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: widget.appState.timezone,
+              decoration: InputDecoration(
+                labelText: i18n.t('settings.timezone', 'Timezone'),
+                prefixIcon: const Icon(Icons.public_rounded),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'UTC', child: Text('UTC')),
+                DropdownMenuItem(value: 'EST', child: Text('EST (Eastern)')),
+                DropdownMenuItem(value: 'CST', child: Text('CST (Central)')),
+                DropdownMenuItem(value: 'MST', child: Text('MST (Mountain)')),
+                DropdownMenuItem(value: 'PST', child: Text('PST (Pacific)')),
+                DropdownMenuItem(value: 'GMT', child: Text('GMT')),
+                DropdownMenuItem(value: 'CET', child: Text('CET')),
+                DropdownMenuItem(value: 'IST', child: Text('IST')),
+                DropdownMenuItem(value: 'JST', child: Text('JST')),
+                DropdownMenuItem(value: 'AEST', child: Text('AEST')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                unawaited(widget.appState.setTimezone(value));
+              },
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.link_rounded),
+              title: Text(i18n.t('settings.apiBaseUrl', 'API Base URL')),
+              subtitle: Text(AppConfig.baseUri.toString()),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.security_rounded),
+              title: Text(i18n.t('settings.authMode', 'Auth mode')),
+              subtitle: Text(i18n.t('settings.authModeValue', 'Bearer token via /api/mobile/login')),
+            ),
+            const Divider(height: 18),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _exportTasksCsv,
+                  icon: const Icon(Icons.download_rounded),
+                  label: Text(i18n.t('settings.exportData', 'Export Data')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _clearPanelCache,
+                  icon: const Icon(Icons.cleaning_services_rounded),
+                  label: Text(i18n.t('settings.clearCache', 'Clear Cache')),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3551,69 +4514,39 @@ class _SocialShellState extends State<SocialShell> {
         SfPanelCard(
           child: SfSectionHeader(
             title: i18n.t('settings.title', 'Settings'),
-            subtitle: i18n.t('settings.subtitle', 'Personalize the app experience.'),
+            subtitle: i18n.t(
+              'settings.subtitle',
+              'Manage your account, themes, and platform API credentials.',
+            ),
           ),
         ),
         const SizedBox(height: 12),
-        SfPanelCard(
-          child: Column(
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(child: Icon(Icons.person_rounded)),
-                title: Text(user['name']?.toString() ?? widget.userName),
-                subtitle: Text(user['email']?.toString() ?? widget.userEmail),
-              ),
-              const Divider(height: 18),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.dark_mode_rounded),
-                title: Text(i18n.t('settings.darkMode', 'Dark mode')),
-                value: isDark,
-                onChanged: (_) => unawaited(widget.appState.toggleThemeMode()),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.language_rounded),
-                title: Text(i18n.t('settings.language', 'Language')),
-                subtitle: Text(isArabic ? 'العربية' : 'English'),
-                trailing: OutlinedButton(
-                  onPressed: () => unawaited(widget.appState.toggleLocale()),
-                  child: Text(isArabic ? 'EN' : 'AR'),
-                ),
-              ),
-            ],
-          ),
-        ),
+        credentialsCard(),
         const SizedBox(height: 12),
-        SfPanelCard(
-          child: Column(
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.link_rounded),
-                title: Text(i18n.t('settings.apiBaseUrl', 'API Base URL')),
-                subtitle: Text(AppConfig.baseUri.toString()),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.security_rounded),
-                title: Text(i18n.t('settings.authMode', 'Auth mode')),
-                subtitle: Text(i18n.t('settings.authModeValue', 'Bearer token via /api/mobile/login')),
-              ),
-            ],
-          ),
-        ),
+        profileCard(),
         const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: () async {
-              await widget.onSignOut();
-            },
-            icon: const Icon(Icons.logout_rounded),
-            label: Text(i18n.t('common.signOut', 'Sign out')),
-          ),
+        appearanceCard(),
+        const SizedBox(height: 12),
+        experienceCard(),
+        const SizedBox(height: 12),
+        notificationsCard(),
+        const SizedBox(height: 12),
+        privacyCard(),
+        const SizedBox(height: 12),
+        systemCard(),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FilledButton.icon(
+              onPressed: () async {
+                await widget.onSignOut();
+              },
+              icon: const Icon(Icons.logout_rounded),
+              label: Text(i18n.t('common.signOut', 'Sign out')),
+            ),
+          ],
         ),
       ],
     );
@@ -3719,7 +4652,9 @@ class _SocialShellState extends State<SocialShell> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 1024;
+        // Material guidance: switch to rail for larger screens/tablets.
+        final wide = constraints.maxWidth >= 840;
+        final reducedMotion = widget.appState.reducedMotion;
 
         return Scaffold(
           extendBodyBehindAppBar: true,
@@ -3749,58 +4684,40 @@ class _SocialShellState extends State<SocialShell> {
             ],
           ),
           drawer: wide ? null : _buildDrawer(i18n),
-          body: Stack(
-            children: [
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: SfTheme.background(isDark: isDark),
-                ),
-              ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: const Alignment(0.85, -0.8),
-                      radius: 1.25,
-                      colors: [
-                        scheme.primary.withOpacity(isDark ? 0.18 : 0.10),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              SafeArea(
-                child: Row(
-                  children: [
-                    if (wide) _buildRail(i18n),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        transitionBuilder: (child, anim) {
-                          return FadeTransition(
-                            opacity: anim,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0.02, 0),
-                                end: Offset.zero,
-                              ).animate(anim),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: KeyedSubtree(
-                          key: ValueKey<PanelKind>(_currentKind),
-                          child: _buildCurrentPanel(),
-                        ),
+          body: SfAppBackground(
+            child: SafeArea(
+              child: Row(
+                children: [
+                  if (wide) _buildRail(i18n),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, anim) {
+                        if (reducedMotion) {
+                          return FadeTransition(opacity: anim, child: child);
+                        }
+                        return FadeTransition(
+                          opacity: anim,
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0.02, 0),
+                              end: Offset.zero,
+                            ).animate(anim),
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: KeyedSubtree(
+                        key: ValueKey<PanelKind>(_currentKind),
+                        child: _buildCurrentPanel(),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
           bottomNavigationBar: wide ? null : _buildBottomNavigation(i18n),
         );
