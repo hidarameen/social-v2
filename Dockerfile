@@ -60,6 +60,21 @@ RUN flutter build apk --release --dart-define=APP_URL="${APP_URL}"
 RUN flutter build web --release --dart-define=APP_URL="${APP_URL}"
 RUN (cd android && ./gradlew --stop || true) && rm -rf /root/.gradle /src/app/.gradle || true
 
+# A lightweight alternative stage for environments that cannot build Android
+# artifacts due to limited build-time disk/quota (common on managed CI builders).
+#
+# Usage (e.g. Northflank build args):
+#   APK_STAGE=apk_stub
+FROM alpine:3.20 AS apk_stub
+WORKDIR /src/app
+RUN mkdir -p build/app/outputs/flutter-apk build/web \
+  && printf '%s\n' 'Flutter web build disabled for this image.' > build/web/index.html \
+  && printf '%s\n' 'APK build disabled for this image.' > build/app/outputs/flutter-apk/app-release.apk
+
+# Select which stage provides APK + Flutter web artifacts.
+ARG APK_STAGE=apk_builder
+FROM ${APK_STAGE} AS apk_artifacts
+
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -119,8 +134,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs --chmod=0755 /app/bin/yt-dlp ./bin/yt-dlp
 COPY --from=builder --chown=nextjs:nodejs --chmod=0755 /app/bin/ffmpeg ./bin/ffmpeg
-COPY --from=apk_builder --chown=nextjs:nodejs /src/app/build/app/outputs/flutter-apk/app-release.apk ./public/app-release.apk
-COPY --from=apk_builder --chown=nextjs:nodejs /src/app/build/web ./public/flutter-web
+COPY --from=apk_artifacts --chown=nextjs:nodejs /src/app/build/app/outputs/flutter-apk/app-release.apk ./public/app-release.apk
+COPY --from=apk_artifacts --chown=nextjs:nodejs /src/app/build/web ./public/flutter-web
 
 USER nextjs
 
