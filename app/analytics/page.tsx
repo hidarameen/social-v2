@@ -163,7 +163,7 @@ export default function AnalyticsPage() {
         </div>
 
         {isInitialLoading ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5 mb-8">
+          <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
             {[0, 1, 2, 3, 4].map((idx) => (
               <Card key={idx}>
                 <CardContent className="pt-6">
@@ -176,7 +176,7 @@ export default function AnalyticsPage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5 mb-8">
+          <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
             <StatCard
               title="Total Executions"
               value={stats.totalExecutions}

@@ -389,7 +389,7 @@ function TasksPageContent() {
             <CardTitle>Task Search & Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
               <div className="relative">
                 <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -501,7 +501,7 @@ function TasksPageContent() {
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               {filteredTasks.map((task) => {
                 const normalizedStatus = normalizeTaskStatus(task.status);
                 const statusMeta = STATUS_META[normalizedStatus] || STATUS_META.paused;

@@ -436,7 +436,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-              <Card className="xl:col-span-8">
+              <Card className="xl:col-span-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center justify-between gap-2 text-lg font-semibold">
                     <span>Recent Automations</span>
@@ -558,7 +558,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card className="xl:col-span-4">
+              <Card className="xl:col-span-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg font-semibold">System Health</CardTitle>
                 </CardHeader>
@@ -625,7 +625,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-              <Card className="xl:col-span-7">
+              <Card className="xl:col-span-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center justify-between text-lg font-semibold">
                     <span>Recent Executions</span>
@@ -680,7 +680,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card className="xl:col-span-5">
+              <Card className="xl:col-span-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg font-semibold">Top Performing Tasks</CardTitle>
                 </CardHeader>
