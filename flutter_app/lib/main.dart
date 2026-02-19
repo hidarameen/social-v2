@@ -7996,300 +7996,364 @@ class _TaskComposerSheetState extends State<_TaskComposerSheet> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final media = MediaQuery.of(context);
+    final bottomInset = media.viewInsets.bottom;
+    final sheetHeight =
+        (media.size.height * 0.90).clamp(460.0, 920.0).toDouble();
 
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 8,
-          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: SingleChildScrollView(
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: SizedBox(
+          height: sheetHeight,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _isEdit
-                          ? (widget.i18n.isArabic ? 'تعديل مهمة' : 'Edit Task')
-                          : (widget.i18n.isArabic
-                              ? 'إنشاء مهمة'
-                              : 'Create Task'),
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w900),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _isEdit
+                            ? (widget.i18n.isArabic
+                                ? 'تعديل مهمة'
+                                : 'Edit Task')
+                            : (widget.i18n.isArabic
+                                ? 'إنشاء مهمة'
+                                : 'Create Task'),
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _submitting
+                          ? null
+                          : () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              if (_error.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: Card(
+                    color: scheme.error.withAlpha((0.12 * 255).round()),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline_rounded,
+                              color: scheme.error),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _error,
+                              style: TextStyle(
+                                  color: scheme.error,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  IconButton(
-                    onPressed: _submitting
-                        ? null
-                        : () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (_error.trim().isNotEmpty)
-                Card(
-                  color: scheme.error.withAlpha((0.12 * 255).round()),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
+                ),
+              Expanded(
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.error_outline_rounded, color: scheme.error),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _error,
-                            style: TextStyle(
-                                color: scheme.error,
-                                fontWeight: FontWeight.w700),
+                        TextFormField(
+                          controller: _nameController,
+                          textInputAction: TextInputAction.next,
+                          decoration: InputDecoration(
+                            labelText: widget.i18n.isArabic
+                                ? 'اسم المهمة'
+                                : 'Task name',
+                            prefixIcon: const Icon(Icons.task_alt_rounded),
+                          ),
+                          validator: (value) {
+                            if ((value ?? '').trim().isEmpty) {
+                              return widget.i18n.isArabic
+                                  ? 'اسم المهمة مطلوب.'
+                                  : 'Task name is required.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _descController,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: InputDecoration(
+                            labelText: widget.i18n.isArabic
+                                ? 'الوصف (اختياري)'
+                                : 'Description (optional)',
+                            prefixIcon: const Icon(Icons.notes_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final compact = constraints.maxWidth < 620;
+                            final statusField = DropdownButtonFormField<String>(
+                              initialValue: _status,
+                              decoration: InputDecoration(
+                                labelText:
+                                    widget.i18n.isArabic ? 'الحالة' : 'Status',
+                                prefixIcon: const Icon(Icons.toggle_on_rounded),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'active', child: Text('Active')),
+                                DropdownMenuItem(
+                                    value: 'paused', child: Text('Paused')),
+                                DropdownMenuItem(
+                                    value: 'completed',
+                                    child: Text('Completed')),
+                                DropdownMenuItem(
+                                    value: 'error', child: Text('Error')),
+                              ],
+                              onChanged: _submitting
+                                  ? null
+                                  : (value) {
+                                      if (value == null) return;
+                                      setState(() => _status = value);
+                                    },
+                            );
+                            final contentTypeField =
+                                DropdownButtonFormField<String>(
+                              initialValue: _contentType,
+                              decoration: InputDecoration(
+                                labelText: widget.i18n.isArabic
+                                    ? 'نوع المحتوى'
+                                    : 'Content type',
+                                prefixIcon: const Icon(Icons.article_rounded),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'text', child: Text('Text')),
+                                DropdownMenuItem(
+                                    value: 'image', child: Text('Image')),
+                                DropdownMenuItem(
+                                    value: 'video', child: Text('Video')),
+                                DropdownMenuItem(
+                                    value: 'link', child: Text('Link')),
+                              ],
+                              onChanged: _submitting
+                                  ? null
+                                  : (value) {
+                                      if (value == null) return;
+                                      setState(() => _contentType = value);
+                                    },
+                            );
+
+                            if (compact) {
+                              return Column(
+                                children: [
+                                  statusField,
+                                  const SizedBox(height: 12),
+                                  contentTypeField,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              children: [
+                                Expanded(child: statusField),
+                                const SizedBox(width: 12),
+                                Expanded(child: contentTypeField),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.input_rounded),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        widget.i18n.isArabic
+                                            ? 'حسابات المصدر'
+                                            : 'Source accounts',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800),
+                                      ),
+                                    ),
+                                    Text('${_sourceAccountIds.length}'),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                if (_loadingAccounts)
+                                  const Center(
+                                      child: Padding(
+                                          padding: EdgeInsets.all(10),
+                                          child: CircularProgressIndicator()))
+                                else if (_accounts.isEmpty)
+                                  Text(widget.i18n.isArabic
+                                      ? 'لا توجد حسابات.'
+                                      : 'No accounts found.')
+                                else
+                                  ..._accounts.map((account) {
+                                    final id = account['id']?.toString() ?? '';
+                                    final selected =
+                                        _sourceAccountIds.contains(id);
+                                    return CheckboxListTile(
+                                      value: selected,
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      onChanged: _submitting
+                                          ? null
+                                          : (value) {
+                                              setState(() {
+                                                if (value == true) {
+                                                  _sourceAccountIds.add(id);
+                                                } else {
+                                                  _sourceAccountIds.remove(id);
+                                                }
+                                              });
+                                            },
+                                      secondary: Icon(_platformIcon(
+                                          account['platformId']?.toString() ??
+                                              '')),
+                                      title: Text(_accountLabel(account)),
+                                      subtitle: Text(
+                                        '${account['platformId'] ?? 'unknown'} • @${account['accountUsername'] ?? '-'}',
+                                      ),
+                                    );
+                                  }),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.output_rounded),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        widget.i18n.isArabic
+                                            ? 'حسابات الهدف'
+                                            : 'Target accounts',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800),
+                                      ),
+                                    ),
+                                    Text('${_targetAccountIds.length}'),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                if (_loadingAccounts)
+                                  const Center(
+                                      child: Padding(
+                                          padding: EdgeInsets.all(10),
+                                          child: CircularProgressIndicator()))
+                                else if (_accounts.isEmpty)
+                                  Text(widget.i18n.isArabic
+                                      ? 'لا توجد حسابات.'
+                                      : 'No accounts found.')
+                                else
+                                  ..._accounts.map((account) {
+                                    final id = account['id']?.toString() ?? '';
+                                    final selected =
+                                        _targetAccountIds.contains(id);
+                                    return CheckboxListTile(
+                                      value: selected,
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      onChanged: _submitting
+                                          ? null
+                                          : (value) {
+                                              setState(() {
+                                                if (value == true) {
+                                                  _targetAccountIds.add(id);
+                                                } else {
+                                                  _targetAccountIds.remove(id);
+                                                }
+                                              });
+                                            },
+                                      secondary: Icon(_platformIcon(
+                                          account['platformId']?.toString() ??
+                                              '')),
+                                      title: Text(_accountLabel(account)),
+                                      subtitle: Text(
+                                        '${account['platformId'] ?? 'unknown'} • @${account['accountUsername'] ?? '-'}',
+                                      ),
+                                    );
+                                  }),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              if (_error.trim().isNotEmpty) const SizedBox(height: 10),
-              Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                decoration: BoxDecoration(
+                  color: Color.alphaBlend(
+                      scheme.primary.withAlpha(10), scheme.surface),
+                  border: Border(
+                    top: BorderSide(color: scheme.outline.withAlpha(82)),
+                  ),
+                ),
+                child: Row(
                   children: [
-                    TextFormField(
-                      controller: _nameController,
-                      textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText:
-                            widget.i18n.isArabic ? 'اسم المهمة' : 'Task name',
-                        prefixIcon: const Icon(Icons.task_alt_rounded),
-                      ),
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty) {
-                          return widget.i18n.isArabic
-                              ? 'اسم المهمة مطلوب.'
-                              : 'Task name is required.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _descController,
-                      minLines: 2,
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        labelText: widget.i18n.isArabic
-                            ? 'الوصف (اختياري)'
-                            : 'Description (optional)',
-                        prefixIcon: const Icon(Icons.notes_rounded),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _submitting
+                            ? null
+                            : () => Navigator.of(context).maybePop(),
+                        child: Text(widget.i18n.isArabic ? 'إلغاء' : 'Cancel'),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _status,
-                            decoration: InputDecoration(
-                              labelText:
-                                  widget.i18n.isArabic ? 'الحالة' : 'Status',
-                              prefixIcon: const Icon(Icons.toggle_on_rounded),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                  value: 'active', child: Text('Active')),
-                              DropdownMenuItem(
-                                  value: 'paused', child: Text('Paused')),
-                              DropdownMenuItem(
-                                  value: 'completed', child: Text('Completed')),
-                              DropdownMenuItem(
-                                  value: 'error', child: Text('Error')),
-                            ],
-                            onChanged: _submitting
-                                ? null
-                                : (value) {
-                                    if (value == null) return;
-                                    setState(() => _status = value);
-                                  },
-                          ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed:
+                            _submitting ? null : () => unawaited(_submit()),
+                        icon: _submitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Icon(_isEdit
+                                ? Icons.save_rounded
+                                : Icons.add_rounded),
+                        label: Text(
+                          _isEdit
+                              ? (widget.i18n.isArabic ? 'حفظ' : 'Save')
+                              : (widget.i18n.isArabic ? 'إنشاء' : 'Create'),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _contentType,
-                            decoration: InputDecoration(
-                              labelText: widget.i18n.isArabic
-                                  ? 'نوع المحتوى'
-                                  : 'Content type',
-                              prefixIcon: const Icon(Icons.article_rounded),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                  value: 'text', child: Text('Text')),
-                              DropdownMenuItem(
-                                  value: 'image', child: Text('Image')),
-                              DropdownMenuItem(
-                                  value: 'video', child: Text('Video')),
-                              DropdownMenuItem(
-                                  value: 'link', child: Text('Link')),
-                            ],
-                            onChanged: _submitting
-                                ? null
-                                : (value) {
-                                    if (value == null) return;
-                                    setState(() => _contentType = value);
-                                  },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.input_rounded),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    widget.i18n.isArabic
-                                        ? 'حسابات المصدر'
-                                        : 'Source accounts',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w800),
-                                  ),
-                                ),
-                                Text('${_sourceAccountIds.length}'),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            if (_loadingAccounts)
-                              const Center(
-                                  child: Padding(
-                                      padding: EdgeInsets.all(10),
-                                      child: CircularProgressIndicator()))
-                            else if (_accounts.isEmpty)
-                              Text(widget.i18n.isArabic
-                                  ? 'لا توجد حسابات.'
-                                  : 'No accounts found.')
-                            else
-                              ..._accounts.map((account) {
-                                final id = account['id']?.toString() ?? '';
-                                final selected = _sourceAccountIds.contains(id);
-                                return CheckboxListTile(
-                                  value: selected,
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  onChanged: _submitting
-                                      ? null
-                                      : (value) {
-                                          setState(() {
-                                            if (value == true) {
-                                              _sourceAccountIds.add(id);
-                                            } else {
-                                              _sourceAccountIds.remove(id);
-                                            }
-                                          });
-                                        },
-                                  secondary: Icon(_platformIcon(
-                                      account['platformId']?.toString() ?? '')),
-                                  title: Text(_accountLabel(account)),
-                                  subtitle: Text(
-                                    '${account['platformId'] ?? 'unknown'} • @${account['accountUsername'] ?? '-'}',
-                                  ),
-                                );
-                              }),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.output_rounded),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    widget.i18n.isArabic
-                                        ? 'حسابات الهدف'
-                                        : 'Target accounts',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w800),
-                                  ),
-                                ),
-                                Text('${_targetAccountIds.length}'),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            if (_loadingAccounts)
-                              const Center(
-                                  child: Padding(
-                                      padding: EdgeInsets.all(10),
-                                      child: CircularProgressIndicator()))
-                            else if (_accounts.isEmpty)
-                              Text(widget.i18n.isArabic
-                                  ? 'لا توجد حسابات.'
-                                  : 'No accounts found.')
-                            else
-                              ..._accounts.map((account) {
-                                final id = account['id']?.toString() ?? '';
-                                final selected = _targetAccountIds.contains(id);
-                                return CheckboxListTile(
-                                  value: selected,
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  onChanged: _submitting
-                                      ? null
-                                      : (value) {
-                                          setState(() {
-                                            if (value == true) {
-                                              _targetAccountIds.add(id);
-                                            } else {
-                                              _targetAccountIds.remove(id);
-                                            }
-                                          });
-                                        },
-                                  secondary: Icon(_platformIcon(
-                                      account['platformId']?.toString() ?? '')),
-                                  title: Text(_accountLabel(account)),
-                                  subtitle: Text(
-                                    '${account['platformId'] ?? 'unknown'} • @${account['accountUsername'] ?? '-'}',
-                                  ),
-                                );
-                              }),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed:
-                          _submitting ? null : () => unawaited(_submit()),
-                      icon: _submitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              _isEdit ? Icons.save_rounded : Icons.add_rounded),
-                      label: Text(
-                        _isEdit
-                            ? (widget.i18n.isArabic ? 'حفظ' : 'Save')
-                            : (widget.i18n.isArabic ? 'إنشاء' : 'Create'),
                       ),
                     ),
                   ],
