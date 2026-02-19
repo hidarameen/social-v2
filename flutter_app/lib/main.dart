@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
@@ -951,6 +952,7 @@ class _SocialShellState extends State<SocialShell> {
   Timer? _analyticsDebounceTimer;
   final TextEditingController _analyticsSearchController = TextEditingController();
   final Map<String, String> _taskActionState = <String, String>{};
+  final Map<String, String> _executionActionState = <String, String>{};
   final Map<PanelKind, DateTime> _panelUpdatedAt = <PanelKind, DateTime>{};
   Timer? _dashboardRefreshTimer;
 
@@ -4253,6 +4255,310 @@ class _SocialShellState extends State<SocialShell> {
       return '-';
     }
 
+    String prettyJson(dynamic value) {
+      if (value == null) return '';
+      if (value is String) return value;
+      try {
+        return const JsonEncoder.withIndent('  ').convert(value);
+      } catch (_) {
+        return value.toString();
+      }
+    }
+
+    Future<void> retryExecution(Map<String, dynamic> execution) async {
+      final executionId = execution['id']?.toString() ?? '';
+      final taskId = execution['taskId']?.toString() ?? '';
+      if (taskId.trim().isEmpty) {
+        _toast(i18n.isArabic ? 'لا يمكن إعادة المحاولة لهذا التنفيذ.' : 'Retry is not available for this execution.');
+        return;
+      }
+      if (executionId.isNotEmpty && _executionActionState.containsKey(executionId)) return;
+
+      if (executionId.isNotEmpty) {
+        setState(() => _executionActionState[executionId] = 'retry');
+      }
+      try {
+        await widget.api.runTask(widget.accessToken, taskId);
+        _toast(i18n.isArabic ? 'تمت جدولة إعادة التشغيل.' : 'Execution retry queued');
+        await _loadPanel(PanelKind.executions, force: true);
+        await _loadPanel(PanelKind.dashboard, force: true);
+      } catch (error) {
+        final message = error is ApiException ? error.message : 'Failed to retry execution.';
+        _toast(message);
+      } finally {
+        if (!mounted || executionId.isEmpty) return;
+        setState(() => _executionActionState.remove(executionId));
+      }
+    }
+
+    Future<void> openExecutionDetails(Map<String, dynamic> execution) async {
+      final statusText = execution['status']?.toString() ?? 'unknown';
+      final normalized = normalizeStatus(statusText);
+      final tone = statusTone(normalized);
+      final taskName = (execution['taskName']?.toString() ?? '').trim();
+      final sourceName = (execution['sourceAccountName']?.toString() ?? '').trim();
+      final targetName = (execution['targetAccountName']?.toString() ?? '').trim();
+      final sourcePlatformId = execution['sourcePlatformId']?.toString() ?? '';
+      final targetPlatformId = execution['targetPlatformId']?.toString() ?? '';
+      final when = formatWhen(execution['executedAt'] ?? execution['createdAt'] ?? execution['updatedAt']);
+      final duration = formatDuration(execution);
+
+      final responseData = execution['responseData'];
+      final responseMap = responseData is Map
+          ? responseData.map((k, v) => MapEntry(k.toString(), v))
+          : const <String, dynamic>{};
+      final payloadText = prettyJson(responseData).trim();
+      final logsText = prettyJson(
+        execution['logs'] ?? responseMap['logs'] ?? responseMap['events'] ?? responseMap['timeline'],
+      ).trim();
+      final stackText = (
+        execution['errorStack'] ??
+            execution['stack'] ??
+            execution['trace'] ??
+            responseMap['stack'] ??
+            responseMap['trace'] ??
+            responseMap['errorStack']
+      ).toString().trim();
+      final errorText = (execution['error']?.toString() ??
+              execution['errorMessage']?.toString() ??
+              execution['lastError']?.toString() ??
+              responseMap['error']?.toString() ??
+              '')
+          .trim();
+      final originalContent = (execution['originalContent']?.toString() ?? '').trim();
+      final transformedContent = (execution['transformedContent']?.toString() ?? '').trim();
+
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) {
+          return SafeArea(
+            child: FractionallySizedBox(
+              heightFactor: 0.92,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            taskName.isEmpty
+                                ? (i18n.isArabic ? 'تفاصيل التنفيذ' : 'Execution details')
+                                : taskName,
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: i18n.isArabic ? 'نسخ الحمولة' : 'Copy payload',
+                          onPressed: payloadText.isEmpty
+                              ? null
+                              : () async {
+                                  await Clipboard.setData(ClipboardData(text: payloadText));
+                                  _toast(i18n.isArabic ? 'تم نسخ الحمولة.' : 'Payload copied');
+                                },
+                          icon: const Icon(Icons.copy_all_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        SfBadge(statusLabel(normalized), tone: tone),
+                        SfBadge(
+                          '${i18n.isArabic ? 'المدة' : 'Duration'}: $duration',
+                          tone: scheme.onSurfaceVariant,
+                          icon: Icons.timer_outlined,
+                        ),
+                        SfBadge(
+                          '${i18n.isArabic ? 'الوقت' : 'When'}: $when',
+                          tone: scheme.onSurfaceVariant,
+                          icon: Icons.schedule_rounded,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SfPanelCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: scheme.outline.withAlpha((0.24 * 255).round())),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(_platformIcon(sourcePlatformId), size: 16),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      sourceName.isEmpty ? 'Unknown source' : sourceName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Icon(Icons.arrow_forward_rounded),
+                          ),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: scheme.outline.withAlpha((0.24 * 255).round())),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(_platformIcon(targetPlatformId), size: 16),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      targetName.isEmpty ? 'Unknown target' : targetName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (errorText.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      SfPanelCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.error_outline_rounded, color: scheme.error, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  i18n.isArabic ? 'الخطأ' : 'Error',
+                                  style: TextStyle(color: scheme.error, fontWeight: FontWeight.w900),
+                                ),
+                                const Spacer(),
+                                IconButton(
+                                  tooltip: i18n.isArabic ? 'نسخ الخطأ' : 'Copy error',
+                                  onPressed: () async {
+                                    await Clipboard.setData(ClipboardData(text: errorText));
+                                    _toast(i18n.isArabic ? 'تم نسخ الخطأ.' : 'Error copied');
+                                  },
+                                  icon: const Icon(Icons.content_copy_rounded, size: 18),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            SelectableText(errorText),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (stackText.isNotEmpty && stackText != 'null') ...[
+                      const SizedBox(height: 12),
+                      SfPanelCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              i18n.isArabic ? 'التتبّع (Stack Trace)' : 'Stack trace',
+                              style: const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                              stackText,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (originalContent.isNotEmpty || transformedContent.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      SfPanelCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              i18n.isArabic ? 'المحتوى' : 'Content',
+                              style: const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                            if (originalContent.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(i18n.isArabic ? 'الأصلي' : 'Original', style: TextStyle(color: scheme.onSurfaceVariant)),
+                              const SizedBox(height: 4),
+                              SelectableText(originalContent),
+                            ],
+                            if (transformedContent.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(i18n.isArabic ? 'بعد المعالجة' : 'Transformed', style: TextStyle(color: scheme.onSurfaceVariant)),
+                              const SizedBox(height: 4),
+                              SelectableText(transformedContent),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (logsText.isNotEmpty && logsText != 'null') ...[
+                      const SizedBox(height: 12),
+                      SfPanelCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(i18n.isArabic ? 'السجلات' : 'Logs', style: const TextStyle(fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                              logsText,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (payloadText.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      SfPanelCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(i18n.isArabic ? 'الحمولة (Payload)' : 'Payload', style: const TextStyle(fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                              payloadText,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
     Future<void> copyExecutionReport(Map<String, dynamic> execution) async {
       final taskName = execution['taskName']?.toString().trim();
       final statusText = execution['status']?.toString() ?? 'unknown';
@@ -4355,12 +4661,15 @@ class _SocialShellState extends State<SocialShell> {
     }
 
     Widget executionTile(Map<String, dynamic> execution) {
+      final executionId = execution['id']?.toString() ?? '';
       final statusText = execution['status']?.toString() ?? 'unknown';
       final normalized = normalizeStatus(statusText);
       final statusColor = statusTone(normalized);
       final taskName = execution['taskName']?.toString().trim();
       final sourceName = execution['sourceAccountName']?.toString().trim();
       final targetName = execution['targetAccountName']?.toString().trim();
+      final sourcePlatformId = execution['sourcePlatformId']?.toString() ?? '';
+      final targetPlatformId = execution['targetPlatformId']?.toString() ?? '';
       final when = formatWhen(execution['executedAt'] ?? execution['createdAt'] ?? execution['updatedAt']);
       final duration = formatDuration(execution);
       final errorText = (execution['error']?.toString() ??
@@ -4368,6 +4677,7 @@ class _SocialShellState extends State<SocialShell> {
               execution['lastError']?.toString() ??
               '')
           .trim();
+      final busy = executionId.isNotEmpty && _executionActionState.containsKey(executionId);
       final title = (taskName == null || taskName.isEmpty)
           ? i18n.t('executions.item', 'Task execution')
           : taskName;
@@ -4422,10 +4732,25 @@ class _SocialShellState extends State<SocialShell> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    tooltip: i18n.isArabic ? 'نسخ التقرير' : 'Copy report',
-                    onPressed: () => unawaited(copyExecutionReport(execution)),
-                    icon: const Icon(Icons.copy_all_rounded),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: i18n.isArabic ? 'إعادة المحاولة' : 'Retry',
+                        onPressed: busy ? null : () => unawaited(retryExecution(execution)),
+                        icon: const Icon(Icons.replay_rounded),
+                      ),
+                      IconButton(
+                        tooltip: i18n.isArabic ? 'عرض التفاصيل' : 'View details',
+                        onPressed: () => unawaited(openExecutionDetails(execution)),
+                        icon: const Icon(Icons.info_outline_rounded),
+                      ),
+                      IconButton(
+                        tooltip: i18n.isArabic ? 'نسخ التقرير' : 'Copy report',
+                        onPressed: () => unawaited(copyExecutionReport(execution)),
+                        icon: const Icon(Icons.copy_all_rounded),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -4434,12 +4759,60 @@ class _SocialShellState extends State<SocialShell> {
                 children: [
                   Icon(Icons.compare_arrows_rounded, size: 16, color: scheme.onSurfaceVariant),
                   const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '${sourceName == null || sourceName.isEmpty ? 'Unknown source' : sourceName} -> ${targetName == null || targetName.isEmpty ? 'Unknown target' : targetName}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                  Flexible(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: scheme.outline.withAlpha((0.20 * 255).round())),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(_platformIcon(sourcePlatformId), size: 14),
+                              const SizedBox(width: 5),
+                              SizedBox(
+                                width: 130,
+                                child: Text(
+                                  sourceName == null || sourceName.isEmpty ? 'Unknown source' : sourceName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.arrow_forward_rounded, size: 14, color: scheme.onSurfaceVariant),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: scheme.outline.withAlpha((0.20 * 255).round())),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(_platformIcon(targetPlatformId), size: 14),
+                              const SizedBox(width: 5),
+                              SizedBox(
+                                width: 130,
+                                child: Text(
+                                  targetName == null || targetName.isEmpty ? 'Unknown target' : targetName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
