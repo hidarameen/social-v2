@@ -47,14 +47,14 @@ This file tracks concrete UI/UX upgrades for the Flutter APK, aligned with Mater
 40. [PLANNED] Dashboard: add a dedicated empty dashboard illustration (vector-free, icon-based).
 
 41. [PLANNED] Tasks: add a single “Create task” FAB on phones (contextual).
-42. [PLANNED] Tasks: add filter chips row (Status, Platform, Last run, Issues) with counts.
+42. [DONE] Tasks: add filter chips row (Status, Platform, Last run, Issues) with counts.
 43. [PLANNED] Tasks: add saved filter presets ("channels") for power users.
 44. [PLANNED] Tasks: add “Bulk actions” (pause/resume/delete) with multi-select UI.
 45. [PLANNED] Tasks: add sorting controls in a bottom sheet on mobile.
 46. [PLANNED] Tasks: improve “Last run” formatting and add next scheduled run (if available).
 47. [PLANNED] Tasks: show execution failure reason inline with truncation and "view details".
 48. [PLANNED] Tasks: add "Run now" confirmation for high-risk tasks.
-49. [PLANNED] Tasks: add "Duplicate task" action.
+49. [DONE] Tasks: add "Duplicate task" action.
 50. [PLANNED] Tasks: add “Task health” score (computed) with explanation tooltip.
 
 51. [PLANNED] Task editor: split form into steps (Basics, Sources, Targets, Content, Review).
@@ -76,7 +76,7 @@ This file tracks concrete UI/UX upgrades for the Flutter APK, aligned with Mater
 66. [PLANNED] Accounts: add platform icons that match brand shapes (abstracted, not logos).
 67. [PLANNED] Accounts: add skeleton loading list.
 68. [PLANNED] Accounts: add empty-state direct deep link hint to web dashboard.
-69. [PLANNED] Accounts: add “copy username” action.
+69. [DONE] Accounts: add “copy username” action.
 70. [PLANNED] Accounts: add “open platform profile” action if URL exists.
 
 71. [PLANNED] Executions: add status filter chips (Success, Failed, Running, Pending).

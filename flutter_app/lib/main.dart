@@ -935,7 +935,9 @@ class _SocialShellState extends State<SocialShell> {
   bool _tasksLoadingMore = false;
   Timer? _tasksDebounceTimer;
   final TextEditingController _tasksSearchController = TextEditingController();
+  final TextEditingController _accountsSearchController = TextEditingController();
   String _accountsQuery = '';
+  String _accountsStatusFilter = 'all';
   String _executionsQuery = '';
   String _analyticsQuery = '';
   String _analyticsSortBy = 'successRate';
@@ -978,6 +980,7 @@ class _SocialShellState extends State<SocialShell> {
   void initState() {
     super.initState();
     _tasksSearchController.text = _tasksQuery;
+    _accountsSearchController.text = _accountsQuery;
     _analyticsSearchController.text = _analyticsQuery;
     unawaited(_loadCurrentPanel(force: true));
 
@@ -997,6 +1000,7 @@ class _SocialShellState extends State<SocialShell> {
     _tasksDebounceTimer?.cancel();
     _analyticsDebounceTimer?.cancel();
     _tasksSearchController.dispose();
+    _accountsSearchController.dispose();
     _analyticsSearchController.dispose();
     _settingsNameController.dispose();
     _settingsImageUrlController.dispose();
@@ -3196,6 +3200,55 @@ class _SocialShellState extends State<SocialShell> {
       }
     }
 
+    Future<void> duplicateTask(Map<String, dynamic> task) async {
+      final id = task['id']?.toString() ?? '';
+      if (id.isEmpty) return;
+      if (_taskActionState.containsKey(id)) return;
+
+      final sourceIds = task['sourceAccounts'] is List
+          ? (task['sourceAccounts'] as List)
+              .map((e) => e?.toString() ?? '')
+              .where((e) => e.trim().isNotEmpty)
+              .toList()
+          : <String>[];
+      final targetIds = task['targetAccounts'] is List
+          ? (task['targetAccounts'] as List)
+              .map((e) => e?.toString() ?? '')
+              .where((e) => e.trim().isNotEmpty)
+              .toList()
+          : <String>[];
+      final name = (task['name']?.toString() ?? '').trim();
+      final copyName = name.isEmpty ? 'Task (Copy)' : '$name (Copy)';
+
+      final body = <String, dynamic>{
+        'name': copyName,
+        'description': task['description']?.toString() ?? '',
+        'status': 'paused',
+        'contentType': task['contentType']?.toString() ?? 'text',
+        'content': task['content'] ?? '',
+        'sourceAccounts': sourceIds,
+        'targetAccounts': targetIds,
+      };
+
+      setState(() {
+        _taskActionState[id] = 'duplicate';
+      });
+      try {
+        await widget.api.createTask(widget.accessToken, body: body);
+        _toast(i18n.isArabic ? 'تم نسخ المهمة.' : 'Task duplicated');
+        await _loadTasksPage(reset: true, showPanelLoading: true);
+        await _loadPanel(PanelKind.dashboard, force: true);
+      } catch (error) {
+        final message = error is ApiException ? error.message : 'Failed to duplicate task.';
+        _toast(message);
+      } finally {
+        if (!mounted) return;
+        setState(() {
+          _taskActionState.remove(id);
+        });
+      }
+    }
+
     final tasks = rawTasks
         .map((raw) => raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw as Map))
         .toList();
@@ -3240,6 +3293,74 @@ class _SocialShellState extends State<SocialShell> {
     final errorCount = filtered.where((t) => normalizeTaskStatus(t['status']?.toString() ?? '') == 'error').length;
 
     final hasMore = data['hasMore'] == true;
+    final hasActiveTaskFilters = _tasksQuery.isNotEmpty ||
+        _tasksStatusFilter != 'all' ||
+        _tasksPlatformFilter != 'all' ||
+        _tasksLastRunFilter != 'all' ||
+        _tasksIssueFilter != 'all' ||
+        _tasksSortBy != 'createdAt' ||
+        _tasksSortDir != 'desc';
+
+    String shortenLabel(String value, {int max = 18}) {
+      final v = value.trim();
+      if (v.length <= max) return v;
+      return '${v.substring(0, max)}...';
+    }
+
+    void clearAllTaskFilters() {
+      setState(() {
+        _tasksQuery = '';
+        _tasksSearchController.text = '';
+        _tasksStatusFilter = 'all';
+        _tasksPlatformFilter = 'all';
+        _tasksLastRunFilter = 'all';
+        _tasksIssueFilter = 'all';
+        _tasksSortBy = 'createdAt';
+        _tasksSortDir = 'desc';
+      });
+      unawaited(_loadTasksPage(reset: true, showPanelLoading: true));
+    }
+
+    void clearTaskFilter(String key) {
+      bool requiresReload = false;
+      setState(() {
+        if (key == 'query') {
+          _tasksQuery = '';
+          _tasksSearchController.text = '';
+          requiresReload = true;
+          return;
+        }
+        if (key == 'status') {
+          _tasksStatusFilter = 'all';
+          requiresReload = true;
+          return;
+        }
+        if (key == 'platform') {
+          _tasksPlatformFilter = 'all';
+          return;
+        }
+        if (key == 'lastRun') {
+          _tasksLastRunFilter = 'all';
+          return;
+        }
+        if (key == 'issue') {
+          _tasksIssueFilter = 'all';
+          return;
+        }
+        if (key == 'sortBy') {
+          _tasksSortBy = 'createdAt';
+          requiresReload = true;
+          return;
+        }
+        if (key == 'sortDir') {
+          _tasksSortDir = 'desc';
+          requiresReload = true;
+        }
+      });
+      if (requiresReload) {
+        unawaited(_loadTasksPage(reset: true, showPanelLoading: true));
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3453,28 +3574,52 @@ class _SocialShellState extends State<SocialShell> {
                   },
                 ),
                 const SizedBox(height: 8),
-                if (_tasksQuery.isNotEmpty ||
-                    _tasksStatusFilter != 'all' ||
-                    _tasksPlatformFilter != 'all' ||
-                    _tasksLastRunFilter != 'all' ||
-                    _tasksIssueFilter != 'all' ||
-                    _tasksSortBy != 'createdAt' ||
-                    _tasksSortDir != 'desc')
-                  OutlinedButton(
-                    onPressed: () {
-                      setState(() {
-                        _tasksQuery = '';
-                        _tasksSearchController.text = '';
-                        _tasksStatusFilter = 'all';
-                        _tasksPlatformFilter = 'all';
-                        _tasksLastRunFilter = 'all';
-                        _tasksIssueFilter = 'all';
-                        _tasksSortBy = 'createdAt';
-                        _tasksSortDir = 'desc';
-                      });
-                      unawaited(_loadTasksPage(reset: true, showPanelLoading: true));
-                    },
-                    child: Text(i18n.isArabic ? 'مسح الفلاتر' : 'Clear Filters'),
+                if (hasActiveTaskFilters)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (_tasksQuery.isNotEmpty)
+                        InputChip(
+                          label: Text('Search: ${shortenLabel(_tasksQuery)}'),
+                          onDeleted: () => clearTaskFilter('query'),
+                        ),
+                      if (_tasksStatusFilter != 'all')
+                        InputChip(
+                          label: Text('Status: ${statusLabel(_tasksStatusFilter)}'),
+                          onDeleted: () => clearTaskFilter('status'),
+                        ),
+                      if (_tasksPlatformFilter != 'all')
+                        InputChip(
+                          label: Text('Platform: ${platformLabel(_tasksPlatformFilter)}'),
+                          onDeleted: () => clearTaskFilter('platform'),
+                        ),
+                      if (_tasksLastRunFilter != 'all')
+                        InputChip(
+                          label: Text('Last run: ${_tasksLastRunFilter.toUpperCase()}'),
+                          onDeleted: () => clearTaskFilter('lastRun'),
+                        ),
+                      if (_tasksIssueFilter != 'all')
+                        InputChip(
+                          label: Text('Issue: ${_tasksIssueFilter == 'errors' ? 'Errors' : 'Warnings'}'),
+                          onDeleted: () => clearTaskFilter('issue'),
+                        ),
+                      if (_tasksSortBy != 'createdAt')
+                        InputChip(
+                          label: Text('Sort: ${_tasksSortBy == 'name' ? 'Name' : (_tasksSortBy == 'status' ? 'Status' : 'Created')}'),
+                          onDeleted: () => clearTaskFilter('sortBy'),
+                        ),
+                      if (_tasksSortDir != 'desc')
+                        InputChip(
+                          label: Text('Direction: ${_tasksSortDir.toUpperCase()}'),
+                          onDeleted: () => clearTaskFilter('sortDir'),
+                        ),
+                      OutlinedButton.icon(
+                        onPressed: clearAllTaskFilters,
+                        icon: const Icon(Icons.filter_alt_off_rounded),
+                        label: Text(i18n.isArabic ? 'مسح الفلاتر' : 'Clear Filters'),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -3624,6 +3769,13 @@ class _SocialShellState extends State<SocialShell> {
                                     IconButton(
                                       onPressed: busy
                                           ? null
+                                          : () => unawaited(duplicateTask(task)),
+                                      tooltip: 'Duplicate task',
+                                      icon: const Icon(Icons.copy_all_rounded),
+                                    ),
+                                    IconButton(
+                                      onPressed: busy
+                                          ? null
                                           : () {
                                               final idx = kPanelSpecs.indexWhere((p) => p.kind == PanelKind.executions);
                                               if (idx < 0) return;
@@ -3722,32 +3874,55 @@ class _SocialShellState extends State<SocialShell> {
   Widget _buildAccounts(Map<String, dynamic> data) {
     final i18n = _i18n(context);
     final scheme = Theme.of(context).colorScheme;
-    final accounts = data['accounts'] is List
+    final accountsRaw = data['accounts'] is List
         ? (data['accounts'] as List)
         : const <dynamic>[];
+    final accounts = accountsRaw
+        .map((raw) => raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw as Map))
+        .toList();
 
-    final filtered = accounts.where((raw) {
-      final item = raw is Map<String, dynamic>
-          ? raw
-          : Map<String, dynamic>.from(raw as Map);
+    bool matchesSearch(Map<String, dynamic> item) {
       if (_accountsQuery.isEmpty) return true;
       final query = _accountsQuery.toLowerCase();
       final name = item['accountName']?.toString().toLowerCase() ?? '';
       final username = item['accountUsername']?.toString().toLowerCase() ?? '';
       final platform = item['platformId']?.toString().toLowerCase() ?? '';
-      return name.contains(query) ||
-          username.contains(query) ||
-          platform.contains(query);
+      return name.contains(query) || username.contains(query) || platform.contains(query);
+    }
+
+    bool matchesStatus(Map<String, dynamic> item) {
+      if (_accountsStatusFilter == 'all') return true;
+      final active = item['isActive'] == true;
+      if (_accountsStatusFilter == 'active') return active;
+      if (_accountsStatusFilter == 'inactive') return !active;
+      return true;
+    }
+
+    final filtered = accounts.where((item) {
+      return matchesSearch(item) && matchesStatus(item);
     }).toList();
 
     final total = accounts.length;
-    final activeCount = accounts.where((raw) {
-      final item = raw is Map<String, dynamic>
-          ? raw
-          : Map<String, dynamic>.from(raw as Map);
-      return item['isActive'] == true;
-    }).length;
+    final activeCount = accounts.where((item) => item['isActive'] == true).length;
     final inactiveCount = (total - activeCount).clamp(0, total);
+    final hasAccountFilters = _accountsQuery.isNotEmpty || _accountsStatusFilter != 'all';
+
+    final groupedByPlatform = <String, List<Map<String, dynamic>>>{};
+    for (final account in filtered) {
+      final platformId = account['platformId']?.toString().trim().toLowerCase() ?? '';
+      final key = platformId.isEmpty ? 'unknown' : platformId;
+      groupedByPlatform.putIfAbsent(key, () => <Map<String, dynamic>>[]).add(account);
+    }
+    final groupedEntries = groupedByPlatform.entries.toList()
+      ..sort((a, b) => _platformLabel(a.key).compareTo(_platformLabel(b.key)));
+
+    void clearAccountFilters() {
+      setState(() {
+        _accountsQuery = '';
+        _accountsSearchController.text = '';
+        _accountsStatusFilter = 'all';
+      });
+    }
 
     Widget searchCard() {
       return SfPanelCard(
@@ -3790,6 +3965,7 @@ class _SocialShellState extends State<SocialShell> {
             ),
             const SizedBox(height: 12),
             TextField(
+              controller: _accountsSearchController,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
                 hintText: i18n.t(
@@ -3798,6 +3974,34 @@ class _SocialShellState extends State<SocialShell> {
                 ),
               ),
               onChanged: (value) => setState(() => _accountsQuery = value.trim()),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: Text(i18n.isArabic ? 'الكل' : 'All'),
+                  selected: _accountsStatusFilter == 'all',
+                  onSelected: (_) => setState(() => _accountsStatusFilter = 'all'),
+                ),
+                ChoiceChip(
+                  label: Text('${i18n.t('accounts.active', 'Active')} ($activeCount)'),
+                  selected: _accountsStatusFilter == 'active',
+                  onSelected: (_) => setState(() => _accountsStatusFilter = 'active'),
+                ),
+                ChoiceChip(
+                  label: Text('${i18n.t('accounts.inactive', 'Inactive')} ($inactiveCount)'),
+                  selected: _accountsStatusFilter == 'inactive',
+                  onSelected: (_) => setState(() => _accountsStatusFilter = 'inactive'),
+                ),
+                if (hasAccountFilters)
+                  OutlinedButton.icon(
+                    onPressed: clearAccountFilters,
+                    icon: const Icon(Icons.filter_alt_off_rounded),
+                    label: Text(i18n.isArabic ? 'مسح الفلاتر' : 'Clear Filters'),
+                  ),
+              ],
             ),
           ],
         ),
@@ -3813,6 +4017,10 @@ class _SocialShellState extends State<SocialShell> {
       final handle = (username == null || username.isEmpty) ? '-' : '@$username';
       final platformLabel = _platformLabel(platformId);
       final tone = active ? Colors.green.shade700 : scheme.error;
+      final created = DateTime.tryParse(account['createdAt']?.toString() ?? '');
+      final createdLabel = created == null
+          ? ''
+          : '${created.year}-${created.month.toString().padLeft(2, '0')}-${created.day.toString().padLeft(2, '0')}';
 
       return Card(
         margin: const EdgeInsets.only(bottom: 10),
@@ -3828,11 +4036,36 @@ class _SocialShellState extends State<SocialShell> {
             child: Icon(_platformIcon(platformId), color: scheme.onSurfaceVariant),
           ),
           title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-          subtitle: Text('$platformLabel • $handle'),
-          trailing: SfBadge(
-            active ? i18n.t('accounts.active', 'Active') : i18n.t('accounts.inactive', 'Inactive'),
-            tone: tone,
-            icon: active ? Icons.check_rounded : Icons.close_rounded,
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$platformLabel • $handle'),
+              if (createdLabel.isNotEmpty)
+                Text(
+                  i18n.isArabic ? 'أضيف $createdLabel' : 'Added $createdLabel',
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                ),
+            ],
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (username != null && username.isNotEmpty)
+                IconButton(
+                  tooltip: i18n.isArabic ? 'نسخ اسم المستخدم' : 'Copy username',
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: '@$username'));
+                    _toast(i18n.isArabic ? 'تم نسخ اسم المستخدم.' : 'Username copied');
+                  },
+                  icon: const Icon(Icons.content_copy_rounded, size: 18),
+                ),
+              SfBadge(
+                active ? i18n.t('accounts.active', 'Active') : i18n.t('accounts.inactive', 'Inactive'),
+                tone: tone,
+                icon: active ? Icons.check_rounded : Icons.close_rounded,
+              ),
+            ],
           ),
         ),
       );
@@ -3851,13 +4084,44 @@ class _SocialShellState extends State<SocialShell> {
               'accounts.empty.subtitle',
               'Try a different query or connect accounts from the web dashboard.',
             ),
+            primary: hasAccountFilters
+                ? OutlinedButton(
+                    onPressed: clearAccountFilters,
+                    child: Text(i18n.isArabic ? 'مسح الفلاتر' : 'Clear Filters'),
+                  )
+                : null,
           )
         else
-          ...filtered.take(100).map((raw) {
-            final item = raw is Map<String, dynamic>
-                ? raw
-                : Map<String, dynamic>.from(raw as Map);
-            return accountTile(item);
+          ...groupedEntries.map((entry) {
+            final platformId = entry.key;
+            final platformAccounts = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(_platformIcon(platformId), size: 18, color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Text(
+                          _platformLabel(platformId),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(width: 8),
+                        SfBadge(
+                          '${platformAccounts.length}',
+                          tone: scheme.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                  ),
+                  ...platformAccounts.take(100).map(accountTile),
+                ],
+              ),
+            );
           }),
       ],
     );
