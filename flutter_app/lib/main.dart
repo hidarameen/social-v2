@@ -1925,6 +1925,8 @@ class _SocialShellState extends State<SocialShell> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Drawer(
+      backgroundColor: Color.alphaBlend(
+          scheme.primary.withAlpha(isDark ? 14 : 8), scheme.surface),
       child: SafeArea(
         child: Column(
           children: [
@@ -1996,8 +1998,11 @@ class _SocialShellState extends State<SocialShell> {
                       leading: Icon(panel.icon),
                       title: Text(i18n.t(panel.labelKey, panel.fallbackLabel)),
                       selected: selected,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       selectedTileColor:
-                          scheme.primary.withOpacity(isDark ? 0.20 : 0.10),
+                          scheme.primary.withAlpha(isDark ? 60 : 28),
                       onTap: () {
                         Navigator.of(context).maybePop();
                         unawaited(_onPanelSelected(index));
@@ -2029,6 +2034,7 @@ class _SocialShellState extends State<SocialShell> {
 
   Widget _buildRail(I18n i18n) {
     final collapsed = widget.appState.sidebarCollapsed;
+    final scheme = Theme.of(context).colorScheme;
     return NavigationRail(
       selectedIndex: _selectedIndex,
       extended: !collapsed,
@@ -2036,11 +2042,19 @@ class _SocialShellState extends State<SocialShell> {
           ? NavigationRailLabelType.selected
           : NavigationRailLabelType.none,
       leading: Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: IconButton(
-          tooltip: collapsed ? 'Expand sidebar' : 'Collapse sidebar',
-          onPressed: () => unawaited(_toggleSidebar(wide: true)),
-          icon: Icon(collapsed ? Icons.menu_open_rounded : Icons.menu_rounded),
+        padding: const EdgeInsets.only(top: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: scheme.surface.withAlpha(132),
+            border: Border.all(color: scheme.outline.withAlpha(84)),
+          ),
+          child: IconButton(
+            tooltip: collapsed ? 'Expand sidebar' : 'Collapse sidebar',
+            onPressed: () => unawaited(_toggleSidebar(wide: true)),
+            icon:
+                Icon(collapsed ? Icons.menu_open_rounded : Icons.menu_rounded),
+          ),
         ),
       ),
       trailing: Padding(
@@ -3810,9 +3824,7 @@ class _SocialShellState extends State<SocialShell> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Card(
-          elevation: 0,
-          color: scheme.surface.withAlpha((0.55 * 255).round()),
+        SfPanelCard(
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -3870,7 +3882,7 @@ class _SocialShellState extends State<SocialShell> {
           ),
         ),
         const SizedBox(height: 12),
-        Card(
+        SfPanelCard(
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -4104,7 +4116,7 @@ class _SocialShellState extends State<SocialShell> {
         ),
         const SizedBox(height: 12),
         if (filtered.isEmpty)
-          Card(
+          SfPanelCard(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 26),
               child: Column(
@@ -4196,7 +4208,7 @@ class _SocialShellState extends State<SocialShell> {
 
                   return SizedBox(
                     width: cardWidth,
-                    child: Card(
+                    child: SfPanelCard(
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
@@ -4601,66 +4613,73 @@ class _SocialShellState extends State<SocialShell> {
           ? ''
           : '${created.year}-${created.month.toString().padLeft(2, '0')}-${created.day.toString().padLeft(2, '0')}';
 
-      return Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: ListTile(
-          leading: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: scheme.surface.withOpacity(0.55),
-              border: Border.all(color: scheme.onSurface.withOpacity(0.10)),
-            ),
-            child:
-                Icon(_platformIcon(platformId), color: scheme.onSurfaceVariant),
-          ),
-          title:
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('$platformLabel • $handle'),
-              if (createdLabel.isNotEmpty)
-                Text(
-                  i18n.isArabic ? 'أضيف $createdLabel' : 'Added $createdLabel',
-                  style:
-                      TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+      return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: SfPanelCard(
+            padding: EdgeInsets.zero,
+            child: ListTile(
+              leading: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: scheme.surface.withOpacity(0.55),
+                  border: Border.all(color: scheme.onSurface.withOpacity(0.10)),
                 ),
-            ],
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (profileUrl != null)
-                IconButton(
-                  tooltip: i18n.isArabic ? 'فتح الملف الشخصي' : 'Open profile',
-                  onPressed: () => unawaited(_openAccountProfile(account)),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                ),
-              if (username != null && username.isNotEmpty)
-                IconButton(
-                  tooltip: i18n.isArabic ? 'نسخ اسم المستخدم' : 'Copy username',
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: '@$username'));
-                    _toast(i18n.isArabic
-                        ? 'تم نسخ اسم المستخدم.'
-                        : 'Username copied');
-                  },
-                  icon: const Icon(Icons.content_copy_rounded, size: 18),
-                ),
-              SfBadge(
-                active
-                    ? i18n.t('accounts.active', 'Active')
-                    : i18n.t('accounts.inactive', 'Inactive'),
-                tone: tone,
-                icon: active ? Icons.check_rounded : Icons.close_rounded,
+                child: Icon(_platformIcon(platformId),
+                    color: scheme.onSurfaceVariant),
               ),
-            ],
-          ),
-        ),
-      );
+              title: Text(title,
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('$platformLabel • $handle'),
+                  if (createdLabel.isNotEmpty)
+                    Text(
+                      i18n.isArabic
+                          ? 'أضيف $createdLabel'
+                          : 'Added $createdLabel',
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant, fontSize: 12),
+                    ),
+                ],
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (profileUrl != null)
+                    IconButton(
+                      tooltip:
+                          i18n.isArabic ? 'فتح الملف الشخصي' : 'Open profile',
+                      onPressed: () => unawaited(_openAccountProfile(account)),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    ),
+                  if (username != null && username.isNotEmpty)
+                    IconButton(
+                      tooltip:
+                          i18n.isArabic ? 'نسخ اسم المستخدم' : 'Copy username',
+                      onPressed: () async {
+                        await Clipboard.setData(
+                            ClipboardData(text: '@$username'));
+                        _toast(i18n.isArabic
+                            ? 'تم نسخ اسم المستخدم.'
+                            : 'Username copied');
+                      },
+                      icon: const Icon(Icons.content_copy_rounded, size: 18),
+                    ),
+                  SfBadge(
+                    active
+                        ? i18n.t('accounts.active', 'Active')
+                        : i18n.t('accounts.inactive', 'Inactive'),
+                    tone: tone,
+                    icon: active ? Icons.check_rounded : Icons.close_rounded,
+                  ),
+                ],
+              ),
+            ),
+          ));
     }
 
     return Column(
@@ -5417,223 +5436,166 @@ class _SocialShellState extends State<SocialShell> {
         return scheme.outline.withAlpha((0.32 * 255).round());
       }
 
-      return Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: SfPanelCard(
+            padding: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      color: statusColor.withOpacity(0.12),
-                      border: Border.all(color: statusColor.withOpacity(0.26)),
-                    ),
-                    child: Icon(Icons.history_rounded, color: statusColor),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          color: statusColor.withOpacity(0.12),
+                          border:
+                              Border.all(color: statusColor.withOpacity(0.26)),
+                        ),
+                        child: Icon(Icons.history_rounded, color: statusColor),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SfBadge(
-                              statusLabel(normalized),
-                              tone: statusColor,
-                              icon: normalized == 'failed'
-                                  ? Icons.error_outline_rounded
-                                  : (normalized == 'success'
-                                      ? Icons.check_circle_outline_rounded
-                                      : Icons.hourglass_top_rounded),
-                            ),
-                            SfBadge(
-                              '${i18n.isArabic ? 'المدة' : 'Duration'}: $duration',
-                              tone: scheme.onSurfaceVariant,
-                              icon: Icons.timer_outlined,
+                            Text(title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                SfBadge(
+                                  statusLabel(normalized),
+                                  tone: statusColor,
+                                  icon: normalized == 'failed'
+                                      ? Icons.error_outline_rounded
+                                      : (normalized == 'success'
+                                          ? Icons.check_circle_outline_rounded
+                                          : Icons.hourglass_top_rounded),
+                                ),
+                                SfBadge(
+                                  '${i18n.isArabic ? 'المدة' : 'Duration'}: $duration',
+                                  tone: scheme.onSurfaceVariant,
+                                  icon: Icons.timer_outlined,
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: i18n.isArabic ? 'إعادة المحاولة' : 'Retry',
-                        onPressed: busy
-                            ? null
-                            : () => unawaited(retryExecution(execution)),
-                        icon: const Icon(Icons.replay_rounded),
                       ),
-                      IconButton(
-                        tooltip:
-                            i18n.isArabic ? 'عرض التفاصيل' : 'View details',
-                        onPressed: () =>
-                            unawaited(openExecutionDetails(execution)),
-                        icon: const Icon(Icons.info_outline_rounded),
-                      ),
-                      IconButton(
-                        tooltip: i18n.isArabic ? 'نسخ التقرير' : 'Copy report',
-                        onPressed: () =>
-                            unawaited(copyExecutionReport(execution)),
-                        icon: const Icon(Icons.copy_all_rounded),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: i18n.isArabic ? 'إعادة المحاولة' : 'Retry',
+                            onPressed: busy
+                                ? null
+                                : () => unawaited(retryExecution(execution)),
+                            icon: const Icon(Icons.replay_rounded),
+                          ),
+                          IconButton(
+                            tooltip:
+                                i18n.isArabic ? 'عرض التفاصيل' : 'View details',
+                            onPressed: () =>
+                                unawaited(openExecutionDetails(execution)),
+                            icon: const Icon(Icons.info_outline_rounded),
+                          ),
+                          IconButton(
+                            tooltip:
+                                i18n.isArabic ? 'نسخ التقرير' : 'Copy report',
+                            onPressed: () =>
+                                unawaited(copyExecutionReport(execution)),
+                            icon: const Icon(Icons.copy_all_rounded),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Icon(Icons.compare_arrows_rounded,
-                      size: 16, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                                color: scheme.outline
-                                    .withAlpha((0.20 * 255).round())),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(_platformIcon(sourcePlatformId), size: 14),
-                              const SizedBox(width: 5),
-                              SizedBox(
-                                width: 130,
-                                child: Text(
-                                  sourceName == null || sourceName.isEmpty
-                                      ? 'Unknown source'
-                                      : sourceName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      color: scheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(Icons.arrow_forward_rounded,
-                            size: 14, color: scheme.onSurfaceVariant),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                                color: scheme.outline
-                                    .withAlpha((0.20 * 255).round())),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(_platformIcon(targetPlatformId), size: 14),
-                              const SizedBox(width: 5),
-                              SizedBox(
-                                width: 130,
-                                child: Text(
-                                  targetName == null || targetName.isEmpty
-                                      ? 'Unknown target'
-                                      : targetName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      color: scheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(Icons.schedule_rounded,
-                      size: 16, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      when,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: scheme.onSurfaceVariant),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                  const SizedBox(height: 10),
                   Row(
                     children: [
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: stepTone(0).withAlpha((0.14 * 255).round()),
-                          border: Border.all(color: stepTone(0), width: 1.4),
-                        ),
-                      ),
-                      Expanded(
-                        child: Container(
-                          height: 2,
-                          color: connectorTone(0),
-                        ),
-                      ),
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: stepTone(1).withAlpha((0.14 * 255).round()),
-                          border: Border.all(color: stepTone(1), width: 1.4),
-                        ),
-                      ),
-                      Expanded(
-                        child: Container(
-                          height: 2,
-                          color: connectorTone(1),
-                        ),
-                      ),
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: stepTone(2).withAlpha((0.14 * 255).round()),
-                          border: Border.all(color: stepTone(2), width: 1.4),
+                      Icon(Icons.compare_arrows_rounded,
+                          size: 16, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                    color: scheme.outline
+                                        .withAlpha((0.20 * 255).round())),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(_platformIcon(sourcePlatformId),
+                                      size: 14),
+                                  const SizedBox(width: 5),
+                                  SizedBox(
+                                    width: 130,
+                                    child: Text(
+                                      sourceName == null || sourceName.isEmpty
+                                          ? 'Unknown source'
+                                          : sourceName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          color: scheme.onSurfaceVariant,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.arrow_forward_rounded,
+                                size: 14, color: scheme.onSurfaceVariant),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                    color: scheme.outline
+                                        .withAlpha((0.20 * 255).round())),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(_platformIcon(targetPlatformId),
+                                      size: 14),
+                                  const SizedBox(width: 5),
+                                  SizedBox(
+                                    width: 130,
+                                    child: Text(
+                                      targetName == null || targetName.isEmpty
+                                          ? 'Unknown target'
+                                          : targetName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          color: scheme.onSurfaceVariant,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -5641,96 +5603,169 @@ class _SocialShellState extends State<SocialShell> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
+                      Icon(Icons.schedule_rounded,
+                          size: 16, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          i18n.isArabic ? 'مجدول' : 'Queued',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: stepTone(0),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          i18n.isArabic ? 'جارٍ التنفيذ' : 'Running',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: stepTone(1),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          i18n.isArabic ? 'مكتمل' : 'Done',
-                          textAlign: TextAlign.end,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: stepTone(2),
-                          ),
+                          when,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: scheme.onSurfaceVariant),
                         ),
                       ),
                     ],
                   ),
-                  if (stageText.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '${i18n.isArabic ? 'المرحلة' : 'Stage'}: $stageText',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: scheme.onSurfaceVariant, fontSize: 12),
+                  const SizedBox(height: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  stepTone(0).withAlpha((0.14 * 255).round()),
+                              border:
+                                  Border.all(color: stepTone(0), width: 1.4),
+                            ),
+                          ),
+                          Expanded(
+                            child: Container(
+                              height: 2,
+                              color: connectorTone(0),
+                            ),
+                          ),
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  stepTone(1).withAlpha((0.14 * 255).round()),
+                              border:
+                                  Border.all(color: stepTone(1), width: 1.4),
+                            ),
+                          ),
+                          Expanded(
+                            child: Container(
+                              height: 2,
+                              color: connectorTone(1),
+                            ),
+                          ),
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  stepTone(2).withAlpha((0.14 * 255).round()),
+                              border:
+                                  Border.all(color: stepTone(2), width: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              i18n.isArabic ? 'مجدول' : 'Queued',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: stepTone(0),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              i18n.isArabic ? 'جارٍ التنفيذ' : 'Running',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: stepTone(1),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              i18n.isArabic ? 'مكتمل' : 'Done',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: stepTone(2),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (stageText.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${i18n.isArabic ? 'المرحلة' : 'Stage'}: $stageText',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: scheme.onSurfaceVariant, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (errorText.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: scheme.error.withAlpha((0.10 * 255).round()),
+                        border: Border.all(
+                            color:
+                                scheme.error.withAlpha((0.22 * 255).round())),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.error_outline_rounded,
+                              color: scheme.error, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              errorText,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: scheme.error,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: i18n.isArabic ? 'نسخ الخطأ' : 'Copy error',
+                            onPressed: () async {
+                              await Clipboard.setData(
+                                  ClipboardData(text: errorText));
+                              _toast(i18n.isArabic
+                                  ? 'تم نسخ الخطأ.'
+                                  : 'Error copied');
+                            },
+                            icon: const Icon(Icons.content_copy_rounded,
+                                size: 18),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ],
               ),
-              if (errorText.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: scheme.error.withAlpha((0.10 * 255).round()),
-                    border: Border.all(
-                        color: scheme.error.withAlpha((0.22 * 255).round())),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.error_outline_rounded,
-                          color: scheme.error, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          errorText,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: scheme.error, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: i18n.isArabic ? 'نسخ الخطأ' : 'Copy error',
-                        onPressed: () async {
-                          await Clipboard.setData(
-                              ClipboardData(text: errorText));
-                          _toast(
-                              i18n.isArabic ? 'تم نسخ الخطأ.' : 'Error copied');
-                        },
-                        icon: const Icon(Icons.content_copy_rounded, size: 18),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
+            ),
+          ));
     }
 
     return Column(

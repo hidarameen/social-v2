@@ -95,41 +95,55 @@ class SfTheme {
       ),
     );
 
-    final radius = BorderRadius.circular(24);
+    final radius = BorderRadius.circular(22);
     final fieldRadius = BorderRadius.circular(16);
+    final bgColor = isDark
+        ? Color.alphaBlend(
+            scheme.primary.withAlpha(16), const Color(0xFF0E1320))
+        : Color.alphaBlend(
+            scheme.primary.withAlpha(8), const Color(0xFFF5F7FC));
+    final canvasColor = isDark
+        ? Color.alphaBlend(
+            scheme.secondary.withAlpha(14), const Color(0xFF0A101B))
+        : Color.alphaBlend(
+            scheme.secondary.withAlpha(8), const Color(0xFFF1F5FB));
 
     return base.copyWith(
-      scaffoldBackgroundColor:
-          isDark ? const Color(0xFF131725) : const Color(0xFFF2F4F8),
-      canvasColor: isDark ? const Color(0xFF131725) : const Color(0xFFF2F4F8),
+      scaffoldBackgroundColor: bgColor,
+      canvasColor: canvasColor,
       appBarTheme: AppBarTheme(
         centerTitle: false,
         elevation: 0,
         backgroundColor: Colors.transparent,
         foregroundColor: scheme.onSurface,
         surfaceTintColor: Colors.transparent,
-        toolbarHeight: isDark ? 60 : 60,
+        toolbarHeight: 62,
         titleTextStyle: TextStyle(
           fontFamily: 'Tajawal',
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
+          fontSize: 21,
+          fontWeight: FontWeight.w800,
           color: scheme.onSurface,
         ),
       ),
       dividerTheme: DividerThemeData(
         thickness: 1,
         color: (isDark ? const Color(0xFFE5E8F1) : const Color(0xFFDDE3EF))
-            .withOpacity(isDark ? 0.12 : 0.70),
+            .withAlpha(isDark ? 30 : 176),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color:
-            isDark ? scheme.surface.withOpacity(0.95) : const Color(0xFFFFFFFF),
+        color: isDark
+            ? Color.alphaBlend(
+                scheme.primary.withAlpha(9),
+                scheme.surface,
+              )
+            : const Color(0xFFFFFFFF),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: radius,
           side: BorderSide(
-              color: scheme.outline.withOpacity(isDark ? 0.34 : 0.44)),
+            color: scheme.outline.withAlpha(isDark ? 94 : 112),
+          ),
         ),
         margin: EdgeInsets.zero,
       ),
@@ -141,13 +155,14 @@ class SfTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark
-            ? scheme.surfaceContainerHighest.withOpacity(0.62)
+            ? scheme.surfaceContainerHighest.withAlpha(158)
             : const Color(0xFFFFFFFF),
         border: OutlineInputBorder(borderRadius: fieldRadius),
         enabledBorder: OutlineInputBorder(
           borderRadius: fieldRadius,
           borderSide: BorderSide(
-              color: scheme.outlineVariant.withOpacity(isDark ? 0.45 : 0.80)),
+            color: scheme.outlineVariant.withAlpha(isDark ? 116 : 204),
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: fieldRadius,
@@ -157,10 +172,9 @@ class SfTheme {
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       chipTheme: base.chipTheme.copyWith(
-        backgroundColor: scheme.surface.withOpacity(isDark ? 0.75 : 1.0),
-        selectedColor: scheme.primary.withOpacity(isDark ? 0.24 : 0.13),
-        side:
-            BorderSide(color: scheme.outline.withOpacity(isDark ? 0.35 : 0.44)),
+        backgroundColor: scheme.surface.withAlpha(isDark ? 192 : 255),
+        selectedColor: scheme.primary.withAlpha(isDark ? 62 : 32),
+        side: BorderSide(color: scheme.outline.withAlpha(isDark ? 90 : 112)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         labelStyle:
             TextStyle(fontWeight: FontWeight.w600, color: scheme.onSurface),
@@ -178,8 +192,7 @@ class SfTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          side: BorderSide(
-              color: scheme.outline.withOpacity(isDark ? 0.38 : 0.62)),
+          side: BorderSide(color: scheme.outline.withAlpha(isDark ? 97 : 158)),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
@@ -194,7 +207,7 @@ class SfTheme {
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected))
             return const Color(0xFF4CD964);
-          return scheme.outline.withOpacity(isDark ? 0.45 : 0.55);
+          return scheme.outline.withAlpha(isDark ? 116 : 140);
         }),
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return Colors.white;
@@ -202,18 +215,18 @@ class SfTheme {
         }),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: scheme.surface.withOpacity(isDark ? 0.70 : 0.92),
-        indicatorColor: scheme.primary.withOpacity(isDark ? 0.26 : 0.14),
+        backgroundColor: scheme.surface.withAlpha(isDark ? 179 : 235),
+        indicatorColor: scheme.primary.withAlpha(isDark ? 67 : 36),
         selectedIconTheme: IconThemeData(color: scheme.primary),
         selectedLabelTextStyle:
-            TextStyle(fontWeight: FontWeight.w600, color: scheme.primary),
+            TextStyle(fontWeight: FontWeight.w700, color: scheme.primary),
         unselectedIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
         unselectedLabelTextStyle: TextStyle(
             color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surface.withOpacity(isDark ? 0.72 : 0.95),
-        indicatorColor: scheme.primary.withOpacity(isDark ? 0.26 : 0.13),
+        backgroundColor: scheme.surface.withAlpha(isDark ? 184 : 242),
+        indicatorColor: scheme.primary.withAlpha(isDark ? 67 : 34),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
@@ -223,7 +236,9 @@ class SfTheme {
         }),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: isDark ? scheme.surface : const Color(0xFFFFFFFF),
+        backgroundColor: isDark
+            ? Color.alphaBlend(scheme.primary.withAlpha(11), scheme.surface)
+            : const Color(0xFFFFFFFF),
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -232,7 +247,7 @@ class SfTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor:
-            isDark ? const Color(0xFF121824) : const Color(0xFF0B1220),
+            isDark ? const Color(0xFF0F1826) : const Color(0xFF0B1220),
         contentTextStyle:
             const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -353,18 +368,18 @@ class SfTheme {
       case 'orbit':
       default:
         return _SfPalette(
-          primary: isDark ? const Color(0xFF8F56F5) : const Color(0xFF6F3EF6),
-          secondary: isDark ? const Color(0xFF7181FF) : const Color(0xFF3A49F9),
-          accent: const Color(0xFF9C2CF3),
+          primary: isDark ? const Color(0xFF5B8DFF) : const Color(0xFF2F6BFF),
+          secondary: isDark ? const Color(0xFF17A0B5) : const Color(0xFF0E9AB2),
+          accent: isDark ? const Color(0xFF22C7A2) : const Color(0xFF0DA781),
           background:
-              isDark ? const Color(0xFF131725) : const Color(0xFFF2F4F8),
-          surface: isDark ? const Color(0xFF1D2335) : const Color(0xFFFFFFFF),
+              isDark ? const Color(0xFF111826) : const Color(0xFFF5F7FC),
+          surface: isDark ? const Color(0xFF172133) : const Color(0xFFFFFFFF),
           surfaceVariant:
-              isDark ? const Color(0xFF252D41) : const Color(0xFFE9EEF7),
-          onSurface: isDark ? const Color(0xFFF2F4FF) : const Color(0xFF1D1D35),
+              isDark ? const Color(0xFF212D42) : const Color(0xFFE9EEF8),
+          onSurface: isDark ? const Color(0xFFF2F6FF) : const Color(0xFF1B2538),
           onSurfaceVariant:
-              isDark ? const Color(0xFFB6BDD5) : const Color(0xFF8A8A9D),
-          outline: isDark ? const Color(0xFF3B4662) : const Color(0xFFDDE3EF),
+              isDark ? const Color(0xFFAFBDD7) : const Color(0xFF61708A),
+          outline: isDark ? const Color(0xFF34455F) : const Color(0xFFD6DEEB),
         );
     }
   }

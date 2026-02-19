@@ -1,12 +1,14 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 class SfTokens {
-  static const double pagePadding = 24;
+  static const double pagePadding = 26;
   static const double cardPadding = 20;
   static const double sectionGap = 16;
-  static const double itemGap = 16;
+  static const double itemGap = 14;
 
-  static const double radiusLg = 24;
+  static const double radiusLg = 22;
   static const double radiusMd = 16;
 
   static BorderRadius get radiusLarge => BorderRadius.circular(radiusLg);
@@ -50,11 +52,12 @@ class SfAppBackground extends StatelessWidget {
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    final bgStart = isDark ? const Color(0xFF191B2B) : const Color(0xFFF2F4F8);
-    final bgEnd = isDark ? const Color(0xFF101423) : const Color(0xFFEFF3FA);
+    final bgStart = isDark ? const Color(0xFF0D1524) : const Color(0xFFF4F7FC);
+    final bgEnd = isDark ? const Color(0xFF0A101B) : const Color(0xFFEEF3FA);
 
-    final glowA = const Color(0xFF9C2CF3).withOpacity(isDark ? 0.22 : 0.12);
-    final glowB = const Color(0xFF3A49F9).withOpacity(isDark ? 0.20 : 0.11);
+    final glowA = scheme.primary.withAlpha(isDark ? 64 : 36);
+    final glowB = scheme.secondary.withAlpha(isDark ? 56 : 28);
+    final glowC = scheme.tertiary.withAlpha(isDark ? 44 : 22);
 
     return Stack(
       children: [
@@ -73,8 +76,8 @@ class SfAppBackground extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: const Alignment(-0.8, -0.85),
-                radius: 1.25,
+                center: const Alignment(-0.9, -0.88),
+                radius: 1.18,
                 colors: [glowA, Colors.transparent],
               ),
             ),
@@ -84,9 +87,20 @@ class SfAppBackground extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: const Alignment(0.9, -0.2),
-                radius: 1.15,
+                center: const Alignment(0.96, -0.25),
+                radius: 1.1,
                 colors: [glowB, Colors.transparent],
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.75, 1.1),
+                radius: 1.2,
+                colors: [glowC, Colors.transparent],
               ),
             ),
           ),
@@ -95,7 +109,7 @@ class SfAppBackground extends StatelessWidget {
           child: IgnorePointer(
             child: CustomPaint(
               painter: _SfDotGridPainter(
-                color: scheme.outline.withOpacity(isDark ? 0.08 : 0.06),
+                color: scheme.outline.withAlpha(isDark ? 24 : 16),
               ),
             ),
           ),
@@ -155,19 +169,41 @@ class SfSectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withAlpha(26),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: scheme.primary.withAlpha(58)),
+                ),
+                child: Text(
+                  'SocialFlow',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.primary,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               Text(
                 title,
                 style: const TextStyle(
-                    fontSize: 28, fontWeight: FontWeight.w700, height: 1.12),
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  height: 1.06,
+                ),
               ),
               if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                   subtitle!,
                   style: TextStyle(
                     fontSize: 15,
                     color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -183,7 +219,7 @@ class SfSectionHeader extends StatelessWidget {
   }
 }
 
-class SfPanelCard extends StatelessWidget {
+class SfPanelCard extends StatefulWidget {
   const SfPanelCard({
     super.key,
     this.padding = const EdgeInsets.all(SfTokens.cardPadding),
@@ -198,46 +234,101 @@ class SfPanelCard extends StatelessWidget {
   final Widget? trailing;
 
   @override
+  State<SfPanelCard> createState() => _SfPanelCardState();
+}
+
+class _SfPanelCardState extends State<SfPanelCard> {
+  bool _hovering = false;
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final body = Padding(padding: padding, child: child);
+    final body = Padding(padding: widget.padding, child: widget.child);
+    final surfaceBase = isDark
+        ? Color.alphaBlend(scheme.primary.withAlpha(9), scheme.surface)
+        : const Color(0xFFFFFFFF);
+    final elevatedOffset = _hovering ? const Offset(0, 10) : const Offset(0, 6);
+    final shadow =
+        isDark ? Colors.black.withAlpha(54) : Colors.black.withAlpha(26);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: SfTokens.radiusLarge,
-        color:
-            isDark ? scheme.surface.withOpacity(0.95) : const Color(0xFFFFFFFF),
-        boxShadow: [
-          BoxShadow(
-            blurRadius: 20,
-            spreadRadius: 0,
-            offset: const Offset(0, 10),
-            color: Colors.black.withOpacity(isDark ? 0.20 : 0.06),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        scale: _hovering ? 1.008 : 1,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            borderRadius: SfTokens.radiusLarge,
+            boxShadow: [
+              BoxShadow(
+                blurRadius: _hovering ? 28 : 20,
+                spreadRadius: 0,
+                offset: elevatedOffset,
+                color: shadow,
+              ),
+            ],
+            border:
+                Border.all(color: scheme.outline.withAlpha(isDark ? 102 : 112)),
           ),
-        ],
-        border:
-            Border.all(color: scheme.outline.withOpacity(isDark ? 0.34 : 0.45)),
-      ),
-      child: ClipRRect(
-        borderRadius: SfTokens.radiusLarge,
-        child: Stack(
-          children: [
-            body,
-            if (leading != null)
-              Positioned(
-                left: 12,
-                top: 12,
-                child: leading!,
-              ),
-            if (trailing != null)
-              Positioned(
-                right: 12,
-                top: 12,
-                child: trailing!,
-              ),
-          ],
+          child: ClipRRect(
+            borderRadius: SfTokens.radiusLarge,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          surfaceBase,
+                          Color.alphaBlend(
+                            scheme.secondary.withAlpha(isDark ? 14 : 8),
+                            surfaceBase,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: IgnorePointer(
+                    child: ClipRect(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          height: 2,
+                          color: scheme.primary.withAlpha(isDark ? 70 : 52),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                body,
+                if (widget.leading != null)
+                  Positioned(
+                    left: 12,
+                    top: 12,
+                    child: widget.leading!,
+                  ),
+                if (widget.trailing != null)
+                  Positioned(
+                    right: 12,
+                    top: 12,
+                    child: widget.trailing!,
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -262,9 +353,16 @@ class SfBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: tone.withOpacity(isDark ? 0.22 : 0.12),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            tone.withAlpha(isDark ? 82 : 42),
+            tone.withAlpha(isDark ? 46 : 26),
+          ],
+        ),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: tone.withOpacity(isDark ? 0.35 : 0.30)),
+        border: Border.all(color: tone.withAlpha(isDark ? 126 : 100)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -275,7 +373,11 @@ class SfBadge extends StatelessWidget {
           ],
           Text(
             text,
-            style: TextStyle(color: tone, fontWeight: FontWeight.w800),
+            style: TextStyle(
+              color: tone,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.1,
+            ),
           ),
         ],
       ),
@@ -315,8 +417,8 @@ class SfEmptyState extends StatelessWidget {
                 height: 54,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: scheme.primary.withOpacity(0.14),
-                  border: Border.all(color: scheme.primary.withOpacity(0.28)),
+                  color: scheme.primary.withAlpha(36),
+                  border: Border.all(color: scheme.primary.withAlpha(72)),
                 ),
                 child: Icon(icon, color: scheme.primary),
               ),
