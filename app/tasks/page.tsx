@@ -384,12 +384,12 @@ function TasksPageContent() {
           </div>
         </div>
 
-        <Card className="mb-6 animate-fade-up sticky-toolbar">
+        <Card className="mb-6 animate-fade-up sticky-toolbar surface-card">
           <CardHeader>
             <CardTitle>Task Search & Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
               <div className="relative">
                 <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -445,6 +445,26 @@ function TasksPageContent() {
                   <SelectItem value="warnings">Auth warnings</SelectItem>
                 </SelectContent>
               </Select>
+              <Select
+                value={`${sortBy}:${sortDir}`}
+                onValueChange={(value: string) => {
+                  const [by, dir] = value.split(':') as any;
+                  setSortBy(by);
+                  setSortDir(dir);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="createdAt:desc">Date (Newest)</SelectItem>
+                  <SelectItem value="createdAt:asc">Date (Oldest)</SelectItem>
+                  <SelectItem value="status:asc">Status (A→Z)</SelectItem>
+                  <SelectItem value="status:desc">Status (Z→A)</SelectItem>
+                  <SelectItem value="name:asc">Name (A→Z)</SelectItem>
+                  <SelectItem value="name:desc">Name (Z→A)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -462,6 +482,8 @@ function TasksPageContent() {
                     setPlatformFilter('all');
                     setLastRunFilter('all');
                     setIssueFilter('all');
+                    setSortBy('createdAt');
+                    setSortDir('desc');
                   }}
                 >
                   Clear Filters
@@ -474,7 +496,7 @@ function TasksPageContent() {
         {isInitialLoading ? (
           <div className="space-y-4 animate-fade-up-delay">
             {[0, 1, 2].map((idx) => (
-              <Card key={idx}>
+              <Card key={idx} className="surface-card">
                 <CardContent className="p-6">
                   <div className="animate-pulse space-y-3">
                     <div className="h-5 w-48 rounded bg-muted/60" />
@@ -486,7 +508,7 @@ function TasksPageContent() {
             ))}
           </div>
         ) : filteredTasks.length === 0 ? (
-          <Card className="animate-fade-up-delay">
+          <Card className="animate-fade-up-delay surface-card">
             <CardContent className="py-12 text-center">
               <p className="mb-4 text-muted-foreground">
                 No tasks found. {tasks.length === 0 ? 'Create your first task to get started.' : 'Try a different search.'}
@@ -543,7 +565,7 @@ function TasksPageContent() {
                 return (
                   <Card
                     key={task.id}
-                    className="animate-fade-up overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:shadow-foreground/10"
+                    className="surface-card animate-fade-up overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:shadow-foreground/10"
                   >
                     <CardContent className="p-3 sm:p-3.5">
                       <div className="space-y-2.5">

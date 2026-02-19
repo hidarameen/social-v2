@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Clock,
   Zap,
+  Sparkles,
 } from 'lucide-react';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { getCachedQuery, setCachedQuery } from '@/lib/client/query-cache';
@@ -144,13 +145,32 @@ export default function AnalyticsPage() {
       <main className="control-main">
         <div className="page-header animate-fade-up">
           <div>
-            <p className="kpi-pill mb-3">Execution Intelligence</p>
+            <p className="kpi-pill mb-3 inline-flex items-center gap-1.5">
+              <Sparkles size={12} />
+              Execution Intelligence
+            </p>
             <h1 className="page-title">
             Analytics & Insights
             </h1>
             <p className="page-subtitle">
             Monitor task performance and execution statistics
             </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              {isInitialLoading ? (
+                <>
+                  <span className="kpi-pill">Loading totals...</span>
+                  <span className="kpi-pill">Loading success...</span>
+                  <span className="kpi-pill">Loading failures...</span>
+                </>
+              ) : (
+                <>
+                  <span className="kpi-pill">{stats.totalExecutions} total runs</span>
+                  <span className="kpi-pill">{stats.successfulExecutions} successful</span>
+                  <span className="kpi-pill">{stats.failedExecutions} failed</span>
+                  <span className="kpi-pill">{stats.successRate}% success</span>
+                </>
+              )}
+            </div>
           </div>
           <Button
             variant="outline"
@@ -165,7 +185,7 @@ export default function AnalyticsPage() {
         {isInitialLoading ? (
           <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
             {[0, 1, 2, 3, 4].map((idx) => (
-              <Card key={idx}>
+              <Card key={idx} className="surface-card">
                 <CardContent className="pt-6">
                   <div className="animate-pulse space-y-3">
                     <div className="h-3 w-24 rounded bg-muted/50" />
@@ -210,7 +230,7 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        <Card className="mb-8 animate-fade-up">
+        <Card className="mb-8 animate-fade-up surface-card">
           <CardHeader>
             <CardTitle>Success Rate by Task (Top 8)</CardTitle>
           </CardHeader>
@@ -242,12 +262,12 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* Task Performance Table */}
-        <Card className="animate-fade-up">
+        <Card className="animate-fade-up surface-card">
           <CardHeader>
             <CardTitle>Performance by Task</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 sticky-toolbar">
+            <div className="mb-4 sticky-toolbar surface-card">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <Input
                   placeholder="Search tasks..."
@@ -358,7 +378,7 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* Performance Insights */}
-        <Card className="mt-8 animate-fade-up-delay">
+        <Card className="mt-8 animate-fade-up-delay surface-card">
           <CardHeader>
             <CardTitle>Performance Insights</CardTitle>
           </CardHeader>
@@ -369,7 +389,7 @@ export default function AnalyticsPage() {
                   Best Performing Tasks
                 </h3>
                 <div className="space-y-2">
-                  {taskStats
+                  {[...taskStats]
                     .sort((a, b) => Number(b.successRate) - Number(a.successRate))
                     .slice(0, 3)
                     .map(stat => (

@@ -367,7 +367,7 @@ export default function DashboardPage() {
         </div>
 
         {error ? (
-          <Card className="mb-4 border-destructive/35 bg-destructive/10">
+          <Card className="mb-4 border-destructive/35 bg-destructive/10 surface-card">
             <CardContent className="flex items-center justify-between gap-3 py-4">
               <div className="inline-flex items-center gap-2 text-destructive">
                 <AlertTriangle size={16} />
@@ -384,7 +384,7 @@ export default function DashboardPage() {
           <div className="space-y-4 animate-fade-up">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {[0, 1, 2, 3].map((index) => (
-                <Card key={index}>
+                <Card key={index} className="surface-card">
                   <CardContent className="p-6">
                     <div className="animate-pulse space-y-3">
                       <div className="h-4 w-24 rounded bg-muted/60" />
@@ -394,7 +394,7 @@ export default function DashboardPage() {
                 </Card>
               ))}
             </div>
-            <Card>
+            <Card className="surface-card">
               <CardContent className="p-6">
                 <div className="animate-pulse space-y-3">
                   <div className="h-5 w-48 rounded bg-muted/60" />
@@ -405,7 +405,7 @@ export default function DashboardPage() {
             </Card>
           </div>
         ) : isEmptyWorkspace ? (
-          <Card className="animate-fade-up">
+          <Card className="animate-fade-up surface-card">
             <CardContent className="py-16 text-center">
               <h2 className="text-xl font-bold text-foreground">Workspace is ready</h2>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -436,7 +436,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-              <Card className="xl:col-span-6">
+              <Card className="surface-card xl:col-span-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center justify-between gap-2 text-lg font-semibold">
                     <span>Recent Automations</span>
@@ -558,7 +558,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card className="xl:col-span-6">
+              <Card className="surface-card xl:col-span-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg font-semibold">System Health</CardTitle>
                 </CardHeader>
@@ -625,7 +625,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-              <Card className="xl:col-span-6">
+              <Card className="surface-card xl:col-span-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center justify-between text-lg font-semibold">
                     <span>Recent Executions</span>
@@ -680,7 +680,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card className="xl:col-span-6">
+              <Card className="surface-card xl:col-span-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg font-semibold">Top Performing Tasks</CardTitle>
                 </CardHeader>
