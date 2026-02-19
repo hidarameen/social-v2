@@ -32,6 +32,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _email = TextEditingController();
   final TextEditingController _password = TextEditingController();
   final TextEditingController _confirmPassword = TextEditingController();
+  final FocusNode _nameFocus = FocusNode();
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _confirmFocus = FocusNode();
 
   bool _agree = false;
   bool _busy = false;
@@ -40,12 +44,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   String _error = '';
 
+  static const _primary = Color(0xFF6366F1);
+
   @override
   void dispose() {
     _name.dispose();
     _email.dispose();
     _password.dispose();
     _confirmPassword.dispose();
+    _nameFocus.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
     super.dispose();
   }
 
@@ -116,19 +126,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'auth.registerDesc',
         'Start securely with verified email access and strong credential requirements.',
       ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: AutofillGroup(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _LabeledField(
               label: i18n.t('auth.fullName', 'Full Name'),
+              icon: Icons.badge_outlined,
               child: TextFormField(
                 key: const Key('register-name-field'),
                 controller: _name,
+                focusNode: _nameFocus,
                 textDirection: widget.state.dir,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => _emailFocus.requestFocus(),
+                onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                 decoration: InputDecoration(
                   hintText: i18n.isArabic ? 'اسمك الكامل' : 'Your full name',
+                  prefixIcon: const Icon(Icons.person_outline_rounded),
                 ),
                 validator: (value) {
                   final v = (value ?? '').trim();
@@ -142,13 +159,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: 12),
             _LabeledField(
               label: i18n.t('auth.email', 'Email'),
+              icon: Icons.alternate_email_rounded,
               child: TextFormField(
                 key: const Key('register-email-field'),
                 controller: _email,
+                focusNode: _emailFocus,
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.email],
                 textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(hintText: 'you@example.com'),
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+                decoration: const InputDecoration(
+                  hintText: 'you@example.com',
+                  prefixIcon: Icon(Icons.mail_outline_rounded),
+                ),
                 validator: (value) {
                   final v = (value ?? '').trim();
                   if (v.isEmpty) return i18n.isArabic ? 'البريد مطلوب.' : 'Email is required.';
@@ -160,14 +185,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: 12),
             _LabeledField(
               label: i18n.t('auth.password', 'Password'),
+              icon: Icons.lock_outline_rounded,
               child: TextFormField(
                 key: const Key('register-password-field'),
                 controller: _password,
+                focusNode: _passwordFocus,
                 obscureText: !_showPassword,
                 autofillHints: const [AutofillHints.newPassword],
                 textDirection: TextDirection.ltr,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => _confirmFocus.requestFocus(),
+                onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                 decoration: InputDecoration(
                   hintText: i18n.isArabic ? 'كلمة مرور قوية' : 'Create a strong password',
+                  prefixIcon: const Icon(Icons.password_rounded),
                   suffixIcon: IconButton(
                     onPressed: _busy ? null : () => setState(() => _showPassword = !_showPassword),
                     icon: Icon(_showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded),
@@ -219,16 +250,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ],
             ),
             const SizedBox(height: 12),
+            Text(
+              i18n.isArabic
+                  ? 'أضف كلمة مرور قوية لحماية الحساب من الوصول غير المصرح.'
+                  : 'Choose a strong password to protect your account.',
+              style: TextStyle(fontSize: 11.5, color: Colors.white.withOpacity(widget.state.themeMode == AppThemeMode.dark ? 0.65 : 0.55)),
+            ),
+            const SizedBox(height: 10),
             _LabeledField(
               label: i18n.t('auth.confirmPassword', 'Confirm Password'),
+              icon: Icons.verified_rounded,
               child: TextFormField(
                 key: const Key('register-confirm-password-field'),
                 controller: _confirmPassword,
+                focusNode: _confirmFocus,
                 obscureText: !_showConfirm,
                 autofillHints: const [AutofillHints.newPassword],
                 textDirection: TextDirection.ltr,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _submit(),
+                onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                 decoration: InputDecoration(
                   hintText: i18n.isArabic ? 'أعد كتابة كلمة المرور' : 'Re-enter your password',
+                  prefixIcon: const Icon(Icons.shield_outlined),
                   suffixIcon: IconButton(
                     onPressed: _busy ? null : () => setState(() => _showConfirm = !_showConfirm),
                     icon: Icon(_showConfirm ? Icons.visibility_off_rounded : Icons.visibility_rounded),
@@ -243,28 +287,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            CheckboxListTile(
-              value: _agree,
-              onChanged: _busy ? null : (v) => setState(() => _agree = v == true),
-              title: Text(i18n.t('auth.termsAgree', 'I agree to the Terms of Service and Privacy Policy.')),
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-              subtitle: _agree
-                  ? null
-                  : Text(
-                      i18n.isArabic ? 'يجب الموافقة للمتابعة.' : 'You must accept the terms to continue.',
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withOpacity(widget.state.themeMode == AppThemeMode.dark ? 0.10 : 0.14)),
+                color: (widget.state.themeMode == AppThemeMode.dark ? Colors.white : const Color(0xFF0D1422)).withOpacity(0.04),
+              ),
+              child: CheckboxListTile(
+                value: _agree,
+                onChanged: _busy ? null : (v) => setState(() => _agree = v == true),
+                title: Text(i18n.t('auth.termsAgree', 'I agree to the Terms of Service and Privacy Policy.')),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                subtitle: _agree
+                    ? null
+                    : Text(
+                        i18n.isArabic ? 'يجب الموافقة للمتابعة.' : 'You must accept the terms to continue.',
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+              ),
             ),
             const SizedBox(height: 8),
             if (_error.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(_error, style: const TextStyle(color: Colors.redAccent)),
+              _InlineStatus(
+                text: _error,
+                color: Colors.redAccent,
+                icon: Icons.error_outline_rounded,
               ),
             FilledButton(
               key: const Key('register-submit-button'),
               onPressed: (_busy || !_agree) ? null : _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: _busy
@@ -272,7 +329,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     : Text(i18n.t('auth.createAccount', 'Create Account')),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                _AssistPill(text: i18n.isArabic ? 'تحقق بريد إلكتروني' : 'Email verification', icon: Icons.verified_user_rounded),
+                _AssistPill(text: i18n.isArabic ? 'قوة كلمة المرور' : 'Password strength', icon: Icons.security_rounded),
+                _AssistPill(text: i18n.isArabic ? 'سهولة التسجيل' : 'Smooth signup', icon: Icons.bolt_rounded),
+              ],
+            ),
             TextButton(
               onPressed: _busy ? null : widget.onGoToLogin,
               child: Text(
@@ -280,7 +347,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -288,17 +356,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
 }
 
 class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child});
+  const _LabeledField({required this.label, required this.child, this.icon});
 
   final String label;
   final Widget child;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 16),
+              const SizedBox(width: 6),
+            ],
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
         const SizedBox(height: 6),
         child,
       ],
@@ -311,4 +388,60 @@ class _RuleCheck {
 
   final String label;
   final bool pass;
+}
+
+class _InlineStatus extends StatelessWidget {
+  const _InlineStatus({required this.text, required this.color, required this.icon});
+
+  final String text;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.24)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: TextStyle(color: color))),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssistPill extends StatelessWidget {
+  static const _successColor = Color(0xFF10B981);
+  const _AssistPill({required this.text, required this.icon});
+
+  final String text;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: _successColor.withOpacity(0.10),
+        border: Border.all(color: _successColor.withOpacity(0.24)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: _successColor),
+          const SizedBox(width: 6),
+          Text(text, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _successColor)),
+        ],
+      ),
+    );
+  }
 }
