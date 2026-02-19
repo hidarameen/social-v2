@@ -6017,85 +6017,204 @@ class _SocialShellState extends State<SocialShell> {
       }
     }
 
+    Widget analyticsSurface({
+      required Widget child,
+      EdgeInsetsGeometry padding = const EdgeInsets.all(12),
+      Color? borderTone,
+    }) {
+      final tone = borderTone ?? scheme.outline;
+      return Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.surface.withAlpha((0.62 * 255).round()),
+              scheme.surface.withAlpha((0.44 * 255).round()),
+            ],
+          ),
+          border: Border.all(color: tone.withAlpha((0.24 * 255).round())),
+        ),
+        child: child,
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SfPanelCard(
-          child: SfSectionHeader(
-            title: i18n.t('analytics.title', 'Analytics'),
-            subtitle: i18n.t(
-              'analytics.subtitle',
-              'Monitor task performance and execution statistics.',
-            ),
-            trailing: OutlinedButton.icon(
-              onPressed: exportCsv,
-              icon: const Icon(Icons.download_rounded),
-              label: Text(i18n.t('analytics.exportCsv', 'Export CSV')),
-            ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SfBadge(
+                i18n.t('analytics.title', 'Analytics'),
+                tone: scheme.primary,
+                icon: Icons.insights_rounded,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                i18n.t('analytics.title', 'Analytics'),
+                style:
+                    const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                i18n.t(
+                  'analytics.subtitle',
+                  'Monitor task performance and execution statistics.',
+                ),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  SfBadge(
+                    '${i18n.t('analytics.kpi.totalExecutions', 'Total executions')}: ${totals['executions'] ?? 0}',
+                    tone: scheme.onSurface,
+                    icon: Icons.sync_rounded,
+                  ),
+                  SfBadge(
+                    '${i18n.t('analytics.kpi.successRate', 'Success rate')}: ${(successRate * 100).toStringAsFixed(2)}%',
+                    tone: scheme.tertiary,
+                    icon: Icons.trending_up_rounded,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        unawaited(_loadPanel(PanelKind.analytics, force: true)),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: Text(i18n.t('common.refresh', 'Refresh')),
+                  ),
+                  FilledButton.icon(
+                    onPressed: exportCsv,
+                    icon: const Icon(Icons.download_rounded),
+                    label: Text(i18n.t('analytics.exportCsv', 'Export CSV')),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            SizedBox(
-              width: 280,
-              child: SfKpiTile(
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 12.0;
+            final maxWidth =
+                constraints.maxWidth.isFinite ? constraints.maxWidth : 1120.0;
+            final cols = maxWidth >= 1160
+                ? 4
+                : maxWidth >= 760
+                    ? 2
+                    : 1;
+            final tileWidth = cols == 1
+                ? maxWidth
+                : ((maxWidth - ((cols - 1) * gap)) / cols)
+                    .clamp(250, 600)
+                    .toDouble();
+            final tiles = <Widget>[
+              SfKpiTile(
                 label:
                     i18n.t('analytics.kpi.totalExecutions', 'Total executions'),
                 value: '${totals['executions'] ?? 0}',
                 icon: Icons.sync_rounded,
               ),
-            ),
-            SizedBox(
-              width: 280,
-              child: SfKpiTile(
+              SfKpiTile(
                 label: i18n.t('analytics.kpi.successful', 'Successful'),
                 value: '${totals['successfulExecutions'] ?? 0}',
                 icon: Icons.check_circle_rounded,
                 tone: Colors.green.shade700,
               ),
-            ),
-            SizedBox(
-              width: 280,
-              child: SfKpiTile(
+              SfKpiTile(
                 label: i18n.t('analytics.kpi.failed', 'Failed'),
                 value: '${totals['failedExecutions'] ?? 0}',
                 icon: Icons.error_rounded,
                 tone: scheme.error,
               ),
-            ),
-            SizedBox(
-              width: 280,
-              child: SfKpiTile(
+              SfKpiTile(
                 label: i18n.t('analytics.kpi.successRate', 'Success rate'),
                 value: '${(successRate * 100).toStringAsFixed(2)}%',
                 icon: Icons.trending_up_rounded,
                 tone: scheme.tertiary,
               ),
-            ),
-          ],
+            ];
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: tiles
+                  .map((t) => SizedBox(width: tileWidth, child: t))
+                  .toList(),
+            );
+          },
         ),
-        const SizedBox(height: 12),
-        SfBarChart(
-          title:
-              i18n.t('analytics.chart.title', 'Success Rate by Task (Top 8)'),
-          subtitle: i18n.t(
-              'analytics.chart.subtitle', 'Sorted by your current ordering.'),
-          values: top.map((e) => (e['value'] as double)).toList(),
-          labels: top.map((e) => (e['label'] as String)).toList(),
-          maxValue: 100,
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         SfPanelCard(
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SfSectionHeader(
-                title: i18n.t('analytics.table.title', 'Performance by Task'),
-                subtitle: i18n.t('analytics.table.subtitle',
-                    'Search, sort, and review task-level execution KPIs.'),
+              Text(
+                i18n.t('analytics.chart.title', 'Success Rate by Task (Top 8)'),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                i18n.t('analytics.chart.subtitle',
+                    'Sorted by your current ordering.'),
+                style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              if (top.isEmpty)
+                analyticsSurface(
+                  child:
+                      Text(i18n.t('analytics.empty', 'No analytics data yet.')),
+                )
+              else
+                SfBarChart(
+                  title: i18n.t(
+                      'analytics.chart.title', 'Success Rate by Task (Top 8)'),
+                  subtitle: i18n.t('analytics.chart.subtitle',
+                      'Sorted by your current ordering.'),
+                  values: top.map((e) => (e['value'] as double)).toList(),
+                  labels: top.map((e) => (e['label'] as String)).toList(),
+                  maxValue: 100,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SfPanelCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                i18n.t('analytics.table.title', 'Performance by Task'),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                i18n.t(
+                  'analytics.table.subtitle',
+                  'Search, sort, and review task-level execution KPIs.',
+                ),
+                style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 12),
               LayoutBuilder(
@@ -6177,7 +6296,10 @@ class _SocialShellState extends State<SocialShell> {
               ),
               const SizedBox(height: 12),
               if (taskStats.isEmpty)
-                Text(i18n.t('analytics.empty', 'No analytics data yet.'))
+                analyticsSurface(
+                  child:
+                      Text(i18n.t('analytics.empty', 'No analytics data yet.')),
+                )
               else
                 ...taskStats.take(80).map((raw) {
                   final item = raw is Map<String, dynamic>
@@ -6195,72 +6317,75 @@ class _SocialShellState extends State<SocialShell> {
                           ? scheme.secondary
                           : scheme.error;
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border:
-                          Border.all(color: scheme.outline.withOpacity(0.55)),
-                      color: scheme.surface.withOpacity(0.35),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            color: rateColor.withOpacity(0.12),
-                            border:
-                                Border.all(color: rateColor.withOpacity(0.22)),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: analyticsSurface(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              color: rateColor.withAlpha((0.12 * 255).round()),
+                              border: Border.all(
+                                  color: rateColor
+                                      .withAlpha((0.22 * 255).round())),
+                            ),
+                            child:
+                                Icon(Icons.analytics_rounded, color: rateColor),
                           ),
-                          child:
-                              Icon(Icons.analytics_rounded, color: rateColor),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(taskName,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w900)),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  SfBadge(
-                                      '${i18n.t('analytics.executions', 'Executions')}: $total',
-                                      tone: scheme.onSurface),
-                                  SfBadge(
-                                      '${i18n.t('analytics.kpi.successful', 'Successful')}: $ok',
-                                      tone: Colors.green.shade700),
-                                  SfBadge(
-                                      '${i18n.t('analytics.kpi.failed', 'Failed')}: $fail',
-                                      tone: scheme.error),
-                                ],
-                              ),
-                            ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(taskName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    SfBadge(
+                                        '${i18n.t('analytics.executions', 'Executions')}: $total',
+                                        tone: scheme.onSurface),
+                                    SfBadge(
+                                        '${i18n.t('analytics.kpi.successful', 'Successful')}: $ok',
+                                        tone: Colors.green.shade700),
+                                    SfBadge(
+                                        '${i18n.t('analytics.kpi.failed', 'Failed')}: $fail',
+                                        tone: scheme.error),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        SfBadge('${rate.toStringAsFixed(2)}%',
-                            tone: rateColor, icon: Icons.trending_up_rounded),
-                      ],
+                          const SizedBox(width: 10),
+                          SfBadge('${rate.toStringAsFixed(2)}%',
+                              tone: rateColor, icon: Icons.trending_up_rounded),
+                        ],
+                      ),
                     ),
                   );
                 }),
               if (canLoadMore) ...[
                 const SizedBox(height: 8),
                 Center(
-                  child: OutlinedButton(
+                  child: OutlinedButton.icon(
                     onPressed: _analyticsLoadingMore
                         ? null
                         : () => unawaited(_loadMoreAnalytics()),
-                    child: Text(
+                    icon: _analyticsLoadingMore
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.expand_more_rounded),
+                    label: Text(
                       _analyticsLoadingMore
                           ? (i18n.isArabic ? '...جاري التحميل' : 'Loading...')
                           : i18n.t('analytics.loadMore', 'Load more'),
@@ -6369,6 +6494,31 @@ class _SocialShellState extends State<SocialShell> {
       },
     ];
 
+    Widget settingsSurface({
+      required Widget child,
+      EdgeInsetsGeometry padding = const EdgeInsets.all(12),
+      Color? borderTone,
+    }) {
+      final tone = borderTone ?? scheme.outline;
+      return Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.surface.withAlpha(((isDark ? 0.50 : 0.62) * 255).round()),
+              scheme.surface.withAlpha(((isDark ? 0.36 : 0.46) * 255).round()),
+            ],
+          ),
+          border: Border.all(
+              color: tone.withAlpha(((isDark ? 0.62 : 0.24) * 255).round())),
+        ),
+        child: child,
+      );
+    }
+
     Widget toggleRow({
       required String title,
       required String subtitle,
@@ -6376,14 +6526,7 @@ class _SocialShellState extends State<SocialShell> {
       required ValueChanged<bool> onChanged,
       required IconData icon,
     }) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: scheme.outline.withOpacity(isDark ? 0.65 : 0.70)),
-          color: scheme.surface.withOpacity(isDark ? 0.35 : 0.55),
-        ),
+      return settingsSurface(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -6392,9 +6535,11 @@ class _SocialShellState extends State<SocialShell> {
               height: 40,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
-                color: scheme.primary.withOpacity(isDark ? 0.18 : 0.10),
+                color: scheme.primary
+                    .withAlpha(((isDark ? 0.18 : 0.10) * 255).round()),
                 border: Border.all(
-                    color: scheme.primary.withOpacity(isDark ? 0.26 : 0.18)),
+                    color: scheme.primary
+                        .withAlpha(((isDark ? 0.26 : 0.18) * 255).round())),
               ),
               child: Icon(icon, color: scheme.primary, size: 20),
             ),
@@ -6427,8 +6572,8 @@ class _SocialShellState extends State<SocialShell> {
     Widget presetCard(Map<String, dynamic> opt, {required bool selected}) {
       final swatches = (opt['swatches'] as List).cast<Color>();
       final border = selected
-          ? scheme.primary.withOpacity(isDark ? 0.55 : 0.50)
-          : scheme.outline.withOpacity(isDark ? 0.65 : 0.70);
+          ? scheme.primary.withAlpha(((isDark ? 0.55 : 0.50) * 255).round())
+          : scheme.outline.withAlpha(((isDark ? 0.65 : 0.70) * 255).round());
 
       return InkWell(
         onTap: () => unawaited(
@@ -6442,9 +6587,23 @@ class _SocialShellState extends State<SocialShell> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: border, width: selected ? 1.4 : 1.0),
-            color: selected
-                ? scheme.primary.withOpacity(isDark ? 0.14 : 0.10)
-                : scheme.surface.withOpacity(isDark ? 0.35 : 0.55),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: selected
+                  ? [
+                      scheme.primary
+                          .withAlpha(((isDark ? 0.16 : 0.12) * 255).round()),
+                      scheme.primary
+                          .withAlpha(((isDark ? 0.08 : 0.06) * 255).round()),
+                    ]
+                  : [
+                      scheme.surface
+                          .withAlpha(((isDark ? 0.48 : 0.60) * 255).round()),
+                      scheme.surface
+                          .withAlpha(((isDark ? 0.34 : 0.44) * 255).round()),
+                    ],
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -6477,8 +6636,8 @@ class _SocialShellState extends State<SocialShell> {
                         shape: BoxShape.circle,
                         color: c,
                         border: Border.all(
-                            color: scheme.outline
-                                .withOpacity(isDark ? 0.55 : 0.70)),
+                            color: scheme.outline.withAlpha(
+                                ((isDark ? 0.55 : 0.70) * 255).round())),
                       ),
                     ),
                   ],
@@ -6816,14 +6975,7 @@ class _SocialShellState extends State<SocialShell> {
               icon: Icons.dark_mode_rounded,
             ),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                    color: scheme.outline.withOpacity(isDark ? 0.65 : 0.70)),
-                color: scheme.surface.withOpacity(isDark ? 0.35 : 0.55),
-              ),
+            settingsSurface(
               child: Row(
                 children: [
                   Container(
@@ -6831,10 +6983,11 @@ class _SocialShellState extends State<SocialShell> {
                     height: 40,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
-                      color: scheme.secondary.withOpacity(isDark ? 0.18 : 0.10),
+                      color: scheme.secondary
+                          .withAlpha(((isDark ? 0.18 : 0.10) * 255).round()),
                       border: Border.all(
-                          color: scheme.secondary
-                              .withOpacity(isDark ? 0.26 : 0.18)),
+                          color: scheme.secondary.withAlpha(
+                              ((isDark ? 0.26 : 0.18) * 255).round())),
                     ),
                     child: Icon(Icons.language_rounded,
                         color: scheme.secondary, size: 20),
@@ -7061,20 +7214,27 @@ class _SocialShellState extends State<SocialShell> {
               },
             ),
             const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.link_rounded),
-              title: Text(i18n.t('settings.apiBaseUrl', 'API Base URL')),
-              subtitle: Text(AppConfig.baseUri.toString()),
+            settingsSurface(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.link_rounded),
+                title: Text(i18n.t('settings.apiBaseUrl', 'API Base URL')),
+                subtitle: Text(AppConfig.baseUri.toString()),
+              ),
             ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.security_rounded),
-              title: Text(i18n.t('settings.authMode', 'Auth mode')),
-              subtitle: Text(i18n.t('settings.authModeValue',
-                  'Bearer token via /api/mobile/login')),
+            const SizedBox(height: 10),
+            settingsSurface(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.security_rounded),
+                title: Text(i18n.t('settings.authMode', 'Auth mode')),
+                subtitle: Text(i18n.t('settings.authModeValue',
+                    'Bearer token via /api/mobile/login')),
+              ),
             ),
-            const Divider(height: 18),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -7100,41 +7260,76 @@ class _SocialShellState extends State<SocialShell> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SfPanelCard(
-          child: SfSectionHeader(
-            title: i18n.t('settings.title', 'Settings'),
-            subtitle: i18n.t(
-              'settings.subtitle',
-              'Manage your account, themes, and platform API credentials.',
-            ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SfBadge(
+                i18n.t('settings.title', 'Settings'),
+                tone: scheme.primary,
+                icon: Icons.tune_rounded,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                i18n.t('settings.title', 'Settings'),
+                style:
+                    const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                i18n.t(
+                  'settings.subtitle',
+                  'Manage your account, themes, and platform API credentials.',
+                ),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  SfBadge(
+                    '${i18n.t('settings.language', 'Language')}: ${isArabic ? 'AR' : 'EN'}',
+                    tone: scheme.secondary,
+                    icon: Icons.language_rounded,
+                  ),
+                  SfBadge(
+                    '${i18n.t('settings.themePreset', 'Theme preset')}: ${widget.appState.themePreset}',
+                    tone: scheme.onSurface,
+                    icon: Icons.palette_rounded,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         credentialsCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         profileCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         appearanceCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         experienceCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         notificationsCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         privacyCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         systemCard(),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            FilledButton.icon(
+        const SizedBox(height: 14),
+        SfPanelCard(
+          padding: const EdgeInsets.all(14),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
               onPressed: () async {
                 await widget.onSignOut();
               },
               icon: const Icon(Icons.logout_rounded),
               label: Text(i18n.t('common.signOut', 'Sign out')),
             ),
-          ],
+          ),
         ),
       ],
     );
