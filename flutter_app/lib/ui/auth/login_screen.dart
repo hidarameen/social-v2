@@ -181,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+            children: [
             _LabeledField(
               label: i18n.t('auth.email', 'Email'),
               icon: Icons.alternate_email_rounded,
@@ -450,7 +450,6 @@ class _MetaPill extends StatelessWidget {
     );
   }
 }
-
 
 class _TrustRow extends StatelessWidget {
   const _TrustRow({required this.isArabic, required this.muted});

@@ -131,7 +131,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+            children: [
             _LabeledField(
               label: i18n.t('auth.fullName', 'Full Name'),
               icon: Icons.badge_outlined,
