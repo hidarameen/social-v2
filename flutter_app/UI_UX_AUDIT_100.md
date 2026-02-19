@@ -1,115 +1,115 @@
-# Flutter APK UI/UX Audit (100 Issues)
+# Flutter APK UI/UX Audit (100 Current Gaps vs Next.js)
 
-Audit scope: Flutter UI implementation in `flutter_app/` compared against the current Next.js control app UX patterns and Material 3 guidance. This is a code-based audit (not an on-device visual inspection).
-Audit date: 2026-02-18.
+Audit scope (code-based):
+- Flutter mobile shell and panels: `flutter_app/lib/main.dart`
+- Web reference UX: `components/layout/header.tsx`, `components/layout/global-shell-enhancements.tsx`, `app/tasks/page.tsx`, `components/tasks/task-wizard.tsx`, `app/executions/page.tsx`, `app/settings/page.tsx`
 
-1. Navigation lacks consistent per-section captions (rail/drawer) across all densities, making scanning slower than the Next.js sidebar.
-2. Rail "extended vs collapsed" behavior is not animated, causing abrupt layout change compared to the web shell.
-3. Drawer navigation does not show a clear “active” pill/indicator with the same prominence as the web sidebar active style.
-4. There is no global command palette or quick switcher (web uses Ctrl/Cmd+K), reducing operator speed.
-5. There is no global shortcuts/help surface for power users.
-6. There is no persistent “last refreshed” timestamp indicator, making data staleness unclear.
-7. Refresh is duplicated (AppBar refresh and panel refresh), but the UI does not explain which one affects which data scope.
-8. AppBar lacks contextual actions per panel (search/filter/export), forcing controls into the panel and increasing scroll.
-9. Background and card styling are not consistently applied to legacy `Card(...)` usage across the app, producing visual inconsistency.
-10. Several panels still use mixed component styles (plain `Card` vs `SfPanelCard`), causing uneven elevation/border/radius.
+Audit date: 2026-02-19.
 
-11. Typography scale is not centralized; headings and labels use ad-hoc `TextStyle(...)` values.
-12. Status semantics (success/warn/error) use inconsistent hues and saturation across panels.
-13. Chips/pills do not use a unified system (some are `Container` pills, some are `SfBadge`), reducing consistency.
-14. Iconography is inconsistent (mix of outline/filled, mixed metaphors across panels).
-15. Microcopy uses inconsistent tone (e.g., “Task execution” vs “Executions”), reducing perceived polish.
-16. There is no density switch for list content spacing (only VisualDensity), so some layouts remain too roomy on tablets.
-17. No unified “glass” surface specification (blur + border + noise) like the web’s glass toolbar.
-18. No unified “sticky toolbar” behavior for filters/search in long lists (web uses sticky toolbars).
-19. No unified empty-state illustration pattern per section (icon-only empties vary).
-20. No unified skeleton loading pattern; many screens still show spinners or nothing.
+1. Flutter has no global command palette equivalent to the web `Ctrl/Cmd + K` workflow.
+2. Flutter has no keyboard-shortcuts help modal equivalent to web `Shift + ?`.
+3. Flutter has no global quick-actions menu/FAB equivalent to the web shell enhancement.
+4. Flutter has no "What's New" modal surface for release-level operator updates.
+5. Flutter has no "recently viewed" navigation surface.
+6. Flutter panel state is not URL-routed, so views are not deep-linkable/shareable like web routes.
+7. Flutter sidebar omits per-item captions used in web navigation for faster scanning.
+8. Flutter header does not show breadcrumbs.
+9. Flutter has no global offline banner equivalent to the web shell offline state.
+10. Flutter has no route progress indicator equivalent to web route-change progress.
+11. Flutter has no global top search entry point that opens a cross-app command/search surface.
+12. Flutter has no global profile modal from header with inline edit/logout parity.
+13. Flutter mobile nav lacks the web-style quick menu actions cluster.
+14. Flutter has no dedicated quick-search header action icon parity.
+15. Flutter has no app-wide keyboard shortcut bindings for operator speed workflows.
 
-21. Dashboard KPIs do not include trend deltas or timeframe scoping like “Last 24h/7d”.
-22. Dashboard “Recent Automations” cards are dense and lack a consistent information hierarchy on small screens.
-23. Dashboard “System Health” does not include actionable drill-down links (e.g., “Show failing tasks/accounts”).
-24. Dashboard does not surface “recent failures” as a first-class callout.
-25. Dashboard does not clearly differentiate “workspace empty” vs “data failed to load” states.
-26. Dashboard shows platform chips but lacks per-platform counts/legend clarity in compact layouts.
-27. Dashboard actions (“Connect Account”, “Create Task”) do not show context hints (where it will open and what it does).
-28. Dashboard uses multiple different pill styles instead of one KPI pill component.
-29. Dashboard does not have a compact mode layout tuned for phone width (KPI grid wrapping is fragile).
-30. Dashboard does not provide a “quick glance” mode for operators (compact KPIs + top 3 alerts).
+16. Flutter still mixes multiple component styles (`Card`, `ListTile`, custom SF widgets) in one surface.
+17. Spacing remains partly hard-coded across sections instead of fully tokenized.
+18. Icon sizing is inconsistent across cards, chips, and row actions.
+19. Status tones are not fully normalized to one semantic system matching web token behavior.
+20. Panel motion choreography is not at the same polish level as web stagger/fade patterns.
+21. Header composition differs between panels, reducing visual rhythm consistency.
+22. Corner-radius usage varies across tiles, cards, chips, and modal sections.
+23. Badge/chip visual language is not fully unified across all panels.
+24. Search/filter blocks are not sticky on long-scroll sections.
+25. Skeleton states are implemented, but not uniformly across all panels and states.
+26. Error communication pattern is mixed (snackbar vs inline) rather than standardized.
+27. Density behavior does not yet match web compactness expectations on large screens.
+28. Desktop-hover affordances are less explicit than web for interactive rows/actions.
+29. Typography hierarchy is still less strict than web's title/subtitle/body rhythm.
+30. There is no single shared cross-platform token contract mirroring web theme tokens.
 
-31. Tasks filters are many; the UI lacks a summary “filter bar” with chips showing active filters.
-32. Tasks sort controls are mixed with filters and do not have a clear “sort state” indicator.
-33. Tasks list cards do not have a consistent header (title + status + last run + actions), varying by data.
-34. Tasks actions are icon-only and rely on tooltips; on mobile these are less discoverable.
-35. Tasks do not have multi-select and bulk operations (pause/resume/delete), limiting operational workflows.
-36. Tasks do not expose a “duplicate task” flow, a common power-user action.
-37. Tasks error messaging shows generic “Failed” text without guided remediation steps.
-38. Tasks do not provide a preview of routes (source->targets) in a compact, glanceable format.
-39. Tasks do not provide an “audit trail” surface (who changed what, when).
-40. Task edit sheet has limited progressive disclosure; it is one long form without steps.
+31. Dashboard lacks timeframe switching (Today/7d/30d).
+32. Dashboard lacks KPI trend arrows/delta indicators.
+33. Dashboard lacks a dedicated OAuth-attention callout block like web.
+34. Dashboard lacks a dedicated recent-failures module.
+35. Dashboard lacks a compact quick-actions strip in the hero area.
+36. Dashboard lacks platform distribution mini-bars/summary visuals.
+37. Dashboard lacks task health scoring/presentation.
+38. Dashboard lacks a prominent pending-executions operational alert tile.
+39. Dashboard lacks a release/update announcement widget.
+40. Dashboard cards do not all provide equivalent deep links and next actions as web.
+41. Dashboard does not support user-level widget pinning/reordering.
+42. Dashboard lacks a panel-level export shortcut surface.
+43. Dashboard lacks a condensed "operator glance" mode for dense monitoring.
+44. Dashboard lacks consistent KPI explanation tooltips.
+45. Dashboard lacks refresh cadence controls (auto-refresh strategy options).
 
-41. Task editor account selection is not searchable; lists become unusable at scale.
-42. Task editor does not show per-account health/authorization status inline.
-43. Task editor does not provide content previews for text/image/video/link with final render.
-44. Task editor does not provide a “test run” that validates credentials/content before saving.
-45. Task editor validation errors are not summarized at top; users must hunt for the failing field.
-46. Task editor lacks contextual help for status/content type choices.
-47. Task editor does not surface rate limits/retry strategy (if supported), leaving operators blind.
-48. Task editor does not warn about dangerous configurations (e.g., very wide fan-out).
-49. Task editor lacks drafts/autosave; accidental dismiss loses work.
-50. Task editor form does not adapt well to smaller screens when many fields are shown.
+46. Flutter has no dedicated route-based tasks page with URL-persisted filters.
+47. Flutter task creation is not parity with web `TaskWizard` stepper workflow.
+48. Flutter task editing is not parity with web route-based wizard editing.
+49. Flutter lacks task detail page parity (`app/tasks/[id]/page.tsx`).
+50. Flutter lacks task-level analytics block shown in web detail.
+51. Flutter lacks task error-analysis/failure-prediction surfaces present in web details.
+52. Flutter lacks full schedule/recurrence UX parity with wizard depth.
+53. Flutter lacks full platform-specific advanced controls parity (Twitter/Telegram/YouTube branches).
+54. Flutter task rows do not expose web-level auth-warning density and context.
+55. Flutter lacks multi-select bulk task operations (pause/resume/delete).
+56. Flutter lacks saved filter presets/channels.
+57. Flutter task sorting/filtering controls are less expressive than web's full control set.
+58. Flutter task rows show less dense operational metadata than web cards.
+59. Flutter confirmation UX is not standardized to a shared confirm-dialog pattern.
+60. Flutter lacks per-task export/report shortcuts available through web flows.
+61. Flutter "open task logs" uses local panel state, not URL-backed task-scoped execution routing.
+62. Flutter lacks rich pre-submit transformation previews.
+63. Flutter task composer lacks draft autosave/restore.
+64. Flutter task form lacks full step-level validation summary UX.
+65. Flutter task creation/edit workflows are less keyboard-efficient than web.
 
-51. Accounts panel lacks grouping by platform, which is essential once many accounts exist.
-52. Accounts panel lacks “needs re-auth” / OAuth warning filter.
-53. Accounts panel does not provide direct actions per account (reconnect, open profile, copy handle).
-54. Accounts panel does not provide an account details view (metadata, last activity).
-55. Accounts panel search is not debounced and can rebuild heavily on every keystroke.
-56. Accounts panel platform icons are generic and not mapped to the same brand semantics as the web UI.
-57. Accounts panel does not show connection quality (latency/errors) or last sync.
-58. Accounts panel does not clearly separate “inactive” from “warning” states.
-59. Accounts panel lacks skeleton loading states.
-60. Accounts panel empty state does not include a deep link/QR/action to the relevant web flow.
+66. Flutter has no OAuth account-connect flow UI.
+67. Flutter has no manual account add/edit UI parity with web account forms.
+68. Flutter has no disconnect/delete account action in accounts panel.
+69. Flutter has no reconnect action for inactive or expired-auth accounts.
+70. Flutter has no auth-method badgeing (OAuth/manual/session) on account rows.
+71. Flutter has no dedicated account details drawer/sheet parity with web depth.
+72. Flutter does not expose re-auth reason/required-at signals per account.
+73. Flutter account filtering is narrower than web account-management flows.
+74. Flutter accounts panel has no backend pagination/load-more control parity.
+75. Flutter has no route-level account management pages (connect/edit) parity.
 
-61. Executions panel lacks filters by status (success/failed/running/pending).
-62. Executions panel lacks a detail view for a single execution (logs, payload, errors).
-63. Executions panel does not show duration/latency, blocking performance diagnosis.
-64. Executions panel does not provide “retry execution” action (if supported).
-65. Executions panel does not provide “copy error” / “share report” affordances.
-66. Executions panel shows minimal source/target context; it should show platform chips and account labels.
-67. Executions panel lacks timeline visualization (queued -> running -> completed).
-68. Executions panel does not paginate/infinite-scroll clearly for large histories.
-69. Executions panel lacks offline/cached-view indicator.
-70. Executions panel lacks dedicated empty states for “no data” vs “filters exclude all”.
+76. Flutter executions lack SSE/EventSource real-time updates.
+77. Flutter executions lack grouped-run view by execution group id.
+78. Flutter executions lack explicit sort controls (`executedAt/status/taskName`).
+79. Flutter executions have no URL task filter/deep link parity.
+80. Flutter executions panel lacks CSV export action parity.
+81. Flutter executions do not implement dynamic polling strategy based on pending state.
+82. Flutter executions do not implement app-focus visibility refresh behavior parity.
+83. Flutter executions lack grouped expand/collapse route detail rows.
+84. Flutter executions lack top stats cards based on grouped runs.
+85. Flutter executions lack grouped error aggregation summaries.
+86. Flutter executions have no permalink/shareable route to a specific run.
+87. Flutter executions have no batch retry action by group.
+88. Flutter executions lack explicit processing-run KPI parity.
 
-71. Analytics panel previously lacked search/sort/table parity; it is improving but still lacks full Next.js insights blocks.
-72. Analytics lacks average execution time (web shows a placeholder; mobile should show real or omit clearly).
-73. Analytics lacks the “Performance Insights” section (best tasks + recent summary) that the web UI presents.
-74. Analytics lacks timeframe scoping (24h/7d/30d) and comparison to previous period.
-75. Analytics lacks per-platform breakdown.
-76. Analytics lacks a failure category breakdown.
-77. Analytics chart lacks touch tooltips and highlight interactions.
-78. Analytics table lacks a compact “row actions” menu (view task, open logs).
-79. Analytics does not persist query/sort state across sessions like the web query cache.
-80. Analytics does not show stable caching/stale indicators.
+89. Flutter analytics lacks timeframe selector parity.
+90. Flutter analytics lacks compare-to-previous-period metrics.
+91. Flutter analytics lacks per-platform breakdown parity.
+92. Flutter analytics lacks failure-category breakdown parity.
+93. Flutter analytics lacks anomaly/recommendation insight cards.
+94. Flutter analytics rows lack direct contextual actions (open task/open logs).
+95. Flutter analytics lacks explicit stale/cache-state signaling parity.
 
-81. Settings page previously lacked Next.js parity; improved, but still missing preset preview/animation parity.
-82. Settings does not show a “Save All Changes” top action like web; actions are per-section.
-83. Settings platform credential fields do not show per-field validation and formatting hints (e.g., key length).
-84. Settings credentials section does not warn about leaving page with unsaved draft changes.
-85. Settings does not show last updated timestamps for platform credentials.
-86. Settings does not support “export data” actual file delivery; currently it is limited by mobile constraints.
-87. Settings does not include a “Reset to defaults” flow with confirmation.
-88. Settings does not expose a diagnostics page (build info, API reachability, last sync).
-89. Settings does not include an “About” section with version and release notes.
-90. Settings does not include notification permission state and deep link to system settings.
-
-91. Profile image uses raw URLs; there is no in-app image picker or cropping like web upload flow.
-92. Password change UX does not include strength meter or policy hints.
-93. Password change UX does not include “show/hide password” toggles per field.
-94. Auth screens do not consistently use the same surface/background system as the shell screens.
-95. Error states often use SnackBars only; there is no persistent error panel for long messages.
-96. Accessibility: many interactive elements lack explicit semantics labels beyond visible text.
-97. Accessibility: minimum tap target is not guaranteed for all custom clickable widgets.
-98. Accessibility: dynamic type scaling is not reviewed; some text may clip at large font sizes.
-99. Accessibility: RTL layout is present but not fully audited for alignment, icons, and flow direction.
-100. Performance: large single-file UI (`lib/main.dart`) increases maintenance risk and makes consistent UX changes harder.
-
+96. Flutter settings has no single "Save All Changes" action parity.
+97. Flutter settings lacks explicit unsaved-changes leave guard across all editable sections.
+98. Flutter lacks a dedicated diagnostics screen with runtime/build/network detail parity.
+99. Flutter lacks an "About / release notes" section parity.
+100. Flutter UI remains highly monolithic (`lib/main.dart`), making parity iteration and regression control harder than the modular web architecture.
