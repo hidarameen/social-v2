@@ -27,6 +27,7 @@ import {
   ImageIcon,
   Layers,
   VideoIcon,
+  Sparkles,
 } from 'lucide-react';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { getCachedQuery, setCachedQuery } from '@/lib/client/query-cache';
@@ -523,14 +524,30 @@ export default function ExecutionsPage() {
       <Header />
 
       <main className="control-main">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="page-header animate-fade-up">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              Execution History
-            </h1>
-            <p className="text-muted-foreground">
-              Track all your task executions and their results
+            <p className="kpi-pill mb-3 inline-flex items-center gap-1.5">
+              <Sparkles size={12} />
+              Runtime Timeline
             </p>
+            <h1 className="page-title">Execution History</h1>
+            <p className="page-subtitle">Track task executions, route-level state, and delivery results</p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              {isInitialLoading ? (
+                <>
+                  <span className="kpi-pill">Loading runs...</span>
+                  <span className="kpi-pill">Loading success...</span>
+                  <span className="kpi-pill">Loading failures...</span>
+                </>
+              ) : (
+                <>
+                  <span className="kpi-pill">{stats.total} total</span>
+                  <span className="kpi-pill">{stats.successful} successful</span>
+                  <span className="kpi-pill">{stats.failed} failed</span>
+                  <span className="kpi-pill">{stats.processing} processing</span>
+                </>
+              )}
+            </div>
             {taskIdFilter ? (
               <div className="mt-3 flex items-center gap-2 text-xs">
                 <span className="kpi-pill">
@@ -562,9 +579,9 @@ export default function ExecutionsPage() {
 
         {/* Stats Cards */}
         {isInitialLoading ? (
-          <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[0, 1, 2, 3].map((idx) => (
-              <Card key={idx}>
+              <Card key={idx} className="surface-card">
                 <CardContent className="pt-6">
                   <div className="animate-pulse space-y-3">
                     <div className="mx-auto h-3 w-24 rounded bg-muted/50" />
@@ -575,8 +592,8 @@ export default function ExecutionsPage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Card className="surface-card">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <p className="text-muted-foreground text-sm mb-1">Total Runs</p>
@@ -584,7 +601,7 @@ export default function ExecutionsPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="surface-card">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <p className="text-muted-foreground text-sm mb-1">Successful Runs</p>
@@ -594,7 +611,7 @@ export default function ExecutionsPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="surface-card">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <p className="text-muted-foreground text-sm mb-1">Failed Runs</p>
@@ -604,7 +621,7 @@ export default function ExecutionsPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="surface-card">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <p className="text-muted-foreground text-sm mb-1">Processing Runs</p>
@@ -618,12 +635,12 @@ export default function ExecutionsPage() {
         )}
 
         {/* Filters */}
-        <Card className="mb-6 sticky-toolbar">
+        <Card className="mb-6 animate-fade-up sticky-toolbar surface-card">
           <CardHeader>
             <CardTitle>Filters</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Search
@@ -684,13 +701,38 @@ export default function ExecutionsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Task ID
+                </label>
+                <Input
+                  placeholder="Optional task id..."
+                  value={taskIdFilter}
+                  onChange={(event) => setTaskIdFilter(event.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {(searchTerm || statusFilter !== 'all' || taskIdFilter) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setStatusFilter('all');
+                    setTaskIdFilter('');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
 
         {/* Executions List */}
         {isInitialLoading ? (
-          <Card>
+          <Card className="surface-card">
             <CardContent className="py-6">
               <div className="space-y-3">
                 {[0, 1, 2].map((idx) => (
@@ -703,7 +745,7 @@ export default function ExecutionsPage() {
             </CardContent>
           </Card>
         ) : filteredExecutions.length === 0 ? (
-          <Card>
+          <Card className="surface-card">
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">
                 No executions found. {executions.length === 0 ? 'Create and run some tasks to see execution history.' : 'Try a different search filter.'}
@@ -838,7 +880,7 @@ export default function ExecutionsPage() {
                       <span>Grouped run with {routes.length} routes</span>
                     </div>
                   ) : null}
-                  <Card className="hover:border-primary/50 transition-colors cursor-pointer">
+                  <Card className="surface-card cursor-pointer transition-colors hover:border-primary/50">
                     <CardContent className="p-6">
                       <div
                         className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"

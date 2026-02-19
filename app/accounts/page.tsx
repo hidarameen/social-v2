@@ -28,7 +28,7 @@ import { platformConfigs } from '@/lib/platforms/configs';
 import { type PlatformId } from '@/lib/platforms/types';
 import { PlatformIcon } from '@/components/common/platform-icon';
 import { AccountAvatar } from '@/components/common/account-avatar';
-import { Plus, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirmDialog } from '@/components/common/use-confirm-dialog';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
@@ -468,12 +468,15 @@ export default function AccountsPage() {
       <main className="control-main">
         <div className="page-header animate-fade-up">
           <div>
-            <p className="kpi-pill mb-3">Identity Layer</p>
+            <p className="kpi-pill mb-3 inline-flex items-center gap-1.5">
+              <Sparkles size={12} />
+              Identity Layer
+            </p>
             <h1 className="page-title">
               Connected Accounts
             </h1>
             <p className="page-subtitle">
-              Manage your social media platform connections
+              Manage account connections, auth status, and platform access
             </p>
             <div className="mt-4 flex flex-wrap gap-2 text-xs">
               {isInitialLoading ? (
@@ -796,9 +799,9 @@ export default function AccountsPage() {
             </DialogContent>
           </Dialog>
         </div>
-        <Card className="mb-6 animate-fade-up sticky-toolbar">
+        <Card className="mb-6 animate-fade-up sticky-toolbar surface-card">
           <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <Input
                 placeholder="Search accounts..."
                 value={searchTerm}
@@ -839,6 +842,12 @@ export default function AccountsPage() {
                   <SelectItem value="isActive:asc">Inactive First</SelectItem>
                 </SelectContent>
               </Select>
+              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-card/55 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Visible</span>
+                <span className="font-semibold text-foreground">
+                  {accounts.length} / {totalConnected}
+                </span>
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {(searchTerm || statusFilter !== 'all') && (
@@ -889,18 +898,25 @@ export default function AccountsPage() {
               if (platformAccounts.length === 0) return null;
 
               const config = platformConfigs[platformId as PlatformId];
+              const platformActiveCount = platformAccounts.filter((account) => account.isActive).length;
               return (
                 <div key={platformId}>
-                  <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-foreground">
-                    <PlatformIcon platformId={platformId as PlatformId} size={20} />
-                    <span>{config.name}</span>
-                  </h2>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
+                      <PlatformIcon platformId={platformId as PlatformId} size={20} />
+                      <span>{config.name}</span>
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="kpi-pill">{platformAccounts.length} accounts</span>
+                      <span className="kpi-pill">{platformActiveCount} active</span>
+                    </div>
+                  </div>
 
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                     {platformAccounts.map(account => (
                       <Card
                         key={account.id}
-                        className={`${account.isActive ? '' : 'opacity-65'} hover:border-primary/30`}
+                        className={`surface-card h-full ${account.isActive ? '' : 'opacity-65'} hover:border-primary/30`}
                       >
                         <CardContent className="p-6">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

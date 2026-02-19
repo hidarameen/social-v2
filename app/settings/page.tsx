@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Save, Bell, Lock, Palette, Database, KeyRound, Moon, Sun } from 'lucide-react';
+import { Save, Bell, Lock, Palette, Database, KeyRound, Moon, Sun, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useTheme } from 'next-themes';
@@ -445,7 +445,10 @@ export default function SettingsPage() {
       <main className="control-main">
         <div className="page-header animate-fade-up">
           <div>
-            <p className="kpi-pill mb-3">Workspace Control</p>
+            <p className="kpi-pill mb-3 inline-flex items-center gap-1.5">
+              <Sparkles size={12} />
+              Workspace Control
+            </p>
             <h1 className="page-title">
             Settings
             </h1>
@@ -459,8 +462,8 @@ export default function SettingsPage() {
           </Button>
         </div>
 
-        <div className="w-full space-y-6">
-          <Card>
+        <div className="grid w-full grid-cols-1 gap-6 xl:grid-cols-2">
+          <Card className="surface-card xl:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <KeyRound size={20} />
@@ -521,7 +524,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card xl:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <KeyRound size={20} />
@@ -650,7 +653,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Lock size={20} />
@@ -703,7 +706,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Palette size={20} />
@@ -780,7 +783,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card">
             <CardHeader>
               <CardTitle>Workspace Experience</CardTitle>
             </CardHeader>
@@ -842,7 +845,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Bell size={20} />
@@ -921,7 +924,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Lock size={20} />
@@ -977,7 +980,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Database size={20} />
@@ -1003,7 +1006,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 xl:col-span-2">
             <Button size="lg" onClick={handleSave}>
               <Save size={20} className="mr-2" />
               Save Settings
