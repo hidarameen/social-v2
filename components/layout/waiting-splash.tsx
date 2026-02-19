@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AppLogo } from '@/components/common/app-logo';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,9 @@ type WaitingSplashProps = {
   showDelayMs?: number;
 };
 
+const MIN_VISIBLE_MS = 520;
+const EXIT_MS = 420;
+
 export function WaitingSplash({
   active,
   title = 'Please Wait',
@@ -22,9 +25,7 @@ export function WaitingSplash({
   className,
   showDelayMs = 120,
 }: WaitingSplashProps) {
-  const SHOW_DELAY_MS = Math.max(0, showDelayMs);
-  const MIN_VISIBLE_MS = 520;
-  const EXIT_MS = 420;
+  const showDelay = Math.max(0, showDelayMs);
 
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
@@ -50,7 +51,7 @@ export function WaitingSplash({
     };
   }, []);
 
-  const beginExit = () => {
+  const beginExit = useCallback(() => {
     if (!visible || exiting) return;
     setExiting(true);
     exitTimerRef.current = window.setTimeout(() => {
@@ -58,7 +59,7 @@ export function WaitingSplash({
       setExiting(false);
       exitTimerRef.current = null;
     }, EXIT_MS);
-  };
+  }, [exiting, visible]);
 
   useEffect(() => {
     if (active) {
@@ -81,7 +82,7 @@ export function WaitingSplash({
         shownAtRef.current = Date.now();
         setVisible(true);
         showTimerRef.current = null;
-      }, SHOW_DELAY_MS);
+      }, showDelay);
       return;
     }
 
@@ -100,7 +101,7 @@ export function WaitingSplash({
       minVisibleTimerRef.current = null;
       beginExit();
     }, remaining);
-  }, [active, exiting, visible]);
+  }, [active, beginExit, showDelay, visible]);
 
   if (!visible) return null;
 

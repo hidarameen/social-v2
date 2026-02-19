@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Image from 'next/image';
 import { Bot, UserCircle2 } from 'lucide-react';
 import type { PlatformId } from '@/lib/platforms/types';
 import { PlatformIcon } from '@/components/common/platform-icon';
@@ -39,11 +40,13 @@ export function AccountAvatar({
       aria-label={label}
     >
       {showImage ? (
-        <img
-          src={cleanUrl}
+        <Image
+          src={cleanUrl as string}
           alt={label}
+          fill
+          sizes={`${size}px`}
           className="h-full w-full object-cover"
-          loading="lazy"
+          unoptimized
           referrerPolicy="no-referrer"
           onError={() => setImageError(true)}
         />
@@ -66,4 +69,3 @@ export function AccountAvatar({
     </div>
   );
 }
-

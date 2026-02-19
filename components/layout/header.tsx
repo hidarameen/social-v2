@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense, type ChangeEvent, useEffect, useMemo, useState } from 'react';
+import NextImage from 'next/image';
+import { Suspense, type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
   Bell,
@@ -35,6 +36,80 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+
+const storageKeyNeedsReset = (key: string) => {
+  const normalizedKey = key.toLowerCase();
+  if (normalizedKey === 'socialflow_splash_seen_v2') return false;
+  if (normalizedKey === 'socialflow_auth_remember_email') return false;
+  if (normalizedKey === 'socialflow_auth_remember_enabled') return false;
+  if (normalizedKey === 'socialflow_locale_v1') return false;
+  if (normalizedKey === 'socialflow_theme_preset_v1') return false;
+  if (normalizedKey === 'socialflow_shell_sidebar_collapsed_v1') return false;
+  if (normalizedKey === 'socialflow_shell_reduced_motion_v1') return false;
+  if (normalizedKey === 'socialflow_shell_density_v1') return false;
+  return (
+    normalizedKey.startsWith('socialflow_') ||
+    normalizedKey.includes('nextauth') ||
+    normalizedKey.includes('next-auth') ||
+    normalizedKey.includes('authjs')
+  );
+};
+
+const clearMatchingStorageKeys = (storage: Storage) => {
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key || !storageKeyNeedsReset(key)) continue;
+    keysToRemove.push(key);
+  }
+  for (const key of keysToRemove) {
+    storage.removeItem(key);
+  }
+};
+
+async function clearClientSessionArtifacts() {
+  try {
+    clearMatchingStorageKeys(window.localStorage);
+  } catch {
+    // ignore storage failures
+  }
+  try {
+    clearMatchingStorageKeys(window.sessionStorage);
+  } catch {
+    // ignore storage failures
+  }
+
+  if ('caches' in window) {
+    try {
+      const cacheKeys = await window.caches.keys();
+      await Promise.allSettled(cacheKeys.map((cacheKey) => window.caches.delete(cacheKey)));
+    } catch {
+      // ignore cache API failures
+    }
+  }
+
+  try {
+    const indexedDbFactory = window.indexedDB as IDBFactory & {
+      databases?: () => Promise<Array<{ name?: string }>>;
+    };
+    if (typeof indexedDbFactory.databases !== 'function') return;
+
+    const databases = await indexedDbFactory.databases();
+    await Promise.allSettled(
+      databases.map(({ name }) => {
+        if (!name || !storageKeyNeedsReset(name)) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          const request = window.indexedDB.deleteDatabase(name);
+          request.onsuccess = () => resolve();
+          request.onerror = () => resolve();
+          request.onblocked = () => resolve();
+        });
+      })
+    );
+  } catch {
+    // ignore indexedDB failures
+  }
+}
 
 function HeaderContent() {
   const pathname = usePathname();
@@ -107,81 +182,7 @@ function HeaderContent() {
   const isDarkTheme = themeMounted && resolvedTheme === 'dark';
   const userLabel = session?.user?.name || t('header.profile', 'Profile');
 
-  const storageKeyNeedsReset = (key: string) => {
-    const normalizedKey = key.toLowerCase();
-    if (normalizedKey === 'socialflow_splash_seen_v2') return false;
-    if (normalizedKey === 'socialflow_auth_remember_email') return false;
-    if (normalizedKey === 'socialflow_auth_remember_enabled') return false;
-    if (normalizedKey === 'socialflow_locale_v1') return false;
-    if (normalizedKey === 'socialflow_theme_preset_v1') return false;
-    if (normalizedKey === 'socialflow_shell_sidebar_collapsed_v1') return false;
-    if (normalizedKey === 'socialflow_shell_reduced_motion_v1') return false;
-    if (normalizedKey === 'socialflow_shell_density_v1') return false;
-    return (
-      normalizedKey.startsWith('socialflow_') ||
-      normalizedKey.includes('nextauth') ||
-      normalizedKey.includes('next-auth') ||
-      normalizedKey.includes('authjs')
-    );
-  };
-
-  const clearMatchingStorageKeys = (storage: Storage) => {
-    const keysToRemove: string[] = [];
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index);
-      if (!key || !storageKeyNeedsReset(key)) continue;
-      keysToRemove.push(key);
-    }
-    for (const key of keysToRemove) {
-      storage.removeItem(key);
-    }
-  };
-
-  const clearClientSessionArtifacts = async () => {
-    try {
-      clearMatchingStorageKeys(window.localStorage);
-    } catch {
-      // ignore storage failures
-    }
-    try {
-      clearMatchingStorageKeys(window.sessionStorage);
-    } catch {
-      // ignore storage failures
-    }
-
-    if ('caches' in window) {
-      try {
-        const cacheKeys = await window.caches.keys();
-        await Promise.allSettled(cacheKeys.map((cacheKey) => window.caches.delete(cacheKey)));
-      } catch {
-        // ignore cache API failures
-      }
-    }
-
-    try {
-      const indexedDbFactory = window.indexedDB as IDBFactory & {
-        databases?: () => Promise<Array<{ name?: string }>>;
-      };
-      if (typeof indexedDbFactory.databases !== 'function') return;
-
-      const databases = await indexedDbFactory.databases();
-      await Promise.allSettled(
-        databases.map(({ name }) => {
-          if (!name || !storageKeyNeedsReset(name)) return Promise.resolve();
-          return new Promise<void>((resolve) => {
-            const request = window.indexedDB.deleteDatabase(name);
-            request.onsuccess = () => resolve();
-            request.onerror = () => resolve();
-            request.onblocked = () => resolve();
-          });
-        })
-      );
-    } catch {
-      // ignore indexedDB failures
-    }
-  };
-
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     void (async () => {
       await clearClientSessionArtifacts();
       try {
@@ -195,7 +196,7 @@ function HeaderContent() {
       }
       window.location.replace('/login?forceLogin=1&loggedOut=1');
     })();
-  };
+  }, []);
 
   useEffect(() => {
     const onOpenProfile = () => setProfileOpen(true);
@@ -208,7 +209,7 @@ function HeaderContent() {
       window.removeEventListener('open-profile-settings', onOpenProfile);
       window.removeEventListener('request-logout', onRequestLogout);
     };
-  }, []);
+  }, [handleLogout]);
 
   const parseJsonSafe = async (res: Response) => {
     const text = await res.text();
@@ -353,9 +354,9 @@ function HeaderContent() {
       const data = await parseJsonSafe(res);
       if (!res.ok || !data?.success) throw new Error(data?.error || 'Failed to save profile');
 
-	      const nextProfileImage = data.user?.profileImageUrl || '';
-	      setProfileImageState(nextProfileImage);
-        setProfileHydrated(true);
+      const nextProfileImage = data.user?.profileImageUrl || '';
+      setProfileImageState(nextProfileImage);
+      setProfileHydrated(true);
 
       await update({
         name: data.user?.name || name,
@@ -525,10 +526,13 @@ function HeaderContent() {
             onClick={() => setProfileOpen(true)}
           >
             {profilePreviewImage ? (
-              <img
+              <NextImage
                 src={profilePreviewImage}
                 alt={userLabel}
+                width={32}
+                height={32}
                 className="h-8 w-8 rounded-full object-cover"
+                unoptimized
                 referrerPolicy="no-referrer"
               />
             ) : (
@@ -655,10 +659,13 @@ function HeaderContent() {
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   {profilePreviewImage ? (
-                    <img
+                    <NextImage
                       src={profilePreviewImage}
                       alt="Profile"
+                      width={64}
+                      height={64}
                       className="h-16 w-16 rounded-full border border-border/70 object-cover"
+                      unoptimized
                       referrerPolicy="no-referrer"
                     />
                   ) : (

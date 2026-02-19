@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -693,84 +693,92 @@ export function TaskWizard(props: { mode: WizardMode; taskId?: string }) {
     };
   };
 
-  const validateStep = (s: number, data: WizardForm): string | null => {
-    if (s === 1) {
-      if (!data.name.trim()) return 'Task name is required';
-      return null;
-    }
-    if (s === 2) {
-      if (uniqueIds(data.sourceAccounts).length === 0) return 'Select at least one source account';
-      const overlapping = data.sourceAccounts.filter((id) => data.targetAccounts.includes(id));
-      if (overlapping.length > 0) return 'A single account cannot be both source and target in the same task';
-      return null;
-    }
-    if (s === 3) {
-      if (hasTwitterSource) {
-        if (data.twitterSourceType === 'username' && !data.twitterUsername.trim()) {
-          return 'Please enter a Twitter username for the source';
-        }
-        if (data.triggerType === 'on_like' && data.twitterSourceType === 'username') {
-          return 'Liked-tweet trigger requires a connected Twitter account';
-        }
-        if (
-          (data.triggerType === 'on_keyword' || data.triggerType === 'on_hashtag' || data.triggerType === 'on_search') &&
-          !data.triggerValue.trim()
-        ) {
-          return 'Please enter a trigger value for the selected trigger type';
-        }
+  const validateStep = useCallback(
+    (s: number, data: WizardForm): string | null => {
+      if (s === 1) {
+        if (!data.name.trim()) return 'Task name is required';
+        return null;
       }
-      if (hasTelegramSource) {
-        const overrideIds = uniqueIds(
-          [
-            ...data.telegramSourceChatIds,
-            ...parseTelegramChatIdentifiers(data.telegramSourceChatId),
-          ]
-            .map((value) => parseTelegramChatIdentifier(String(value || '')))
-            .filter(Boolean) as string[]
-        );
-        const telegramAccounts = selectedSourceAccounts.filter((a) => a.platformId === 'telegram');
-        const hasAccountChatId = telegramAccounts.some((a) => {
-          const chatId = String((a.credentials as any)?.chatId || '').trim();
-          return Boolean(chatId);
-        });
-        if (overrideIds.length === 0 && !hasAccountChatId) {
-          return 'Telegram sources require at least one chat identifier (ID, @username, or t.me link).';
+      if (s === 2) {
+        if (uniqueIds(data.sourceAccounts).length === 0) return 'Select at least one source account';
+        const overlapping = data.sourceAccounts.filter((id) => data.targetAccounts.includes(id));
+        if (overlapping.length > 0)
+          return 'A single account cannot be both source and target in the same task';
+        return null;
+      }
+      if (s === 3) {
+        if (hasTwitterSource) {
+          if (data.twitterSourceType === 'username' && !data.twitterUsername.trim()) {
+            return 'Please enter a Twitter username for the source';
+          }
+          if (data.triggerType === 'on_like' && data.twitterSourceType === 'username') {
+            return 'Liked-tweet trigger requires a connected Twitter account';
+          }
+          if (
+            (data.triggerType === 'on_keyword' ||
+              data.triggerType === 'on_hashtag' ||
+              data.triggerType === 'on_search') &&
+            !data.triggerValue.trim()
+          ) {
+            return 'Please enter a trigger value for the selected trigger type';
+          }
         }
-      }
-      return null;
-    }
-    if (s === 4) {
-      if (uniqueIds(data.targetAccounts).length === 0) return 'Select at least one destination account';
-      const overlapping = data.sourceAccounts.filter((id) => data.targetAccounts.includes(id));
-      if (overlapping.length > 0) return 'A single account cannot be both source and target in the same task';
-      return null;
-    }
-    if (s === 5) {
-      if (hasYouTubeTarget && data.youtubeActions.uploadVideoToPlaylist && !data.youtubeActions.playlistId) {
-        return 'Please select a YouTube playlist or disable "Upload video to playlist"';
-      }
-      if (hasTelegramTarget) {
-        const overrideIds = uniqueIds(
-          [
-            ...data.telegramTargetChatIds,
-            ...parseTelegramChatIdentifiers(data.telegramTargetChatId),
-          ]
-            .map((value) => parseTelegramChatIdentifier(String(value || '')))
-            .filter(Boolean) as string[]
-        );
-        const telegramAccounts = selectedTargetAccounts.filter((a) => a.platformId === 'telegram');
-        const hasAccountChatId = telegramAccounts.some((a) => {
-          const chatId = String((a.credentials as any)?.chatId || '').trim();
-          return Boolean(chatId);
-        });
-        if (overrideIds.length === 0 && !hasAccountChatId) {
-          return 'Telegram targets require at least one chat identifier (ID, @username, or t.me link).';
+        if (hasTelegramSource) {
+          const overrideIds = uniqueIds(
+            [...data.telegramSourceChatIds, ...parseTelegramChatIdentifiers(data.telegramSourceChatId)]
+              .map((value) => parseTelegramChatIdentifier(String(value || '')))
+              .filter(Boolean) as string[]
+          );
+          const telegramAccounts = selectedSourceAccounts.filter((a) => a.platformId === 'telegram');
+          const hasAccountChatId = telegramAccounts.some((a) => {
+            const chatId = String((a.credentials as any)?.chatId || '').trim();
+            return Boolean(chatId);
+          });
+          if (overrideIds.length === 0 && !hasAccountChatId) {
+            return 'Telegram sources require at least one chat identifier (ID, @username, or t.me link).';
+          }
         }
+        return null;
+      }
+      if (s === 4) {
+        if (uniqueIds(data.targetAccounts).length === 0) return 'Select at least one destination account';
+        const overlapping = data.sourceAccounts.filter((id) => data.targetAccounts.includes(id));
+        if (overlapping.length > 0)
+          return 'A single account cannot be both source and target in the same task';
+        return null;
+      }
+      if (s === 5) {
+        if (hasYouTubeTarget && data.youtubeActions.uploadVideoToPlaylist && !data.youtubeActions.playlistId) {
+          return 'Please select a YouTube playlist or disable "Upload video to playlist"';
+        }
+        if (hasTelegramTarget) {
+          const overrideIds = uniqueIds(
+            [...data.telegramTargetChatIds, ...parseTelegramChatIdentifiers(data.telegramTargetChatId)]
+              .map((value) => parseTelegramChatIdentifier(String(value || '')))
+              .filter(Boolean) as string[]
+          );
+          const telegramAccounts = selectedTargetAccounts.filter((a) => a.platformId === 'telegram');
+          const hasAccountChatId = telegramAccounts.some((a) => {
+            const chatId = String((a.credentials as any)?.chatId || '').trim();
+            return Boolean(chatId);
+          });
+          if (overrideIds.length === 0 && !hasAccountChatId) {
+            return 'Telegram targets require at least one chat identifier (ID, @username, or t.me link).';
+          }
+        }
+        return null;
       }
       return null;
-    }
-    return null;
-  };
+    },
+    [
+      hasTelegramSource,
+      hasTelegramTarget,
+      hasTwitterSource,
+      hasYouTubeTarget,
+      selectedSourceAccounts,
+      selectedTargetAccounts,
+    ]
+  );
 
   const saveToServer = async (data: WizardForm) => {
     if (mode !== 'edit') return true;
@@ -916,7 +924,7 @@ export function TaskWizard(props: { mode: WizardMode; taskId?: string }) {
 
   const stepIssues = useMemo(() => {
     return steps.map(({ step: s }) => ({ step: s, error: validateStep(s, form) }));
-  }, [form, steps]);
+  }, [form, steps, validateStep]);
 
   const progress = useMemo(() => {
     const done = stepIssues.filter((item) => !item.error).length;
