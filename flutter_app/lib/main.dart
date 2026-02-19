@@ -5092,269 +5092,337 @@ class _SocialShellState extends State<SocialShell> {
         isScrollControlled: true,
         showDragHandle: true,
         builder: (context) {
+          final media = MediaQuery.of(context);
+          final bottomInset = media.viewInsets.bottom;
+          final sheetHeight =
+              (media.size.height * 0.92).clamp(420.0, 920.0).toDouble();
           return SafeArea(
-            child: FractionallySizedBox(
-              heightFactor: 0.92,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: SizedBox(
+                height: sheetHeight,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            taskName.isEmpty
-                                ? (i18n.isArabic
-                                    ? 'تفاصيل التنفيذ'
-                                    : 'Execution details')
-                                : taskName,
-                            style: const TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip:
-                              i18n.isArabic ? 'نسخ الحمولة' : 'Copy payload',
-                          onPressed: payloadText.isEmpty
-                              ? null
-                              : () async {
-                                  await Clipboard.setData(
-                                      ClipboardData(text: payloadText));
-                                  _toast(i18n.isArabic
-                                      ? 'تم نسخ الحمولة.'
-                                      : 'Payload copied');
-                                },
-                          icon: const Icon(Icons.copy_all_rounded),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        SfBadge(statusLabel(normalized), tone: tone),
-                        SfBadge(
-                          '${i18n.isArabic ? 'المدة' : 'Duration'}: $duration',
-                          tone: scheme.onSurfaceVariant,
-                          icon: Icons.timer_outlined,
-                        ),
-                        SfBadge(
-                          '${i18n.isArabic ? 'الوقت' : 'When'}: $when',
-                          tone: scheme.onSurfaceVariant,
-                          icon: Icons.schedule_rounded,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SfPanelCard(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: scheme.outline
-                                        .withAlpha((0.24 * 255).round())),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(_platformIcon(sourcePlatformId),
-                                      size: 16),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      sourceName.isEmpty
-                                          ? 'Unknown source'
-                                          : sourceName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            child: Icon(Icons.arrow_forward_rounded),
-                          ),
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: scheme.outline
-                                        .withAlpha((0.24 * 255).round())),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(_platformIcon(targetPlatformId),
-                                      size: 16),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      targetName.isEmpty
-                                          ? 'Unknown target'
-                                          : targetName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (errorText.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      SfPanelCard(
-                        padding: const EdgeInsets.all(14),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.error_outline_rounded,
-                                    color: scheme.error, size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  i18n.isArabic ? 'الخطأ' : 'Error',
-                                  style: TextStyle(
-                                      color: scheme.error,
-                                      fontWeight: FontWeight.w900),
+                                Expanded(
+                                  child: Text(
+                                    taskName.isEmpty
+                                        ? (i18n.isArabic
+                                            ? 'تفاصيل التنفيذ'
+                                            : 'Execution details')
+                                        : taskName,
+                                    style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w900),
+                                  ),
                                 ),
-                                const Spacer(),
                                 IconButton(
                                   tooltip: i18n.isArabic
-                                      ? 'نسخ الخطأ'
-                                      : 'Copy error',
-                                  onPressed: () async {
-                                    await Clipboard.setData(
-                                        ClipboardData(text: errorText));
-                                    _toast(i18n.isArabic
-                                        ? 'تم نسخ الخطأ.'
-                                        : 'Error copied');
-                                  },
-                                  icon: const Icon(Icons.content_copy_rounded,
-                                      size: 18),
+                                      ? 'نسخ الحمولة'
+                                      : 'Copy payload',
+                                  onPressed: payloadText.isEmpty
+                                      ? null
+                                      : () async {
+                                          await Clipboard.setData(
+                                              ClipboardData(text: payloadText));
+                                          _toast(i18n.isArabic
+                                              ? 'تم نسخ الحمولة.'
+                                              : 'Payload copied');
+                                        },
+                                  icon: const Icon(Icons.copy_all_rounded),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 8),
-                            SelectableText(errorText),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if (stackText.isNotEmpty && stackText != 'null') ...[
-                      const SizedBox(height: 12),
-                      SfPanelCard(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              i18n.isArabic
-                                  ? 'التتبّع (Stack Trace)'
-                                  : 'Stack trace',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                SfBadge(statusLabel(normalized), tone: tone),
+                                SfBadge(
+                                  '${i18n.isArabic ? 'المدة' : 'Duration'}: $duration',
+                                  tone: scheme.onSurfaceVariant,
+                                  icon: Icons.timer_outlined,
+                                ),
+                                SfBadge(
+                                  '${i18n.isArabic ? 'الوقت' : 'When'}: $when',
+                                  tone: scheme.onSurfaceVariant,
+                                  icon: Icons.schedule_rounded,
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 8),
-                            SelectableText(
-                              stackText,
-                              style: const TextStyle(
-                                  fontFamily: 'monospace', fontSize: 12),
+                            const SizedBox(height: 12),
+                            SfPanelCard(
+                              padding: const EdgeInsets.all(14),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: scheme.outline.withAlpha(
+                                                (0.24 * 255).round())),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(_platformIcon(sourcePlatformId),
+                                              size: 16),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              sourceName.isEmpty
+                                                  ? 'Unknown source'
+                                                  : sourceName,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const Padding(
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 8),
+                                    child: Icon(Icons.arrow_forward_rounded),
+                                  ),
+                                  Expanded(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: scheme.outline.withAlpha(
+                                                (0.24 * 255).round())),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(_platformIcon(targetPlatformId),
+                                              size: 16),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              targetName.isEmpty
+                                                  ? 'Unknown target'
+                                                  : targetName,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if (originalContent.isNotEmpty ||
-                        transformedContent.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      SfPanelCard(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              i18n.isArabic ? 'المحتوى' : 'Content',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                            if (originalContent.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(i18n.isArabic ? 'الأصلي' : 'Original',
-                                  style: TextStyle(
-                                      color: scheme.onSurfaceVariant)),
-                              const SizedBox(height: 4),
-                              SelectableText(originalContent),
+                            if (errorText.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              SfPanelCard(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.error_outline_rounded,
+                                            color: scheme.error, size: 18),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          i18n.isArabic ? 'الخطأ' : 'Error',
+                                          style: TextStyle(
+                                              color: scheme.error,
+                                              fontWeight: FontWeight.w900),
+                                        ),
+                                        const Spacer(),
+                                        IconButton(
+                                          tooltip: i18n.isArabic
+                                              ? 'نسخ الخطأ'
+                                              : 'Copy error',
+                                          onPressed: () async {
+                                            await Clipboard.setData(
+                                                ClipboardData(text: errorText));
+                                            _toast(i18n.isArabic
+                                                ? 'تم نسخ الخطأ.'
+                                                : 'Error copied');
+                                          },
+                                          icon: const Icon(
+                                              Icons.content_copy_rounded,
+                                              size: 18),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SelectableText(errorText),
+                                  ],
+                                ),
+                              ),
                             ],
-                            if (transformedContent.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Text(
-                                  i18n.isArabic
-                                      ? 'بعد المعالجة'
-                                      : 'Transformed',
-                                  style: TextStyle(
-                                      color: scheme.onSurfaceVariant)),
-                              const SizedBox(height: 4),
-                              SelectableText(transformedContent),
+                            if (stackText.isNotEmpty &&
+                                stackText != 'null') ...[
+                              const SizedBox(height: 12),
+                              SfPanelCard(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      i18n.isArabic
+                                          ? 'التتبّع (Stack Trace)'
+                                          : 'Stack trace',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SelectableText(
+                                      stackText,
+                                      style: const TextStyle(
+                                          fontFamily: 'monospace',
+                                          fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            if (originalContent.isNotEmpty ||
+                                transformedContent.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              SfPanelCard(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      i18n.isArabic ? 'المحتوى' : 'Content',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900),
+                                    ),
+                                    if (originalContent.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                          i18n.isArabic ? 'الأصلي' : 'Original',
+                                          style: TextStyle(
+                                              color: scheme.onSurfaceVariant)),
+                                      const SizedBox(height: 4),
+                                      SelectableText(originalContent),
+                                    ],
+                                    if (transformedContent.isNotEmpty) ...[
+                                      const SizedBox(height: 10),
+                                      Text(
+                                          i18n.isArabic
+                                              ? 'بعد المعالجة'
+                                              : 'Transformed',
+                                          style: TextStyle(
+                                              color: scheme.onSurfaceVariant)),
+                                      const SizedBox(height: 4),
+                                      SelectableText(transformedContent),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                            if (logsText.isNotEmpty && logsText != 'null') ...[
+                              const SizedBox(height: 12),
+                              SfPanelCard(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(i18n.isArabic ? 'السجلات' : 'Logs',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w900)),
+                                    const SizedBox(height: 8),
+                                    SelectableText(
+                                      logsText,
+                                      style: const TextStyle(
+                                          fontFamily: 'monospace',
+                                          fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            if (payloadText.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              SfPanelCard(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                        i18n.isArabic
+                                            ? 'الحمولة (Payload)'
+                                            : 'Payload',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w900)),
+                                    const SizedBox(height: 8),
+                                    SelectableText(
+                                      payloadText,
+                                      style: const TextStyle(
+                                          fontFamily: 'monospace',
+                                          fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
                           ],
                         ),
                       ),
-                    ],
-                    if (logsText.isNotEmpty && logsText != 'null') ...[
-                      const SizedBox(height: 12),
-                      SfPanelCard(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(i18n.isArabic ? 'السجلات' : 'Logs',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 8),
-                            SelectableText(
-                              logsText,
-                              style: const TextStyle(
-                                  fontFamily: 'monospace', fontSize: 12),
-                            ),
-                          ],
+                    ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      decoration: BoxDecoration(
+                        color: Color.alphaBlend(
+                            scheme.primary.withAlpha(10), scheme.surface),
+                        border: Border(
+                          top: BorderSide(color: scheme.outline.withAlpha(82)),
                         ),
                       ),
-                    ],
-                    if (payloadText.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      SfPanelCard(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                                i18n.isArabic ? 'الحمولة (Payload)' : 'Payload',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 8),
-                            SelectableText(
-                              payloadText,
-                              style: const TextStyle(
-                                  fontFamily: 'monospace', fontSize: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => Navigator.of(context).maybePop(),
+                              icon: const Icon(Icons.close_rounded),
+                              label: Text(i18n.isArabic ? 'إغلاق' : 'Close'),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: payloadText.isEmpty
+                                  ? null
+                                  : () async {
+                                      await Clipboard.setData(
+                                          ClipboardData(text: payloadText));
+                                      _toast(i18n.isArabic
+                                          ? 'تم نسخ الحمولة.'
+                                          : 'Payload copied');
+                                    },
+                              icon: const Icon(Icons.copy_all_rounded),
+                              label: Text(i18n.isArabic
+                                  ? 'نسخ الحمولة'
+                                  : 'Copy payload'),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),
