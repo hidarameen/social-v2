@@ -180,27 +180,156 @@ class SfTheme {
             TextStyle(fontWeight: FontWeight.w600, color: scheme.onSurface),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          backgroundColor: scheme.primary,
-          foregroundColor: Colors.white,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        style: ButtonStyle(
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          ),
+          foregroundColor: const WidgetStatePropertyAll(Colors.white),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return scheme.primary.withAlpha(isDark ? 102 : 120);
+            }
+            if (states.contains(WidgetState.pressed)) {
+              return Color.alphaBlend(
+                Colors.black.withAlpha(isDark ? 18 : 12),
+                scheme.primary,
+              );
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return Color.alphaBlend(
+                Colors.white.withAlpha(isDark ? 8 : 14),
+                scheme.primary,
+              );
+            }
+            return scheme.primary;
+          }),
+          elevation: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) return 0;
+            if (states.contains(WidgetState.pressed)) return 0;
+            if (states.contains(WidgetState.hovered)) return 2;
+            return 1;
+          }),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return Colors.white.withAlpha(isDark ? 24 : 30);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return Colors.white.withAlpha(isDark ? 14 : 18);
+            }
+            return null;
+          }),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+              TextStyle(fontWeight: FontWeight.w700)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          side: BorderSide(color: scheme.outline.withAlpha(isDark ? 97 : 158)),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        style: ButtonStyle(
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          ),
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return BorderSide(
+                  color: scheme.primary.withAlpha(isDark ? 180 : 160));
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return BorderSide(
+                  color: scheme.primary.withAlpha(isDark ? 160 : 140));
+            }
+            return BorderSide(
+                color: scheme.outline.withAlpha(isDark ? 97 : 158));
+          }),
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return scheme.onSurfaceVariant.withAlpha(isDark ? 110 : 120);
+            }
+            return scheme.onSurface;
+          }),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return scheme.primary.withAlpha(isDark ? 38 : 24);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return scheme.primary.withAlpha(isDark ? 28 : 16);
+            }
+            return Colors.transparent;
+          }),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return scheme.primary.withAlpha(isDark ? 42 : 28);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return scheme.primary.withAlpha(isDark ? 26 : 18);
+            }
+            return null;
+          }),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+              TextStyle(fontWeight: FontWeight.w700)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        style: ButtonStyle(
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          foregroundColor: WidgetStatePropertyAll(scheme.primary),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return scheme.primary.withAlpha(isDark ? 36 : 28);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return scheme.primary.withAlpha(isDark ? 24 : 16);
+            }
+            return null;
+          }),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+              TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          padding: const WidgetStatePropertyAll(EdgeInsets.all(10)),
+          iconSize: const WidgetStatePropertyAll(20),
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return scheme.onSurfaceVariant.withAlpha(isDark ? 95 : 120);
+            }
+            if (states.contains(WidgetState.pressed) ||
+                states.contains(WidgetState.hovered)) {
+              return scheme.primary;
+            }
+            return scheme.onSurfaceVariant;
+          }),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return scheme.primary.withAlpha(isDark ? 44 : 28);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return scheme.primary.withAlpha(isDark ? 30 : 18);
+            }
+            return Colors.transparent;
+          }),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return scheme.primary.withAlpha(isDark ? 50 : 36);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return scheme.primary.withAlpha(isDark ? 32 : 20);
+            }
+            return null;
+          }),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         ),
       ),
       switchTheme: SwitchThemeData(

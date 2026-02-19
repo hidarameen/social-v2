@@ -1938,9 +1938,12 @@ class _SocialShellState extends State<SocialShell> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    scheme.primary.withOpacity(isDark ? 0.30 : 0.18),
-                    scheme.secondary.withOpacity(isDark ? 0.18 : 0.10),
-                    scheme.surface.withOpacity(isDark ? 0.65 : 0.92),
+                    scheme.primary
+                        .withAlpha(((isDark ? 0.30 : 0.18) * 255).round()),
+                    scheme.secondary
+                        .withAlpha(((isDark ? 0.18 : 0.10) * 255).round()),
+                    scheme.surface
+                        .withAlpha(((isDark ? 0.65 : 0.92) * 255).round()),
                   ],
                 ),
               ),
@@ -2139,7 +2142,7 @@ class _SocialShellState extends State<SocialShell> {
       width: width,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: scheme.outline.withOpacity(isDark ? 0.30 : 0.20),
+        color: scheme.outline.withAlpha(((isDark ? 0.30 : 0.20) * 255).round()),
       ),
     );
   }
@@ -4495,7 +4498,7 @@ class _SocialShellState extends State<SocialShell> {
             },
           ),
         if (hasMore) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Center(
             child: OutlinedButton(
               onPressed:
@@ -4801,7 +4804,7 @@ class _SocialShellState extends State<SocialShell> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         searchCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         if (filtered.isEmpty)
           SfEmptyState(
             icon: Icons.groups_rounded,
@@ -5453,7 +5456,7 @@ class _SocialShellState extends State<SocialShell> {
                 ),
               ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             TextField(
               controller: _executionsSearchController,
               decoration: InputDecoration(
@@ -5914,7 +5917,7 @@ class _SocialShellState extends State<SocialShell> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         searchCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         if (filtered.isEmpty)
           SfEmptyState(
             icon: Icons.history_rounded,
@@ -7620,7 +7623,8 @@ class _SocialShellState extends State<SocialShell> {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                 child: Container(
-                  color: scheme.surface.withOpacity(isDark ? 0.30 : 0.72),
+                  color: scheme.surface
+                      .withAlpha(((isDark ? 0.30 : 0.72) * 255).round()),
                 ),
               ),
             ),
