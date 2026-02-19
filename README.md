@@ -426,3 +426,136 @@ References:
   - `transformations` (template, media, twitter actions, youtube actions/video metadata, telegram target chat ids),
   - `filters` (trigger and platform-specific conditions),
   - schedule-related fields (when applicable).
+
+## 16) Next.js Logic: Executions, Analytics, Sidebar, Dashboard
+
+This section documents the actual runtime logic in the Next.js web app for `executions`, `analytics`, `dashboard`, and `sidebar` behavior in desktop/mobile.
+
+### A) Executions (`app/executions/page.tsx`)
+
+1. Data lifecycle
+- Initializes filters from query params (`taskId`, `taskName`).
+- Fetches from `GET /api/executions` with:
+  - `search` (debounced),
+  - `status`,
+  - `taskId`,
+  - `sortBy`, `sortDir`,
+  - pagination (`limit`, `offset`).
+- Uses local cache key per filter/sort combination for faster restore.
+
+2. Live refresh model
+- Polling runs continuously:
+  - every `2500ms` when there are pending executions,
+  - every `3500ms` otherwise.
+- Also opens Server-Sent Events stream from `/api/executions/stream`.
+- On stream event/focus/visibility return, it refreshes without full loading lock.
+
+3. Grouped execution model
+- Multiple route executions are grouped as one run via `executionGroupId` fallback logic.
+- Group status is derived:
+  - `pending` if any route pending,
+  - `failed` if no pending and any failed,
+  - else `success`.
+- It computes message type (`text`, `media`, `mixed`) and route-level progress/stage from `responseData`.
+
+4. User actions
+- `Refresh` forces immediate reload.
+- `Retry Task Now` calls `POST /api/tasks/:id/run`.
+- `Export` downloads via `/api/executions/export`.
+- `Load More` appends next page.
+
+5. Responsive behavior
+- Filter panel grid scales from 1 column to 2 and 4 (`md`, `xl`).
+- Group cards stay stacked on mobile and expand inline with details.
+
+### B) Analytics (`app/analytics/page.tsx`)
+
+1. Data lifecycle
+- Fetches from `GET /api/analytics` with:
+  - `search` (debounced),
+  - `sortBy`, `sortDir`,
+  - pagination.
+- Uses cache keyed by query/sort.
+
+2. KPI and table logic
+- `stats` and `taskStats` are derived from API response.
+- Success rate is computed from totals in UI state.
+- Table supports search, sort, and incremental pagination (`Load More`).
+- CSV export uses `/api/analytics/export`.
+
+3. Chart and insights
+- Top chart uses Recharts (`ResponsiveContainer`, `BarChart`) for top 8 tasks.
+- "Best Performing Tasks" uses copied sort (`[...taskStats].sort(...)`) to avoid mutating base state.
+
+4. Responsive behavior
+- KPI cards: `1 -> 2 -> 5` columns (`md`, `xl`).
+- Performance table remains horizontally scrollable on small screens.
+
+### C) Dashboard (`app/page.tsx`)
+
+1. Data lifecycle
+- Loads from `GET /api/dashboard?limit=12`.
+- Silent auto-refresh every 30s updates live metrics.
+- Task statuses are normalized to one of: `active`, `paused`, `completed`, `error`.
+
+2. Quick task actions
+- Toggle active/paused:
+  - optimistic UI update,
+  - `PATCH /api/tasks/:id`,
+  - rollback on failure.
+- Run now:
+  - `POST /api/tasks/:id/run`,
+  - then silent refresh.
+
+3. Main UI blocks
+- KPI cards (tasks/accounts/success).
+- Recent Automations.
+- System Health.
+- Recent Executions.
+- Top Performing Tasks.
+- Empty-workspace state when tasks/accounts/executions are all zero.
+
+4. Responsive behavior
+- All major blocks are grid-based with `md/xl` breakpoints.
+- Mobile stacks cards vertically; desktop splits into multi-column panels.
+
+### D) Sidebar + Header (Desktop/Mobile)
+
+References:
+- `components/layout/sidebar.tsx`
+- `components/layout/header.tsx`
+- `components/layout/shell-provider.tsx`
+- `app/globals.css`
+
+1. Shared shell state
+- `ShellProvider` manages:
+  - `sidebarCollapsed`,
+  - `reducedMotion`,
+  - `density`.
+- Persists in localStorage:
+  - `socialflow_shell_sidebar_collapsed_v1`,
+  - `socialflow_shell_reduced_motion_v1`,
+  - `socialflow_shell_density_v1`.
+- Calculates layout CSS vars:
+  - `--shell-sidebar-width`,
+  - `--shell-content-offset`,
+  - `--shell-sidebar-border-width`.
+
+2. Desktop behavior
+- Left sidebar is shown only on desktop (`md:flex`).
+- Contains:
+  - branding,
+  - collapse/expand control,
+  - nav items from `NAV_ITEMS`,
+  - live status panel,
+  - profile/logout actions.
+- Header uses sidebar width variable to shift content start.
+
+3. Mobile behavior
+- Sidebar is hidden; header shows hamburger button (`md:hidden`).
+- Tapping opens a mobile menu drawer below header.
+- Mobile drawer reuses `NAV_ITEMS` and includes quick search/profile/logout actions.
+
+4. Content offset behavior
+- Main container (`.control-main`) uses `--shell-content-offset` on desktop.
+- On mobile (`max-width: 767px`), offset is forced to zero and layout becomes full-width stacked.
