@@ -3566,26 +3566,7 @@ class _SocialShellState extends State<SocialShell> {
     }
 
     Widget badge(String text, {required Color tone, IconData? icon}) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: tone.withAlpha((0.12 * 255).round()),
-          border: Border.all(color: tone.withAlpha((0.24 * 255).round())),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) Icon(icon, size: 14, color: tone),
-            if (icon != null) const SizedBox(width: 6),
-            Text(
-              text,
-              style: TextStyle(
-                  color: tone, fontWeight: FontWeight.w900, letterSpacing: 0.3),
-            ),
-          ],
-        ),
-      );
+      return SfBadge(text, tone: tone, icon: icon);
     }
 
     Widget platformBadge(String platformId) {
@@ -3599,6 +3580,29 @@ class _SocialShellState extends State<SocialShell> {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(platformIcon(platformId), size: 18),
+      );
+    }
+
+    Widget frostedStrip({
+      required Widget child,
+      EdgeInsetsGeometry padding = const EdgeInsets.all(10),
+    }) {
+      return Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.surface.withAlpha((0.62 * 255).round()),
+              scheme.surface.withAlpha((0.46 * 255).round()),
+            ],
+          ),
+          border:
+              Border.all(color: scheme.outline.withAlpha((0.22 * 255).round())),
+        ),
+        child: child,
       );
     }
 
@@ -3900,296 +3904,297 @@ class _SocialShellState extends State<SocialShell> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SfPanelCard(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                badge(
-                  i18n.isArabic ? 'أتمتة' : 'Automation Pipelines',
-                  tone: scheme.primary,
-                  icon: Icons.auto_awesome_rounded,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              badge(
+                i18n.isArabic ? 'أتمتة' : 'Automation Pipelines',
+                tone: scheme.primary,
+                icon: Icons.auto_awesome_rounded,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                i18n.isArabic ? 'مهامي' : 'My Tasks',
+                style:
+                    const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                i18n.isArabic
+                    ? 'إدارة ومراقبة مهام الأتمتة الخاصة بك.'
+                    : 'Manage and monitor your automation tasks.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  badge('$activeCount active', tone: scheme.primary),
+                  badge('$pausedCount paused', tone: scheme.secondary),
+                  badge('$errorCount failed', tone: scheme.error),
+                  badge('${filtered.length} tasks', tone: scheme.onSurface),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _exportTasksCsv,
+                    icon: const Icon(Icons.download_rounded),
+                    label: Text(i18n.isArabic ? 'تصدير CSV' : 'Export CSV'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => unawaited(_openCreateTaskSheet()),
+                    icon: const Icon(Icons.add_rounded),
+                    label:
+                        Text(i18n.isArabic ? 'إنشاء مهمة' : 'Create New Task'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SfPanelCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      i18n.isArabic ? 'بحث وفلاتر' : 'Task Search & Filters',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  if (hasActiveTaskFilters)
+                    OutlinedButton.icon(
+                      onPressed: clearAllTaskFilters,
+                      icon: const Icon(Icons.filter_alt_off_rounded),
+                      label: Text(i18n.isArabic ? 'مسح الكل' : 'Clear All'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _tasksSearchController,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  hintText: i18n.isArabic
+                      ? 'ابحث بالاسم أو الوصف...'
+                      : 'Search by name or description...',
+                  border: const OutlineInputBorder(),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  i18n.isArabic ? 'مهامي' : 'My Tasks',
-                  style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  i18n.isArabic
-                      ? 'إدارة ومراقبة مهام الأتمتة الخاصة بك.'
-                      : 'Manage and monitor your automation tasks.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 12),
+                onChanged: _onTasksQueryChanged,
+              ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 900;
+                  final rowChildren = <Widget>[
+                    DropdownButtonFormField<String>(
+                      initialValue: _tasksStatusFilter,
+                      decoration: InputDecoration(
+                        labelText: i18n.isArabic ? 'الحالة' : 'Status',
+                        prefixIcon: const Icon(Icons.filter_alt_rounded),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'all', child: Text('All statuses')),
+                        DropdownMenuItem(
+                            value: 'active', child: Text('Active')),
+                        DropdownMenuItem(
+                            value: 'paused', child: Text('Paused')),
+                        DropdownMenuItem(
+                            value: 'completed', child: Text('Completed')),
+                        DropdownMenuItem(value: 'error', child: Text('Error')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        if (_tasksStatusFilter == value) return;
+                        setState(() => _tasksStatusFilter = value);
+                        unawaited(_loadTasksPage(
+                            reset: true, showPanelLoading: true));
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _tasksPlatformFilter,
+                      decoration: InputDecoration(
+                        labelText: i18n.isArabic ? 'المنصة' : 'Platform',
+                        prefixIcon: const Icon(Icons.public_rounded),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                            value: 'all', child: Text('All platforms')),
+                        ...availablePlatforms.map(
+                          (p) => DropdownMenuItem(
+                              value: p, child: Text(platformLabel(p))),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _tasksPlatformFilter = value);
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _tasksLastRunFilter,
+                      decoration: InputDecoration(
+                        labelText: i18n.isArabic ? 'آخر تشغيل' : 'Last run',
+                        prefixIcon: const Icon(Icons.schedule_rounded),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'all', child: Text('Any run')),
+                        DropdownMenuItem(value: '24h', child: Text('Last 24h')),
+                        DropdownMenuItem(value: '7d', child: Text('Last 7d')),
+                        DropdownMenuItem(
+                            value: 'never', child: Text('Never ran')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _tasksLastRunFilter = value);
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _tasksIssueFilter,
+                      decoration: InputDecoration(
+                        labelText: i18n.isArabic ? 'مشاكل' : 'Issues',
+                        prefixIcon: const Icon(Icons.report_problem_rounded),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'all', child: Text('All tasks')),
+                        DropdownMenuItem(
+                            value: 'errors', child: Text('Errors only')),
+                        DropdownMenuItem(
+                            value: 'warnings', child: Text('Auth warnings')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _tasksIssueFilter = value);
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _tasksSortBy,
+                      decoration: InputDecoration(
+                        labelText: i18n.isArabic ? 'ترتيب حسب' : 'Sort by',
+                        prefixIcon: const Icon(Icons.sort_rounded),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'createdAt', child: Text('Created')),
+                        DropdownMenuItem(
+                            value: 'status', child: Text('Status')),
+                        DropdownMenuItem(value: 'name', child: Text('Name')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        if (_tasksSortBy == value) return;
+                        setState(() => _tasksSortBy = value);
+                        unawaited(_loadTasksPage(
+                            reset: true, showPanelLoading: true));
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _tasksSortDir,
+                      decoration: InputDecoration(
+                        labelText: i18n.isArabic ? 'الاتجاه' : 'Direction',
+                        prefixIcon: const Icon(Icons.swap_vert_rounded),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'desc', child: Text('Desc')),
+                        DropdownMenuItem(value: 'asc', child: Text('Asc')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        if (_tasksSortDir == value) return;
+                        setState(() => _tasksSortDir = value);
+                        unawaited(_loadTasksPage(
+                            reset: true, showPanelLoading: true));
+                      },
+                    ),
+                  ];
+
+                  if (!wide) {
+                    return Column(
+                      children: [
+                        for (final child in rowChildren) ...[
+                          child,
+                          const SizedBox(height: 10),
+                        ],
+                      ],
+                    );
+                  }
+
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: rowChildren
+                        .map((w) => SizedBox(width: 280, child: w))
+                        .toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+              if (hasActiveTaskFilters)
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    badge('$activeCount active', tone: scheme.primary),
-                    badge('$pausedCount paused', tone: scheme.secondary),
-                    badge('$errorCount failed', tone: scheme.error),
-                    badge('${filtered.length} tasks', tone: scheme.onSurface),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _exportTasksCsv,
-                      icon: const Icon(Icons.download_rounded),
-                      label: Text(i18n.isArabic ? 'تصدير CSV' : 'Export CSV'),
-                    ),
-                    FilledButton.icon(
-                      onPressed: () => unawaited(_openCreateTaskSheet()),
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(
-                          i18n.isArabic ? 'إنشاء مهمة' : 'Create New Task'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SfPanelCard(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  i18n.isArabic ? 'بحث وفلاتر' : 'Task Search & Filters',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _tasksSearchController,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    hintText: i18n.isArabic
-                        ? 'ابحث بالاسم أو الوصف...'
-                        : 'Search by name or description...',
-                    border: const OutlineInputBorder(),
-                  ),
-                  onChanged: _onTasksQueryChanged,
-                ),
-                const SizedBox(height: 12),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final wide = constraints.maxWidth >= 900;
-                    final rowChildren = <Widget>[
-                      DropdownButtonFormField<String>(
-                        initialValue: _tasksStatusFilter,
-                        decoration: InputDecoration(
-                          labelText: i18n.isArabic ? 'الحالة' : 'Status',
-                          prefixIcon: const Icon(Icons.filter_alt_rounded),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'all', child: Text('All statuses')),
-                          DropdownMenuItem(
-                              value: 'active', child: Text('Active')),
-                          DropdownMenuItem(
-                              value: 'paused', child: Text('Paused')),
-                          DropdownMenuItem(
-                              value: 'completed', child: Text('Completed')),
-                          DropdownMenuItem(
-                              value: 'error', child: Text('Error')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          if (_tasksStatusFilter == value) return;
-                          setState(() => _tasksStatusFilter = value);
-                          unawaited(_loadTasksPage(
-                              reset: true, showPanelLoading: true));
-                        },
+                    if (_tasksQuery.isNotEmpty)
+                      InputChip(
+                        label: Text('Search: ${shortenLabel(_tasksQuery)}'),
+                        onDeleted: () => clearTaskFilter('query'),
                       ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _tasksPlatformFilter,
-                        decoration: InputDecoration(
-                          labelText: i18n.isArabic ? 'المنصة' : 'Platform',
-                          prefixIcon: const Icon(Icons.public_rounded),
-                        ),
-                        items: [
-                          const DropdownMenuItem(
-                              value: 'all', child: Text('All platforms')),
-                          ...availablePlatforms.map(
-                            (p) => DropdownMenuItem(
-                                value: p, child: Text(platformLabel(p))),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _tasksPlatformFilter = value);
-                        },
+                    if (_tasksStatusFilter != 'all')
+                      InputChip(
+                        label:
+                            Text('Status: ${statusLabel(_tasksStatusFilter)}'),
+                        onDeleted: () => clearTaskFilter('status'),
                       ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _tasksLastRunFilter,
-                        decoration: InputDecoration(
-                          labelText: i18n.isArabic ? 'آخر تشغيل' : 'Last run',
-                          prefixIcon: const Icon(Icons.schedule_rounded),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'all', child: Text('Any run')),
-                          DropdownMenuItem(
-                              value: '24h', child: Text('Last 24h')),
-                          DropdownMenuItem(value: '7d', child: Text('Last 7d')),
-                          DropdownMenuItem(
-                              value: 'never', child: Text('Never ran')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _tasksLastRunFilter = value);
-                        },
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _tasksIssueFilter,
-                        decoration: InputDecoration(
-                          labelText: i18n.isArabic ? 'مشاكل' : 'Issues',
-                          prefixIcon: const Icon(Icons.report_problem_rounded),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'all', child: Text('All tasks')),
-                          DropdownMenuItem(
-                              value: 'errors', child: Text('Errors only')),
-                          DropdownMenuItem(
-                              value: 'warnings', child: Text('Auth warnings')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _tasksIssueFilter = value);
-                        },
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _tasksSortBy,
-                        decoration: InputDecoration(
-                          labelText: i18n.isArabic ? 'ترتيب حسب' : 'Sort by',
-                          prefixIcon: const Icon(Icons.sort_rounded),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'createdAt', child: Text('Created')),
-                          DropdownMenuItem(
-                              value: 'status', child: Text('Status')),
-                          DropdownMenuItem(value: 'name', child: Text('Name')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          if (_tasksSortBy == value) return;
-                          setState(() => _tasksSortBy = value);
-                          unawaited(_loadTasksPage(
-                              reset: true, showPanelLoading: true));
-                        },
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _tasksSortDir,
-                        decoration: InputDecoration(
-                          labelText: i18n.isArabic ? 'الاتجاه' : 'Direction',
-                          prefixIcon: const Icon(Icons.swap_vert_rounded),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'desc', child: Text('Desc')),
-                          DropdownMenuItem(value: 'asc', child: Text('Asc')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          if (_tasksSortDir == value) return;
-                          setState(() => _tasksSortDir = value);
-                          unawaited(_loadTasksPage(
-                              reset: true, showPanelLoading: true));
-                        },
-                      ),
-                    ];
-
-                    if (!wide) {
-                      return Column(
-                        children: [
-                          for (final child in rowChildren) ...[
-                            child,
-                            const SizedBox(height: 10),
-                          ],
-                        ],
-                      );
-                    }
-
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: rowChildren
-                          .map((w) => SizedBox(width: 280, child: w))
-                          .toList(),
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-                if (hasActiveTaskFilters)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (_tasksQuery.isNotEmpty)
-                        InputChip(
-                          label: Text('Search: ${shortenLabel(_tasksQuery)}'),
-                          onDeleted: () => clearTaskFilter('query'),
-                        ),
-                      if (_tasksStatusFilter != 'all')
-                        InputChip(
-                          label: Text(
-                              'Status: ${statusLabel(_tasksStatusFilter)}'),
-                          onDeleted: () => clearTaskFilter('status'),
-                        ),
-                      if (_tasksPlatformFilter != 'all')
-                        InputChip(
-                          label: Text(
-                              'Platform: ${platformLabel(_tasksPlatformFilter)}'),
-                          onDeleted: () => clearTaskFilter('platform'),
-                        ),
-                      if (_tasksLastRunFilter != 'all')
-                        InputChip(
-                          label: Text(
-                              'Last run: ${_tasksLastRunFilter.toUpperCase()}'),
-                          onDeleted: () => clearTaskFilter('lastRun'),
-                        ),
-                      if (_tasksIssueFilter != 'all')
-                        InputChip(
-                          label: Text(
-                              'Issue: ${_tasksIssueFilter == 'errors' ? 'Errors' : 'Warnings'}'),
-                          onDeleted: () => clearTaskFilter('issue'),
-                        ),
-                      if (_tasksSortBy != 'createdAt')
-                        InputChip(
-                          label: Text(
-                              'Sort: ${_tasksSortBy == 'name' ? 'Name' : (_tasksSortBy == 'status' ? 'Status' : 'Created')}'),
-                          onDeleted: () => clearTaskFilter('sortBy'),
-                        ),
-                      if (_tasksSortDir != 'desc')
-                        InputChip(
-                          label:
-                              Text('Direction: ${_tasksSortDir.toUpperCase()}'),
-                          onDeleted: () => clearTaskFilter('sortDir'),
-                        ),
-                      OutlinedButton.icon(
-                        onPressed: clearAllTaskFilters,
-                        icon: const Icon(Icons.filter_alt_off_rounded),
+                    if (_tasksPlatformFilter != 'all')
+                      InputChip(
                         label: Text(
-                            i18n.isArabic ? 'مسح الفلاتر' : 'Clear Filters'),
+                            'Platform: ${platformLabel(_tasksPlatformFilter)}'),
+                        onDeleted: () => clearTaskFilter('platform'),
                       ),
-                    ],
-                  ),
-              ],
-            ),
+                    if (_tasksLastRunFilter != 'all')
+                      InputChip(
+                        label: Text(
+                            'Last run: ${_tasksLastRunFilter.toUpperCase()}'),
+                        onDeleted: () => clearTaskFilter('lastRun'),
+                      ),
+                    if (_tasksIssueFilter != 'all')
+                      InputChip(
+                        label: Text(
+                            'Issue: ${_tasksIssueFilter == 'errors' ? 'Errors' : 'Warnings'}'),
+                        onDeleted: () => clearTaskFilter('issue'),
+                      ),
+                    if (_tasksSortBy != 'createdAt')
+                      InputChip(
+                        label: Text(
+                            'Sort: ${_tasksSortBy == 'name' ? 'Name' : (_tasksSortBy == 'status' ? 'Status' : 'Created')}'),
+                        onDeleted: () => clearTaskFilter('sortBy'),
+                      ),
+                    if (_tasksSortDir != 'desc')
+                      InputChip(
+                        label:
+                            Text('Direction: ${_tasksSortDir.toUpperCase()}'),
+                        onDeleted: () => clearTaskFilter('sortDir'),
+                      ),
+                  ],
+                ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         if (filtered.isEmpty)
           SfPanelCard(
             child: Padding(
@@ -4284,190 +4289,180 @@ class _SocialShellState extends State<SocialShell> {
                   return SizedBox(
                     width: cardWidth,
                     child: SfPanelCard(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                badge(statusLabel(normalized).toUpperCase(),
-                                    tone: tone),
-                                badge('Success $rate%', tone: scheme.onSurface),
-                                if (authWarning)
-                                  badge('OAuth Warning',
-                                      tone: scheme.secondary,
-                                      icon: Icons.shield_rounded),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        task['name']?.toString() ?? 'Task',
-                                        style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900),
-                                      ),
-                                      if (descText.isNotEmpty) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          descText,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: showErrorText
-                                                ? scheme.error
-                                                : scheme.onSurface.withAlpha(
-                                                    (0.75 * 255).round()),
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              badge(statusLabel(normalized).toUpperCase(),
+                                  tone: tone),
+                              badge('Success $rate%', tone: scheme.onSurface),
+                              if (authWarning)
+                                badge('OAuth Warning',
+                                    tone: scheme.secondary,
+                                    icon: Icons.shield_rounded),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    IconButton(
-                                      onPressed: busy
-                                          ? null
-                                          : () =>
-                                              unawaited(toggleTaskStatus(task)),
-                                      tooltip: normalized == 'active'
-                                          ? 'Disable task'
-                                          : 'Enable task',
-                                      icon: Icon(
-                                        normalized == 'active'
-                                            ? Icons.pause_circle_filled_rounded
-                                            : Icons.play_circle_fill_rounded,
-                                        color: normalized == 'active'
-                                            ? scheme.secondary
-                                            : scheme.primary,
+                                    Text(
+                                      task['name']?.toString() ?? 'Task',
+                                      style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w900),
+                                    ),
+                                    if (descText.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        descText,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: showErrorText
+                                              ? scheme.error
+                                              : scheme.onSurface.withAlpha(
+                                                  (0.75 * 255).round()),
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
-                                    ),
-                                    IconButton(
-                                      onPressed: busy
-                                          ? null
-                                          : () => unawaited(
-                                              _openEditTaskSheet(task)),
-                                      tooltip: 'Edit task',
-                                      icon: const Icon(Icons.edit_rounded),
-                                    ),
-                                    IconButton(
-                                      onPressed: busy
-                                          ? null
-                                          : () =>
-                                              unawaited(duplicateTask(task)),
-                                      tooltip: 'Duplicate task',
-                                      icon: const Icon(Icons.copy_all_rounded),
-                                    ),
-                                    IconButton(
-                                      onPressed: busy
-                                          ? null
-                                          : () {
-                                              final idx =
-                                                  kPanelSpecs.indexWhere((p) =>
-                                                      p.kind ==
-                                                      PanelKind.executions);
-                                              if (idx < 0) return;
-                                              setState(() {
-                                                _executionsQuery =
-                                                    task['name']?.toString() ??
-                                                        '';
-                                                _executionsSearchController
-                                                    .text = _executionsQuery;
-                                                _executionsStatusFilter = 'all';
-                                                _executionsOffset = 0;
-                                                _executionsHasMore = false;
-                                                _selectedIndex = idx;
-                                              });
-                                              unawaited(_loadPanel(
-                                                  PanelKind.executions,
-                                                  force: true));
-                                            },
-                                      tooltip: 'View logs',
-                                      icon: const Icon(
-                                          Icons.receipt_long_rounded),
-                                    ),
-                                    IconButton(
-                                      onPressed: busy
-                                          ? null
-                                          : () => unawaited(deleteTask(task)),
-                                      tooltip: 'Delete task',
-                                      icon: Icon(Icons.delete_outline_rounded,
-                                          color: scheme.error),
-                                    ),
+                                    ],
                                   ],
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: scheme.surface
-                                    .withAlpha((0.50 * 255).round()),
-                                border: Border.all(
-                                    color: scheme.onSurface
-                                        .withAlpha((0.12 * 255).round())),
-                                borderRadius: BorderRadius.circular(14),
                               ),
-                              child: Row(
+                              const SizedBox(width: 8),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Expanded(
-                                    child: Wrap(
-                                      spacing: 6,
-                                      runSpacing: 6,
-                                      children: sourcePlatforms.isEmpty
-                                          ? [
-                                              Text(i18n.isArabic
-                                                  ? 'بدون مصدر'
-                                                  : 'No source')
-                                            ]
-                                          : sourcePlatforms
-                                              .map((p) => platformBadge(p))
-                                              .toList(),
+                                  IconButton(
+                                    onPressed: busy
+                                        ? null
+                                        : () =>
+                                            unawaited(toggleTaskStatus(task)),
+                                    tooltip: normalized == 'active'
+                                        ? 'Disable task'
+                                        : 'Enable task',
+                                    icon: Icon(
+                                      normalized == 'active'
+                                          ? Icons.pause_circle_filled_rounded
+                                          : Icons.play_circle_fill_rounded,
+                                      color: normalized == 'active'
+                                          ? scheme.secondary
+                                          : scheme.primary,
                                     ),
                                   ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8),
-                                    child: Icon(Icons.arrow_forward_rounded,
-                                        color: scheme.onSurface
-                                            .withAlpha((0.55 * 255).round())),
+                                  IconButton(
+                                    onPressed: busy
+                                        ? null
+                                        : () =>
+                                            unawaited(_openEditTaskSheet(task)),
+                                    tooltip: 'Edit task',
+                                    icon: const Icon(Icons.edit_rounded),
                                   ),
-                                  Expanded(
-                                    child: Wrap(
-                                      spacing: 6,
-                                      runSpacing: 6,
-                                      children: targetPlatforms.isEmpty
-                                          ? [
-                                              Text(i18n.isArabic
-                                                  ? 'بدون هدف'
-                                                  : 'No target')
-                                            ]
-                                          : targetPlatforms
-                                              .map((p) => platformBadge(p))
-                                              .toList(),
-                                    ),
+                                  IconButton(
+                                    onPressed: busy
+                                        ? null
+                                        : () => unawaited(duplicateTask(task)),
+                                    tooltip: 'Duplicate task',
+                                    icon: const Icon(Icons.copy_all_rounded),
+                                  ),
+                                  IconButton(
+                                    onPressed: busy
+                                        ? null
+                                        : () {
+                                            final idx = kPanelSpecs.indexWhere(
+                                                (p) =>
+                                                    p.kind ==
+                                                    PanelKind.executions);
+                                            if (idx < 0) return;
+                                            setState(() {
+                                              _executionsQuery =
+                                                  task['name']?.toString() ??
+                                                      '';
+                                              _executionsSearchController.text =
+                                                  _executionsQuery;
+                                              _executionsStatusFilter = 'all';
+                                              _executionsOffset = 0;
+                                              _executionsHasMore = false;
+                                              _selectedIndex = idx;
+                                            });
+                                            unawaited(_loadPanel(
+                                                PanelKind.executions,
+                                                force: true));
+                                          },
+                                    tooltip: 'View logs',
+                                    icon:
+                                        const Icon(Icons.receipt_long_rounded),
+                                  ),
+                                  IconButton(
+                                    onPressed: busy
+                                        ? null
+                                        : () => unawaited(deleteTask(task)),
+                                    tooltip: 'Delete task',
+                                    icon: Icon(Icons.delete_outline_rounded,
+                                        color: scheme.error),
                                   ),
                                 ],
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          frostedStrip(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: sourcePlatforms.isEmpty
+                                        ? [
+                                            Text(i18n.isArabic
+                                                ? 'بدون مصدر'
+                                                : 'No source')
+                                          ]
+                                        : sourcePlatforms
+                                            .map((p) => platformBadge(p))
+                                            .toList(),
+                                  ),
+                                ),
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
+                                  child: Icon(Icons.arrow_forward_rounded,
+                                      color: scheme.onSurface
+                                          .withAlpha((0.55 * 255).round())),
+                                ),
+                                Expanded(
+                                  child: Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: targetPlatforms.isEmpty
+                                        ? [
+                                            Text(i18n.isArabic
+                                                ? 'بدون هدف'
+                                                : 'No target')
+                                          ]
+                                        : targetPlatforms
+                                            .map((p) => platformBadge(p))
+                                            .toList(),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 10),
-                            Wrap(
+                          ),
+                          const SizedBox(height: 10),
+                          frostedStrip(
+                            padding: const EdgeInsets.all(9),
+                            child: Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: [
@@ -4490,8 +4485,8 @@ class _SocialShellState extends State<SocialShell> {
                                   ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -4575,6 +4570,29 @@ class _SocialShellState extends State<SocialShell> {
         _accountsSearchController.text = '';
         _accountsStatusFilter = 'all';
       });
+    }
+
+    Widget frostedLine({
+      required Widget child,
+      EdgeInsetsGeometry padding = const EdgeInsets.all(10),
+    }) {
+      return Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.surface.withAlpha((0.62 * 255).round()),
+              scheme.surface.withAlpha((0.44 * 255).round()),
+            ],
+          ),
+          border:
+              Border.all(color: scheme.outline.withAlpha((0.22 * 255).round())),
+        ),
+        child: child,
+      );
     }
 
     Widget searchCard() {
@@ -4691,68 +4709,90 @@ class _SocialShellState extends State<SocialShell> {
       return Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: SfPanelCard(
-            padding: EdgeInsets.zero,
-            child: ListTile(
-              leading: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: scheme.surface.withOpacity(0.55),
-                  border: Border.all(color: scheme.onSurface.withOpacity(0.10)),
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: scheme.surface.withAlpha((0.55 * 255).round()),
+                        border: Border.all(
+                            color: scheme.onSurface
+                                .withAlpha((0.10 * 255).round())),
+                      ),
+                      child: Icon(_platformIcon(platformId),
+                          color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 2),
+                          Text('$platformLabel • $handle'),
+                          if (createdLabel.isNotEmpty)
+                            Text(
+                              i18n.isArabic
+                                  ? 'أضيف $createdLabel'
+                                  : 'Added $createdLabel',
+                              style: TextStyle(
+                                  color: scheme.onSurfaceVariant, fontSize: 12),
+                            ),
+                        ],
+                      ),
+                    ),
+                    SfBadge(
+                      active
+                          ? i18n.t('accounts.active', 'Active')
+                          : i18n.t('accounts.inactive', 'Inactive'),
+                      tone: tone,
+                      icon: active ? Icons.check_rounded : Icons.close_rounded,
+                    ),
+                  ],
                 ),
-                child: Icon(_platformIcon(platformId),
-                    color: scheme.onSurfaceVariant),
-              ),
-              title: Text(title,
-                  style: const TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('$platformLabel • $handle'),
-                  if (createdLabel.isNotEmpty)
-                    Text(
-                      i18n.isArabic
-                          ? 'أضيف $createdLabel'
-                          : 'Added $createdLabel',
-                      style: TextStyle(
-                          color: scheme.onSurfaceVariant, fontSize: 12),
-                    ),
-                ],
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (profileUrl != null)
-                    IconButton(
-                      tooltip:
-                          i18n.isArabic ? 'فتح الملف الشخصي' : 'Open profile',
-                      onPressed: () => unawaited(_openAccountProfile(account)),
-                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    ),
-                  if (username != null && username.isNotEmpty)
-                    IconButton(
-                      tooltip:
-                          i18n.isArabic ? 'نسخ اسم المستخدم' : 'Copy username',
-                      onPressed: () async {
-                        await Clipboard.setData(
-                            ClipboardData(text: '@$username'));
-                        _toast(i18n.isArabic
-                            ? 'تم نسخ اسم المستخدم.'
-                            : 'Username copied');
-                      },
-                      icon: const Icon(Icons.content_copy_rounded, size: 18),
-                    ),
-                  SfBadge(
-                    active
-                        ? i18n.t('accounts.active', 'Active')
-                        : i18n.t('accounts.inactive', 'Inactive'),
-                    tone: tone,
-                    icon: active ? Icons.check_rounded : Icons.close_rounded,
+                const SizedBox(height: 10),
+                frostedLine(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (profileUrl != null)
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              unawaited(_openAccountProfile(account)),
+                          icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                          label: Text(
+                              i18n.isArabic ? 'فتح الملف' : 'Open Profile'),
+                        ),
+                      if (username != null && username.isNotEmpty)
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            await Clipboard.setData(
+                                ClipboardData(text: '@$username'));
+                            _toast(i18n.isArabic
+                                ? 'تم نسخ اسم المستخدم.'
+                                : 'Username copied');
+                          },
+                          icon:
+                              const Icon(Icons.content_copy_rounded, size: 16),
+                          label: Text(
+                              i18n.isArabic ? 'نسخ المعرف' : 'Copy Handle'),
+                        ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ));
     }
@@ -5343,6 +5383,29 @@ class _SocialShellState extends State<SocialShell> {
       }
     }
 
+    Widget frostedExecution({
+      required Widget child,
+      EdgeInsetsGeometry padding = const EdgeInsets.all(10),
+    }) {
+      return Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.surface.withAlpha((0.62 * 255).round()),
+              scheme.surface.withAlpha((0.46 * 255).round()),
+            ],
+          ),
+          border:
+              Border.all(color: scheme.outline.withAlpha((0.22 * 255).round())),
+        ),
+        child: child,
+      );
+    }
+
     Widget searchCard() {
       return SfPanelCard(
         child: Column(
@@ -5528,9 +5591,10 @@ class _SocialShellState extends State<SocialShell> {
                         height: 44,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(14),
-                          color: statusColor.withOpacity(0.12),
-                          border:
-                              Border.all(color: statusColor.withOpacity(0.26)),
+                          color: statusColor.withAlpha((0.12 * 255).round()),
+                          border: Border.all(
+                              color:
+                                  statusColor.withAlpha((0.26 * 255).round())),
                         ),
                         child: Icon(Icons.history_rounded, color: statusColor),
                       ),
@@ -5595,76 +5659,84 @@ class _SocialShellState extends State<SocialShell> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(Icons.compare_arrows_rounded,
-                          size: 16, color: scheme.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                  frostedExecution(
+                    child: Column(
+                      children: [
+                        Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 5),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                    color: scheme.outline
-                                        .withAlpha((0.20 * 255).round())),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                            Icon(Icons.compare_arrows_rounded,
+                                size: 16, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  Icon(_platformIcon(sourcePlatformId),
-                                      size: 14),
-                                  const SizedBox(width: 5),
-                                  SizedBox(
-                                    width: 130,
-                                    child: Text(
-                                      sourceName == null || sourceName.isEmpty
-                                          ? 'Unknown source'
-                                          : sourceName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          color: scheme.onSurfaceVariant,
-                                          fontWeight: FontWeight.w700),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                          color: scheme.outline
+                                              .withAlpha((0.20 * 255).round())),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(_platformIcon(sourcePlatformId),
+                                            size: 14),
+                                        const SizedBox(width: 5),
+                                        SizedBox(
+                                          width: 130,
+                                          child: Text(
+                                            sourceName == null ||
+                                                    sourceName.isEmpty
+                                                ? 'Unknown source'
+                                                : sourceName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                                color: scheme.onSurfaceVariant,
+                                                fontWeight: FontWeight.w700),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.arrow_forward_rounded,
-                                size: 14, color: scheme.onSurfaceVariant),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 5),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                    color: scheme.outline
-                                        .withAlpha((0.20 * 255).round())),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(_platformIcon(targetPlatformId),
-                                      size: 14),
-                                  const SizedBox(width: 5),
-                                  SizedBox(
-                                    width: 130,
-                                    child: Text(
-                                      targetName == null || targetName.isEmpty
-                                          ? 'Unknown target'
-                                          : targetName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          color: scheme.onSurfaceVariant,
-                                          fontWeight: FontWeight.w700),
+                                  Icon(Icons.arrow_forward_rounded,
+                                      size: 14, color: scheme.onSurfaceVariant),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                          color: scheme.outline
+                                              .withAlpha((0.20 * 255).round())),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(_platformIcon(targetPlatformId),
+                                            size: 14),
+                                        const SizedBox(width: 5),
+                                        SizedBox(
+                                          width: 130,
+                                          child: Text(
+                                            targetName == null ||
+                                                    targetName.isEmpty
+                                                ? 'Unknown target'
+                                                : targetName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                                color: scheme.onSurfaceVariant,
+                                                fontWeight: FontWeight.w700),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -5672,168 +5744,163 @@ class _SocialShellState extends State<SocialShell> {
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.schedule_rounded,
-                          size: 16, color: scheme.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          when,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: scheme.onSurfaceVariant),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 16,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color:
-                                  stepTone(0).withAlpha((0.14 * 255).round()),
-                              border:
-                                  Border.all(color: stepTone(0), width: 1.4),
-                            ),
-                          ),
-                          Expanded(
-                            child: Container(
-                              height: 2,
-                              color: connectorTone(0),
-                            ),
-                          ),
-                          Container(
-                            width: 16,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color:
-                                  stepTone(1).withAlpha((0.14 * 255).round()),
-                              border:
-                                  Border.all(color: stepTone(1), width: 1.4),
-                            ),
-                          ),
-                          Expanded(
-                            child: Container(
-                              height: 2,
-                              color: connectorTone(1),
-                            ),
-                          ),
-                          Container(
-                            width: 16,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color:
-                                  stepTone(2).withAlpha((0.14 * 255).round()),
-                              border:
-                                  Border.all(color: stepTone(2), width: 1.4),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              i18n.isArabic ? 'مجدول' : 'Queued',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: stepTone(0),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.schedule_rounded,
+                                size: 16, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                when,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    TextStyle(color: scheme.onSurfaceVariant),
                               ),
                             ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              i18n.isArabic ? 'جارٍ التنفيذ' : 'Running',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: stepTone(1),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              i18n.isArabic ? 'مكتمل' : 'Done',
-                              textAlign: TextAlign.end,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: stepTone(2),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (stageText.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${i18n.isArabic ? 'المرحلة' : 'Stage'}: $stageText',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: scheme.onSurfaceVariant, fontSize: 12),
+                          ],
                         ),
                       ],
-                    ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  frostedExecution(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color:
+                                    stepTone(0).withAlpha((0.14 * 255).round()),
+                                border:
+                                    Border.all(color: stepTone(0), width: 1.4),
+                              ),
+                            ),
+                            Expanded(
+                              child:
+                                  Container(height: 2, color: connectorTone(0)),
+                            ),
+                            Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color:
+                                    stepTone(1).withAlpha((0.14 * 255).round()),
+                                border:
+                                    Border.all(color: stepTone(1), width: 1.4),
+                              ),
+                            ),
+                            Expanded(
+                              child:
+                                  Container(height: 2, color: connectorTone(1)),
+                            ),
+                            Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color:
+                                    stepTone(2).withAlpha((0.14 * 255).round()),
+                                border:
+                                    Border.all(color: stepTone(2), width: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                i18n.isArabic ? 'مجدول' : 'Queued',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: stepTone(0),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                i18n.isArabic ? 'جارٍ التنفيذ' : 'Running',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: stepTone(1),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                i18n.isArabic ? 'مكتمل' : 'Done',
+                                textAlign: TextAlign.end,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: stepTone(2),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (stageText.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${i18n.isArabic ? 'المرحلة' : 'Stage'}: $stageText',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: scheme.onSurfaceVariant, fontSize: 12),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                   if (errorText.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: scheme.error.withAlpha((0.10 * 255).round()),
-                        border: Border.all(
-                            color:
-                                scheme.error.withAlpha((0.22 * 255).round())),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.error_outline_rounded,
-                              color: scheme.error, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              errorText,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  color: scheme.error,
-                                  fontWeight: FontWeight.w700),
+                    frostedExecution(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.error_outline_rounded,
+                                color: scheme.error, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                errorText,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    color: scheme.error,
+                                    fontWeight: FontWeight.w700),
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            tooltip: i18n.isArabic ? 'نسخ الخطأ' : 'Copy error',
-                            onPressed: () async {
-                              await Clipboard.setData(
-                                  ClipboardData(text: errorText));
-                              _toast(i18n.isArabic
-                                  ? 'تم نسخ الخطأ.'
-                                  : 'Error copied');
-                            },
-                            icon: const Icon(Icons.content_copy_rounded,
-                                size: 18),
-                          ),
-                        ],
+                            IconButton(
+                              tooltip:
+                                  i18n.isArabic ? 'نسخ الخطأ' : 'Copy error',
+                              onPressed: () async {
+                                await Clipboard.setData(
+                                    ClipboardData(text: errorText));
+                                _toast(i18n.isArabic
+                                    ? 'تم نسخ الخطأ.'
+                                    : 'Error copied');
+                              },
+                              icon: const Icon(Icons.content_copy_rounded,
+                                  size: 18),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
