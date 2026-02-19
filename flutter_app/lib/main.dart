@@ -933,6 +933,7 @@ class _PanelState {
 class _SocialShellState extends State<SocialShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedIndex = 0;
+  bool _mobileMenuOpen = false;
   String _tasksQuery = '';
   String _tasksStatusFilter = 'all';
   String _tasksPlatformFilter = 'all';
@@ -1126,9 +1127,15 @@ class _SocialShellState extends State<SocialShell> {
   }
 
   Future<void> _onPanelSelected(int index) async {
-    if (_selectedIndex == index) return;
+    if (_selectedIndex == index) {
+      if (_mobileMenuOpen) setState(() => _mobileMenuOpen = false);
+      return;
+    }
 
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      _mobileMenuOpen = false;
+    });
     await _loadPanel(_currentKind, force: _currentKind == PanelKind.dashboard);
   }
 
@@ -1150,26 +1157,23 @@ class _SocialShellState extends State<SocialShell> {
 
   Future<void> _toggleSidebar({required bool wide}) async {
     if (wide) {
+      if (_mobileMenuOpen) {
+        setState(() => _mobileMenuOpen = false);
+      }
       await widget.appState
           .setSidebarCollapsed(!widget.appState.sidebarCollapsed);
       return;
     }
 
-    final state = _scaffoldKey.currentState;
-    if (state == null) return;
-    if (state.isDrawerOpen) {
-      Navigator.of(context).maybePop();
-      return;
-    }
-    state.openDrawer();
+    setState(() => _mobileMenuOpen = !_mobileMenuOpen);
   }
 
   void _openProfilePanel({required bool closeDrawer}) {
     final settingsIndex =
         kPanelSpecs.indexWhere((p) => p.kind == PanelKind.settings);
     if (settingsIndex < 0) return;
-    if (closeDrawer) {
-      Navigator.of(context).maybePop();
+    if (closeDrawer && _mobileMenuOpen) {
+      setState(() => _mobileMenuOpen = false);
     }
     unawaited(_onPanelSelected(settingsIndex));
   }
@@ -1921,19 +1925,19 @@ class _SocialShellState extends State<SocialShell> {
     }
   }
 
-  Widget _buildDrawer(I18n i18n) {
+  Widget _buildMobileMenuPanel(I18n i18n) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Drawer(
-      backgroundColor: Color.alphaBlend(
-          scheme.primary.withAlpha(isDark ? 14 : 8), scheme.surface),
-      child: SafeArea(
+    return Positioned.fill(
+      child: Material(
+        color: Color.alphaBlend(
+            scheme.primary.withAlpha(isDark ? 14 : 8), scheme.surface),
         child: Column(
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -1954,36 +1958,25 @@ class _SocialShellState extends State<SocialShell> {
                     borderRadius: BorderRadius.circular(14),
                     child: Image.asset(
                       'assets/icon-192.png',
-                      width: 42,
-                      height: 42,
+                      width: 38,
+                      height: 38,
                       fit: BoxFit.cover,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.userName.trim().isEmpty
-                              ? 'SocialFlow'
-                              : widget.userName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 16),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.userEmail,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w700),
-                        ),
-                      ],
+                    child: Text(
+                      i18n.isArabic ? 'لوحة التنقل' : 'Navigation',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                      ),
                     ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => _mobileMenuOpen = false),
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: i18n.isArabic ? 'إغلاق' : 'Close',
                   ),
                 ],
               ),
@@ -2007,10 +2000,7 @@ class _SocialShellState extends State<SocialShell> {
                       ),
                       selectedTileColor:
                           scheme.primary.withAlpha(isDark ? 60 : 28),
-                      onTap: () {
-                        Navigator.of(context).maybePop();
-                        unawaited(_onPanelSelected(index));
-                      },
+                      onTap: () => unawaited(_onPanelSelected(index)),
                     ),
                   );
                 },
@@ -2026,7 +2016,7 @@ class _SocialShellState extends State<SocialShell> {
               leading: const Icon(Icons.logout_rounded),
               title: Text(i18n.t('common.signOut', 'Sign out')),
               onTap: () async {
-                Navigator.of(context).maybePop();
+                setState(() => _mobileMenuOpen = false);
                 await widget.onSignOut();
               },
             ),
@@ -2110,21 +2100,6 @@ class _SocialShellState extends State<SocialShell> {
               icon: Icon(panel.icon),
               selectedIcon: Icon(panel.icon),
               label: Text(i18n.t(panel.labelKey, panel.fallbackLabel)),
-            ),
-          )
-          .toList(),
-    );
-  }
-
-  Widget _buildBottomNavigation(I18n i18n) {
-    return NavigationBar(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (index) => unawaited(_onPanelSelected(index)),
-      destinations: kPanelSpecs
-          .map(
-            (panel) => NavigationDestination(
-              icon: Icon(panel.icon),
-              label: i18n.t(panel.labelKey, panel.fallbackLabel),
             ),
           )
           .toList(),
@@ -7726,6 +7701,13 @@ class _SocialShellState extends State<SocialShell> {
         final wide = constraints.maxWidth >= 840;
         final reducedMotion = widget.appState.reducedMotion;
         final collapsed = widget.appState.sidebarCollapsed;
+        if (wide && _mobileMenuOpen) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_mobileMenuOpen) return;
+            setState(() => _mobileMenuOpen = false);
+          });
+        }
+        final mobileMenuOpen = !wide && _mobileMenuOpen;
 
         return Scaffold(
           key: _scaffoldKey,
@@ -7736,11 +7718,13 @@ class _SocialShellState extends State<SocialShell> {
               icon: Icon(
                 wide
                     ? (collapsed ? Icons.menu_open_rounded : Icons.menu_rounded)
-                    : Icons.menu_rounded,
+                    : (mobileMenuOpen
+                        ? Icons.close_rounded
+                        : Icons.menu_rounded),
               ),
               tooltip: wide
                   ? (collapsed ? 'Expand sidebar' : 'Collapse sidebar')
-                  : 'Open sidebar',
+                  : (mobileMenuOpen ? 'Close menu' : 'Open menu'),
               onPressed: () => unawaited(_toggleSidebar(wide: wide)),
             ),
             title: Column(
@@ -7775,45 +7759,49 @@ class _SocialShellState extends State<SocialShell> {
               ),
             ],
           ),
-          drawer: wide ? null : _buildDrawer(i18n),
           body: SfAppBackground(
             child: SafeArea(
-              child: Row(
+              child: Stack(
                 children: [
-                  if (wide) _buildRail(i18n),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: reducedMotion
-                          ? Duration.zero
-                          : const Duration(milliseconds: 220),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, anim) {
-                        if (reducedMotion) {
-                          return FadeTransition(opacity: anim, child: child);
-                        }
-                        return FadeTransition(
-                          opacity: anim,
-                          child: SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0.02, 0),
-                              end: Offset.zero,
-                            ).animate(anim),
-                            child: child,
+                  Row(
+                    children: [
+                      if (wide) _buildRail(i18n),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: reducedMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 220),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, anim) {
+                            if (reducedMotion) {
+                              return FadeTransition(
+                                  opacity: anim, child: child);
+                            }
+                            return FadeTransition(
+                              opacity: anim,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.02, 0),
+                                  end: Offset.zero,
+                                ).animate(anim),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: KeyedSubtree(
+                            key: ValueKey<PanelKind>(_currentKind),
+                            child: _buildCurrentPanel(),
                           ),
-                        );
-                      },
-                      child: KeyedSubtree(
-                        key: ValueKey<PanelKind>(_currentKind),
-                        child: _buildCurrentPanel(),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
+                  if (mobileMenuOpen) _buildMobileMenuPanel(i18n),
                 ],
               ),
             ),
           ),
-          bottomNavigationBar: wide ? null : _buildBottomNavigation(i18n),
         );
       },
     );
