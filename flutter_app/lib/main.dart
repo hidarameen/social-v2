@@ -2379,149 +2379,319 @@ class _SocialShellState extends State<SocialShell> {
       );
     }
 
-    Widget sectionTitle(String title, {VoidCallback? onViewAll}) {
+    Widget sectionTitle(
+      String title, {
+      VoidCallback? onViewAll,
+      IconData? icon,
+    }) {
+      final scheme = Theme.of(context).colorScheme;
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-          ),
-          if (onViewAll != null)
-            TextButton(
-              onPressed: onViewAll,
-              child: Text(i18n.t('dashboard.viewAll', 'View all')),
+          Expanded(
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: scheme.primary.withAlpha((0.10 * 255).round()),
+                      border: Border.all(
+                          color:
+                              scheme.primary.withAlpha((0.26 * 255).round())),
+                    ),
+                    child: Icon(icon, size: 18, color: scheme.primary),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+          if (onViewAll != null) ...[
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: onViewAll,
+              icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+              label: Text(i18n.t('dashboard.viewAll', 'View all')),
+            ),
+          ],
         ],
       );
     }
 
+    Widget frostedBlock({
+      required Widget child,
+      EdgeInsetsGeometry padding = const EdgeInsets.all(12),
+      Color? borderColor,
+    }) {
+      final scheme = Theme.of(context).colorScheme;
+      final resolvedBorder = borderColor ?? scheme.outline;
+      return Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.surface.withAlpha((0.62 * 255).round()),
+              scheme.surface.withAlpha((0.44 * 255).round()),
+            ],
+          ),
+          border:
+              Border.all(color: resolvedBorder.withAlpha((0.24 * 255).round())),
+          boxShadow: [
+            BoxShadow(
+              blurRadius: 16,
+              spreadRadius: 0,
+              offset: const Offset(0, 7),
+              color: Colors.black.withAlpha((0.04 * 255).round()),
+            ),
+          ],
+        ),
+        child: child,
+      );
+    }
+
     Widget statGrid() {
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          SizedBox(
-            width: 280,
-            child: SfKpiTile(
-              label: i18n.t('dashboard.kpi.totalTasks', 'Total tasks'),
-              value: '$totalTasks',
-              icon: Icons.task_rounded,
-            ),
-          ),
-          SizedBox(
-            width: 280,
-            child: SfKpiTile(
-              label: i18n.t('dashboard.kpi.activeTasks', 'Active tasks'),
-              value: '$activeTasks',
-              icon: Icons.play_circle_fill_rounded,
-              tone: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          SizedBox(
-            width: 280,
-            child: SfKpiTile(
-              label: i18n.t(
-                  'dashboard.kpi.connectedAccounts', 'Connected accounts'),
-              value: '$totalAccounts',
-              icon: Icons.groups_rounded,
-              tone: Theme.of(context).colorScheme.secondary,
-            ),
-          ),
-          SizedBox(
-            width: 280,
-            child: SfKpiTile(
-              label:
-                  i18n.t('dashboard.kpi.executionSuccess', 'Execution success'),
-              value: '$successRate%',
-              icon: Icons.query_stats_rounded,
-              tone: Colors.green.shade700,
-            ),
-          ),
-        ],
+      final tiles = <Widget>[
+        SfKpiTile(
+          label: i18n.t('dashboard.kpi.totalTasks', 'Total tasks'),
+          value: '$totalTasks',
+          icon: Icons.task_rounded,
+        ),
+        SfKpiTile(
+          label: i18n.t('dashboard.kpi.activeTasks', 'Active tasks'),
+          value: '$activeTasks',
+          icon: Icons.play_circle_fill_rounded,
+          tone: Theme.of(context).colorScheme.primary,
+        ),
+        SfKpiTile(
+          label:
+              i18n.t('dashboard.kpi.connectedAccounts', 'Connected accounts'),
+          value: '$totalAccounts',
+          icon: Icons.groups_rounded,
+          tone: Theme.of(context).colorScheme.secondary,
+        ),
+        SfKpiTile(
+          label: i18n.t('dashboard.kpi.executionSuccess', 'Execution success'),
+          value: '$successRate%',
+          icon: Icons.query_stats_rounded,
+          tone: Colors.green.shade700,
+        ),
+      ];
+
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          const gap = 12.0;
+          final maxWidth =
+              constraints.maxWidth.isFinite ? constraints.maxWidth : 1120.0;
+          final columns = maxWidth >= 1160
+              ? 4
+              : maxWidth >= 760
+                  ? 2
+                  : 1;
+          final baseWidth = columns == 1
+              ? maxWidth
+              : (maxWidth - (columns - 1) * gap) / columns;
+          final tileWidth = columns == 1
+              ? maxWidth
+              : (baseWidth < 250 ? 250 : baseWidth).toDouble();
+
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
+            ],
+          );
+        },
       );
     }
 
     Widget dashboardHeader() {
       final colorScheme = Theme.of(context).colorScheme;
       return SfPanelCard(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            pill(
-              i18n.t('dashboard.liveOps', 'Live Operations'),
-              icon: Icons.bolt_rounded,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              i18n.t('dashboard.title', 'SocialFlow Dashboard'),
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              i18n.t(
-                'dashboard.subtitle',
-                'Unified control center for tasks, accounts, executions, and operational health.',
-              ),
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+        padding: const EdgeInsets.all(18),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 880;
+
+            Widget heroMain = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 pill(
-                    '$activeTasks ${i18n.t('dashboard.kpi.active', 'active')}'),
-                pill(
-                  '$pausedTasks ${i18n.t('dashboard.kpi.paused', 'paused')}',
-                  bg: colorScheme.secondary.withAlpha((0.16 * 255).round()),
-                  fg: colorScheme.secondary,
+                  i18n.t('dashboard.liveOps', 'Live Operations'),
+                  icon: Icons.bolt_rounded,
                 ),
-                pill(
-                  '$errorTasks ${i18n.t('dashboard.kpi.errors', 'errors')}',
-                  bg: colorScheme.error.withAlpha((0.12 * 255).round()),
-                  fg: colorScheme.error,
+                const SizedBox(height: 10),
+                Text(
+                  i18n.t('dashboard.title', 'SocialFlow Dashboard'),
+                  style: const TextStyle(
+                      fontSize: 28, fontWeight: FontWeight.w900),
                 ),
-                pill(
-                    '$successRate% ${i18n.t('dashboard.kpi.successRate', 'success rate')}'),
-                if (hasAuthWarnings)
-                  pill(
-                    i18n.t('dashboard.kpi.oauthAttention',
-                        'OAuth attention needed'),
-                    bg: Colors.orange.shade700.withAlpha((0.18 * 255).round()),
-                    fg: Colors.orange.shade700,
-                    icon: Icons.shield_rounded,
+                const SizedBox(height: 8),
+                Text(
+                  i18n.t(
+                    'dashboard.subtitle',
+                    'Unified control center for tasks, accounts, executions, and operational health.',
                   ),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    pill(
+                        '$activeTasks ${i18n.t('dashboard.kpi.active', 'active')}'),
+                    pill(
+                      '$pausedTasks ${i18n.t('dashboard.kpi.paused', 'paused')}',
+                      bg: colorScheme.secondary.withAlpha((0.16 * 255).round()),
+                      fg: colorScheme.secondary,
+                    ),
+                    pill(
+                      '$errorTasks ${i18n.t('dashboard.kpi.errors', 'errors')}',
+                      bg: colorScheme.error.withAlpha((0.12 * 255).round()),
+                      fg: colorScheme.error,
+                    ),
+                    pill(
+                        '$successRate% ${i18n.t('dashboard.kpi.successRate', 'success rate')}'),
+                    if (hasAuthWarnings)
+                      pill(
+                        i18n.t('dashboard.kpi.oauthAttention',
+                            'OAuth attention needed'),
+                        bg: Colors.orange.shade700
+                            .withAlpha((0.18 * 255).round()),
+                        fg: Colors.orange.shade700,
+                        icon: Icons.shield_rounded,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => unawaited(
+                          _loadPanel(PanelKind.dashboard, force: true)),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: Text(i18n.t('common.refresh', 'Refresh')),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => unawaited(_onPanelSelected(kPanelSpecs
+                          .indexWhere((p) => p.kind == PanelKind.accounts))),
+                      icon: const Icon(Icons.groups_rounded),
+                      label: Text(i18n.t('dashboard.actions.connectAccount',
+                          'Connect Account')),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () async => _openCreateTaskSheet(),
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(i18n.t(
+                          'dashboard.actions.createTask', 'Create New Task')),
+                    ),
+                  ],
+                ),
               ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
+            );
+
+            Widget liveSummary = Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    colorScheme.primary.withAlpha((0.22 * 255).round()),
+                    colorScheme.secondary.withAlpha((0.16 * 255).round()),
+                  ],
+                ),
+                border: Border.all(
+                  color: colorScheme.primary.withAlpha((0.34 * 255).round()),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    i18n.t('dashboard.liveSummary', 'Live summary'),
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$totalExecutions',
+                              style: const TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1),
+                            ),
+                            Text(
+                              i18n.t('dashboard.kpi.totalExecutions',
+                                  'Total executions'),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary
+                              .withAlpha((0.18 * 255).round()),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.multiline_chart_rounded,
+                            color: colorScheme.primary),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+
+            if (!wide) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  heroMain,
+                  const SizedBox(height: 12),
+                  liveSummary,
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                OutlinedButton.icon(
-                  onPressed: () =>
-                      unawaited(_loadPanel(PanelKind.dashboard, force: true)),
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: Text(i18n.t('common.refresh', 'Refresh')),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => unawaited(_onPanelSelected(kPanelSpecs
-                      .indexWhere((p) => p.kind == PanelKind.accounts))),
-                  icon: const Icon(Icons.groups_rounded),
-                  label: Text(i18n.t(
-                      'dashboard.actions.connectAccount', 'Connect Account')),
-                ),
-                FilledButton.icon(
-                  onPressed: () async => _openCreateTaskSheet(),
-                  icon: const Icon(Icons.add_rounded),
-                  label: Text(i18n.t(
-                      'dashboard.actions.createTask', 'Create New Task')),
-                ),
+                Expanded(flex: 8, child: heroMain),
+                const SizedBox(width: 14),
+                Expanded(flex: 4, child: liveSummary),
               ],
-            ),
-          ],
+            );
+          },
         ),
       );
     }
@@ -2735,54 +2905,49 @@ class _SocialShellState extends State<SocialShell> {
     }
 
     Widget recentAutomationsCard() {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              sectionTitle(
-                i18n.t('dashboard.section.recentAutomations',
-                    'Recent Automations'),
-                onViewAll: () => unawaited(_onPanelSelected(
-                    kPanelSpecs.indexWhere((p) => p.kind == PanelKind.tasks))),
-              ),
-              const SizedBox(height: 8),
-              if (recentTasks.isEmpty)
-                Text(i18n.t('dashboard.noTasks', 'No tasks yet.'))
-              else
-                ...recentTasks.take(6).map((raw) {
-                  final task = raw is Map<String, dynamic>
-                      ? Map<String, dynamic>.from(raw)
-                      : Map<String, dynamic>.from(raw as Map);
-                  final id = task['id']?.toString() ?? '';
-                  final normalized =
-                      normalizeTaskStatus(task['status']?.toString() ?? '');
-                  final busy = _taskActionState.containsKey(id);
+      return SfPanelCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            sectionTitle(
+              i18n.t(
+                  'dashboard.section.recentAutomations', 'Recent Automations'),
+              icon: Icons.auto_awesome_rounded,
+              onViewAll: () => unawaited(_onPanelSelected(
+                  kPanelSpecs.indexWhere((p) => p.kind == PanelKind.tasks))),
+            ),
+            const SizedBox(height: 10),
+            if (recentTasks.isEmpty)
+              frostedBlock(
+                child: Text(i18n.t('dashboard.noTasks', 'No tasks yet.')),
+              )
+            else
+              ...recentTasks.take(6).map((raw) {
+                final task = raw is Map<String, dynamic>
+                    ? Map<String, dynamic>.from(raw)
+                    : Map<String, dynamic>.from(raw as Map);
+                final id = task['id']?.toString() ?? '';
+                final normalized =
+                    normalizeTaskStatus(task['status']?.toString() ?? '');
+                final busy = _taskActionState.containsKey(id);
 
-                  final sources = task['sourceAccounts'] is List
-                      ? (task['sourceAccounts'] as List)
-                      : const <dynamic>[];
-                  final targets = task['targetAccounts'] is List
-                      ? (task['targetAccounts'] as List)
-                      : const <dynamic>[];
+                final sources = task['sourceAccounts'] is List
+                    ? (task['sourceAccounts'] as List)
+                    : const <dynamic>[];
+                final targets = task['targetAccounts'] is List
+                    ? (task['targetAccounts'] as List)
+                    : const <dynamic>[];
 
-                  final sourcePlatforms = uniquePlatforms(sources);
-                  final targetPlatforms = uniquePlatforms(targets);
+                final sourcePlatforms = uniquePlatforms(sources);
+                final targetPlatforms = uniquePlatforms(targets);
 
-                  final pillColor = statusColor(normalized);
-                  final scheme = Theme.of(context).colorScheme;
+                final pillColor = statusColor(normalized);
+                final scheme = Theme.of(context).colorScheme;
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: scheme.surface.withAlpha((0.45 * 255).round()),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color:
-                              scheme.onSurface.withAlpha((0.12 * 255).round())),
-                    ),
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: frostedBlock(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -2803,27 +2968,13 @@ class _SocialShellState extends State<SocialShell> {
                                         task['name']?.toString() ??
                                             'Unnamed task',
                                         style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w800),
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w900,
+                                        ),
                                       ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: pillColor
-                                              .withAlpha((0.14 * 255).round()),
-                                          border: Border.all(
-                                              color: pillColor.withAlpha(
-                                                  (0.32 * 255).round())),
-                                          borderRadius:
-                                              BorderRadius.circular(999),
-                                        ),
-                                        child: Text(
-                                          statusLabel(normalized),
-                                          style: TextStyle(
-                                              color: pillColor,
-                                              fontWeight: FontWeight.w800),
-                                        ),
+                                      SfBadge(
+                                        statusLabel(normalized),
+                                        tone: pillColor,
                                       ),
                                     ],
                                   ),
@@ -2876,17 +3027,10 @@ class _SocialShellState extends State<SocialShell> {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        Container(
+                        frostedBlock(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color:
-                                scheme.surface.withAlpha((0.55 * 255).round()),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: scheme.onSurface
-                                    .withAlpha((0.12 * 255).round())),
-                          ),
+                          borderColor: scheme.outline.withAlpha(90),
                           child: Wrap(
                             spacing: 8,
                             runSpacing: 8,
@@ -2919,10 +3063,10 @@ class _SocialShellState extends State<SocialShell> {
                         ),
                       ],
                     ),
-                  );
-                }),
-            ],
-          ),
+                  ),
+                );
+              }),
+          ],
         ),
       );
     }
@@ -2934,184 +3078,152 @@ class _SocialShellState extends State<SocialShell> {
 
       int td(String key) => _readInt(taskBreakdown[key], fallback: 0);
 
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                i18n.t('dashboard.section.systemHealth', 'System Health'),
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+      return SfPanelCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            sectionTitle(
+              i18n.t('dashboard.section.systemHealth', 'System Health'),
+              icon: Icons.health_and_safety_rounded,
+            ),
+            const SizedBox(height: 10),
+            frostedBlock(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    i18n.t('dashboard.health.taskHealth', 'Task health'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      pill('Active ${td('active')}', fg: scheme.primary),
+                      pill('Paused ${td('paused')}',
+                          fg: scheme.secondary,
+                          bg: scheme.secondary.withAlpha((0.16 * 255).round())),
+                      pill('Errors ${td('error')}',
+                          fg: scheme.error,
+                          bg: scheme.error.withAlpha((0.12 * 255).round())),
+                      pill('Done ${td('completed')}',
+                          fg: Colors.green.shade700,
+                          bg: Colors.green.shade700
+                              .withAlpha((0.14 * 255).round())),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: scheme.onSurface.withAlpha((0.12 * 255).round())),
-                  color: scheme.surface.withAlpha((0.40 * 255).round()),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      i18n.t('dashboard.health.taskHealth', 'Task health'),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 10),
+            ),
+            const SizedBox(height: 10),
+            frostedBlock(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        i18n.t('dashboard.health.accountReliability',
+                            'Account reliability'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Icon(
+                        hasAuthWarnings
+                            ? Icons.shield_rounded
+                            : Icons.check_circle_rounded,
+                        size: 16,
+                        color:
+                            hasAuthWarnings ? scheme.secondary : scheme.primary,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '$activeAccounts active / $totalAccounts total',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    inactiveAccounts > 0
+                        ? '$inactiveAccounts ${i18n.t('dashboard.health.authIssues', 'account(s) need re-authentication.')}'
+                        : i18n.t('dashboard.health.noAuthIssues',
+                            'No authentication issues detected.'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            frostedBlock(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    i18n.t(
+                        'dashboard.health.platformsInUse', 'Platforms in use'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  if (platformBreakdown.isEmpty)
+                    Text(i18n.t('dashboard.health.noPlatforms',
+                        'No connected platforms.'))
+                  else
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: [
-                        pill('Active ${td('active')}', fg: scheme.primary),
-                        pill('Paused ${td('paused')}',
-                            fg: scheme.secondary,
-                            bg: scheme.secondary
-                                .withAlpha((0.16 * 255).round())),
-                        pill('Errors ${td('error')}',
-                            fg: scheme.error,
-                            bg: scheme.error.withAlpha((0.12 * 255).round())),
-                        pill('Done ${td('completed')}',
-                            fg: Colors.green.shade700,
-                            bg: Colors.green.shade700
-                                .withAlpha((0.14 * 255).round())),
-                      ],
+                      children: platformBreakdown
+                          .map((entry) => platformChip(entry.key, entry.value))
+                          .toList(),
                     ),
-                  ],
-                ),
+                ],
               ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: scheme.onSurface.withAlpha((0.12 * 255).round())),
-                  color: scheme.surface.withAlpha((0.40 * 255).round()),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          i18n.t('dashboard.health.accountReliability',
-                              'Account reliability'),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        Icon(
-                          hasAuthWarnings
-                              ? Icons.shield_rounded
-                              : Icons.check_circle_rounded,
-                          size: 16,
-                          color: hasAuthWarnings
-                              ? scheme.secondary
-                              : scheme.primary,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      '$activeAccounts active / $totalAccounts total',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      inactiveAccounts > 0
-                          ? '$inactiveAccounts ${i18n.t('dashboard.health.authIssues', 'account(s) need re-authentication.')}'
-                          : i18n.t('dashboard.health.noAuthIssues',
-                              'No authentication issues detected.'),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: scheme.onSurface.withAlpha((0.12 * 255).round())),
-                  color: scheme.surface.withAlpha((0.40 * 255).round()),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      i18n.t('dashboard.health.platformsInUse',
-                          'Platforms in use'),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 10),
-                    if (platformBreakdown.isEmpty)
-                      Text(i18n.t('dashboard.health.noPlatforms',
-                          'No connected platforms.'))
-                    else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: platformBreakdown
-                            .map(
-                                (entry) => platformChip(entry.key, entry.value))
-                            .toList(),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
 
     Widget recentExecutionsCard() {
       final scheme = Theme.of(context).colorScheme;
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              sectionTitle(
-                i18n.t(
-                    'dashboard.section.recentExecutions', 'Recent Executions'),
-                onViewAll: () => unawaited(_onPanelSelected(kPanelSpecs
-                    .indexWhere((p) => p.kind == PanelKind.executions))),
-              ),
-              const SizedBox(height: 8),
-              if (recentExecutions.isEmpty)
-                Text(i18n.t('dashboard.noExecutions', 'No executions yet.'))
-              else
-                ...recentExecutions.take(7).map((raw) {
-                  final execution = raw is Map<String, dynamic>
-                      ? Map<String, dynamic>.from(raw)
-                      : Map<String, dynamic>.from(raw as Map);
-                  final status = execution['status']?.toString() ?? 'pending';
-                  final normalized = status.trim().toLowerCase();
-                  final color = normalized == 'success'
-                      ? scheme.primary
-                      : normalized == 'failed'
-                          ? scheme.error
-                          : scheme.secondary;
-                  final content =
-                      (execution['originalContent']?.toString() ?? '').trim();
-                  final preview = content.isEmpty ? 'No text content' : content;
+      return SfPanelCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            sectionTitle(
+              i18n.t('dashboard.section.recentExecutions', 'Recent Executions'),
+              icon: Icons.history_rounded,
+              onViewAll: () => unawaited(_onPanelSelected(kPanelSpecs
+                  .indexWhere((p) => p.kind == PanelKind.executions))),
+            ),
+            const SizedBox(height: 10),
+            if (recentExecutions.isEmpty)
+              frostedBlock(
+                child: Text(
+                    i18n.t('dashboard.noExecutions', 'No executions yet.')),
+              )
+            else
+              ...recentExecutions.take(7).map((raw) {
+                final execution = raw is Map<String, dynamic>
+                    ? Map<String, dynamic>.from(raw)
+                    : Map<String, dynamic>.from(raw as Map);
+                final status = execution['status']?.toString() ?? 'pending';
+                final normalized = status.trim().toLowerCase();
+                final color = normalized == 'success'
+                    ? scheme.primary
+                    : normalized == 'failed'
+                        ? scheme.error
+                        : scheme.secondary;
+                final content =
+                    (execution['originalContent']?.toString() ?? '').trim();
+                final preview = content.isEmpty ? 'No text content' : content;
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color:
-                              scheme.onSurface.withAlpha((0.12 * 255).round())),
-                      color: scheme.surface.withAlpha((0.40 * 255).round()),
-                    ),
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: frostedBlock(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -3122,25 +3234,10 @@ class _SocialShellState extends State<SocialShell> {
                                 execution['taskName']?.toString() ??
                                     'Task execution',
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w800),
+                                    fontWeight: FontWeight.w900),
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: color.withAlpha((0.14 * 255).round()),
-                                border: Border.all(
-                                    color:
-                                        color.withAlpha((0.32 * 255).round())),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                status,
-                                style: TextStyle(
-                                    color: color, fontWeight: FontWeight.w800),
-                              ),
-                            ),
+                            SfBadge(status, tone: color),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -3167,53 +3264,46 @@ class _SocialShellState extends State<SocialShell> {
                         ),
                       ],
                     ),
-                  );
-                }),
-            ],
-          ),
+                  ),
+                );
+              }),
+          ],
         ),
       );
     }
 
     Widget topTasksCard() {
       final scheme = Theme.of(context).colorScheme;
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                i18n.t('dashboard.section.topTasks', 'Top Performing Tasks'),
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              if (topTaskStats.isEmpty)
-                Text(i18n.t('dashboard.noPerformance',
-                    'Performance data will appear after executions run.'))
-              else
-                ...topTaskStats.take(6).map((raw) {
-                  final item = raw is Map<String, dynamic>
-                      ? Map<String, dynamic>.from(raw)
-                      : Map<String, dynamic>.from(raw as Map);
-                  final rate = _readDouble(item['successRate'], fallback: 0);
-                  final color = rate >= 90
-                      ? scheme.primary
-                      : rate >= 70
-                          ? scheme.secondary
-                          : scheme.error;
+      return SfPanelCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            sectionTitle(
+              i18n.t('dashboard.section.topTasks', 'Top Performing Tasks'),
+              icon: Icons.emoji_events_rounded,
+            ),
+            const SizedBox(height: 10),
+            if (topTaskStats.isEmpty)
+              frostedBlock(
+                child: Text(i18n.t('dashboard.noPerformance',
+                    'Performance data will appear after executions run.')),
+              )
+            else
+              ...topTaskStats.take(6).map((raw) {
+                final item = raw is Map<String, dynamic>
+                    ? Map<String, dynamic>.from(raw)
+                    : Map<String, dynamic>.from(raw as Map);
+                final rate = _readDouble(item['successRate'], fallback: 0);
+                final color = rate >= 90
+                    ? scheme.primary
+                    : rate >= 70
+                        ? scheme.secondary
+                        : scheme.error;
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color:
-                              scheme.onSurface.withAlpha((0.12 * 255).round())),
-                      color: scheme.surface.withAlpha((0.40 * 255).round()),
-                    ),
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: frostedBlock(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -3223,25 +3313,10 @@ class _SocialShellState extends State<SocialShell> {
                               child: Text(
                                 item['taskName']?.toString() ?? 'Task',
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w800),
+                                    fontWeight: FontWeight.w900),
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: color.withAlpha((0.14 * 255).round()),
-                                border: Border.all(
-                                    color:
-                                        color.withAlpha((0.32 * 255).round())),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                '${rate.toStringAsFixed(0)}%',
-                                style: TextStyle(
-                                    color: color, fontWeight: FontWeight.w800),
-                              ),
-                            ),
+                            SfBadge('${rate.toStringAsFixed(0)}%', tone: color),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -3251,10 +3326,10 @@ class _SocialShellState extends State<SocialShell> {
                         ),
                       ],
                     ),
-                  );
-                }),
-            ],
-          ),
+                  ),
+                );
+              }),
+          ],
         ),
       );
     }
@@ -3307,9 +3382,9 @@ class _SocialShellState extends State<SocialShell> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         dashboardHeader(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         statGrid(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         if (isEmptyWorkspace)
           emptyWorkspaceCard()
         else ...[
@@ -3320,7 +3395,7 @@ class _SocialShellState extends State<SocialShell> {
                 return Column(
                   children: [
                     recentAutomationsCard(),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     systemHealthCard(),
                   ],
                 );
@@ -3329,13 +3404,13 @@ class _SocialShellState extends State<SocialShell> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(flex: 8, child: recentAutomationsCard()),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(flex: 4, child: systemHealthCard()),
                 ],
               );
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 1100;
@@ -3343,7 +3418,7 @@ class _SocialShellState extends State<SocialShell> {
                 return Column(
                   children: [
                     recentExecutionsCard(),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     topTasksCard(),
                   ],
                 );
@@ -3352,7 +3427,7 @@ class _SocialShellState extends State<SocialShell> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(flex: 7, child: recentExecutionsCard()),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(flex: 5, child: topTasksCard()),
                 ],
               );
