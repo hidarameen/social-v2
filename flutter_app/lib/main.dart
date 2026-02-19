@@ -923,6 +923,7 @@ class _PanelState {
 }
 
 class _SocialShellState extends State<SocialShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedIndex = 0;
   String _tasksQuery = '';
   String _tasksStatusFilter = 'all';
@@ -945,6 +946,7 @@ class _SocialShellState extends State<SocialShell> {
   Timer? _analyticsDebounceTimer;
   final TextEditingController _analyticsSearchController = TextEditingController();
   final Map<String, String> _taskActionState = <String, String>{};
+  final Map<PanelKind, DateTime> _panelUpdatedAt = <PanelKind, DateTime>{};
   Timer? _dashboardRefreshTimer;
 
   // Settings: profile + platform credentials drafts.
@@ -1074,6 +1076,7 @@ class _SocialShellState extends State<SocialShell> {
         state.loading = false;
         state.data = payload;
         state.error = null;
+        _panelUpdatedAt[kind] = DateTime.now();
         if (kind == PanelKind.analytics) {
           _analyticsOffset = _readInt(payload['nextOffset'], fallback: 0);
           _analyticsHasMore = payload['hasMore'] == true;
@@ -1110,6 +1113,42 @@ class _SocialShellState extends State<SocialShell> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  Future<void> _toggleSidebar({required bool wide}) async {
+    if (wide) {
+      await widget.appState.setSidebarCollapsed(!widget.appState.sidebarCollapsed);
+      return;
+    }
+
+    final state = _scaffoldKey.currentState;
+    if (state == null) return;
+    if (state.isDrawerOpen) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    state.openDrawer();
+  }
+
+  void _openProfilePanel({required bool closeDrawer}) {
+    final settingsIndex = kPanelSpecs.indexWhere((p) => p.kind == PanelKind.settings);
+    if (settingsIndex < 0) return;
+    if (closeDrawer) {
+      Navigator.of(context).maybePop();
+    }
+    unawaited(_onPanelSelected(settingsIndex));
+  }
+
+  String _buildLastUpdatedText(I18n i18n, PanelKind kind) {
+    final updated = _panelUpdatedAt[kind];
+    if (updated == null) {
+      return i18n.isArabic ? 'لم يتم التحديث بعد' : 'Not refreshed yet';
+    }
+    final formatted = MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(updated),
+      alwaysUse24HourFormat: true,
+    );
+    return i18n.isArabic ? 'آخر تحديث $formatted' : 'Updated $formatted';
   }
 
   static const int _kTasksPageSize = 50;
@@ -1440,6 +1479,7 @@ class _SocialShellState extends State<SocialShell> {
         _analyticsOffset = _readInt(payload['nextOffset'], fallback: merged.length);
         _analyticsHasMore = payload['hasMore'] == true;
         _analyticsLoadingMore = false;
+        _panelUpdatedAt[PanelKind.analytics] = DateTime.now();
       });
     } catch (error) {
       if (!mounted) return;
@@ -1494,6 +1534,7 @@ class _SocialShellState extends State<SocialShell> {
       setState(() {
         state.loading = false;
         state.error = null;
+        _panelUpdatedAt[PanelKind.tasks] = DateTime.now();
         if (reset || currentData == null) {
           state.data = payload;
           return;
@@ -1591,7 +1632,6 @@ class _SocialShellState extends State<SocialShell> {
   Widget _buildDrawer(I18n i18n) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final settingsIndex = kPanelSpecs.indexWhere((p) => p.kind == PanelKind.settings);
 
     return Drawer(
       child: SafeArea(
@@ -1674,12 +1714,7 @@ class _SocialShellState extends State<SocialShell> {
             ListTile(
               leading: const Icon(Icons.person_rounded),
               title: Text(i18n.t('settings.profile', 'Profile')),
-              onTap: () {
-                Navigator.of(context).maybePop();
-                if (settingsIndex >= 0) {
-                  unawaited(_onPanelSelected(settingsIndex));
-                }
-              },
+              onTap: () => _openProfilePanel(closeDrawer: true),
             ),
             ListTile(
               leading: const Icon(Icons.logout_rounded),
@@ -1697,7 +1732,6 @@ class _SocialShellState extends State<SocialShell> {
 
   Widget _buildRail(I18n i18n) {
     final collapsed = widget.appState.sidebarCollapsed;
-    final settingsIndex = kPanelSpecs.indexWhere((p) => p.kind == PanelKind.settings);
     return NavigationRail(
       selectedIndex: _selectedIndex,
       extended: !collapsed,
@@ -1706,7 +1740,7 @@ class _SocialShellState extends State<SocialShell> {
         padding: const EdgeInsets.only(top: 8),
         child: IconButton(
           tooltip: collapsed ? 'Expand sidebar' : 'Collapse sidebar',
-          onPressed: () => unawaited(widget.appState.setSidebarCollapsed(!collapsed)),
+          onPressed: () => unawaited(_toggleSidebar(wide: true)),
           icon: Icon(collapsed ? Icons.menu_open_rounded : Icons.menu_rounded),
         ),
       ),
@@ -1718,11 +1752,7 @@ class _SocialShellState extends State<SocialShell> {
             if (collapsed) ...[
               IconButton(
                 tooltip: i18n.t('settings.profile', 'Profile'),
-                onPressed: () {
-                  if (settingsIndex >= 0) {
-                    unawaited(_onPanelSelected(settingsIndex));
-                  }
-                },
+                onPressed: () => _openProfilePanel(closeDrawer: false),
                 icon: const Icon(Icons.person_rounded),
               ),
               IconButton(
@@ -1736,11 +1766,7 @@ class _SocialShellState extends State<SocialShell> {
               SizedBox(
                 width: 168,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    if (settingsIndex >= 0) {
-                      unawaited(_onPanelSelected(settingsIndex));
-                    }
-                  },
+                  onPressed: () => _openProfilePanel(closeDrawer: false),
                   icon: const Icon(Icons.person_rounded),
                   label: Text(i18n.t('settings.profile', 'Profile')),
                 ),
@@ -1788,6 +1814,84 @@ class _SocialShellState extends State<SocialShell> {
     );
   }
 
+  Widget _skeletonBlock({
+    required BuildContext context,
+    double height = 16,
+    double? width,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      height: height,
+      width: width,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: scheme.outline.withOpacity(isDark ? 0.30 : 0.20),
+      ),
+    );
+  }
+
+  Widget _buildPanelLoadingSkeleton(PanelKind kind) {
+    int cardCount = 4;
+    switch (kind) {
+      case PanelKind.dashboard:
+        cardCount = 6;
+        break;
+      case PanelKind.tasks:
+      case PanelKind.accounts:
+      case PanelKind.executions:
+        cardCount = 5;
+        break;
+      case PanelKind.analytics:
+      case PanelKind.settings:
+        cardCount = 4;
+        break;
+    }
+
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(SfTokens.pagePadding),
+          sliver: SliverToBoxAdapter(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1120),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _skeletonBlock(context: context, height: 28, width: 220),
+                    const SizedBox(height: 10),
+                    _skeletonBlock(context: context, height: 14, width: 340),
+                    const SizedBox(height: 20),
+                    ...List.generate(cardCount, (index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: SfPanelCard(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _skeletonBlock(context: context, height: 16, width: 170),
+                              const SizedBox(height: 10),
+                              _skeletonBlock(context: context, height: 14),
+                              const SizedBox(height: 8),
+                              _skeletonBlock(context: context, height: 14, width: 240),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPanelFrame({
     required PanelKind kind,
     required I18n i18n,
@@ -1796,7 +1900,7 @@ class _SocialShellState extends State<SocialShell> {
     final panelState = _panelStates[kind]!;
 
     if (panelState.loading && panelState.data == null) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildPanelLoadingSkeleton(kind);
     }
 
     if (panelState.error != null && panelState.data == null) {
@@ -4966,6 +5070,7 @@ class _SocialShellState extends State<SocialShell> {
     final currentPanel = kPanelSpecs[_selectedIndex];
     final i18n = _i18n(context);
     final panelLabel = i18n.t(currentPanel.labelKey, currentPanel.fallbackLabel);
+    final lastUpdated = _buildLastUpdatedText(i18n, _currentKind);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
 
@@ -4974,11 +5079,39 @@ class _SocialShellState extends State<SocialShell> {
         // Material guidance: switch to rail for larger screens/tablets.
         final wide = constraints.maxWidth >= 840;
         final reducedMotion = widget.appState.reducedMotion;
+        final collapsed = widget.appState.sidebarCollapsed;
 
         return Scaffold(
+          key: _scaffoldKey,
           extendBodyBehindAppBar: true,
           appBar: AppBar(
-            title: Text(panelLabel),
+            automaticallyImplyLeading: false,
+            leading: IconButton(
+              icon: Icon(
+                wide
+                    ? (collapsed ? Icons.menu_open_rounded : Icons.menu_rounded)
+                    : Icons.menu_rounded,
+              ),
+              tooltip: wide
+                  ? (collapsed ? 'Expand sidebar' : 'Collapse sidebar')
+                  : 'Open sidebar',
+              onPressed: () => unawaited(_toggleSidebar(wide: wide)),
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(panelLabel),
+                Text(
+                  lastUpdated,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
             flexibleSpace: ClipRect(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
@@ -4990,15 +5123,8 @@ class _SocialShellState extends State<SocialShell> {
             actions: [
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
-                tooltip: i18n.t('common.refresh', 'Refresh'),
+                tooltip: i18n.t('common.refresh', 'Refresh current panel'),
                 onPressed: () => unawaited(_loadCurrentPanel(force: true)),
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout_rounded),
-                tooltip: i18n.t('common.signOut', 'Sign out'),
-                onPressed: () async {
-                  await widget.onSignOut();
-                },
               ),
             ],
           ),
