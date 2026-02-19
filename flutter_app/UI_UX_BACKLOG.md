@@ -84,9 +84,9 @@ This file tracks concrete UI/UX upgrades for the Flutter APK, aligned with Mater
 73. [DONE] Executions: add details view with logs, payload, and error stack.
 74. [DONE] Executions: add "retry execution" (if backend supports).
 75. [DONE] Executions: add "copy error" and "share report" actions.
-76. [PLANNED] Executions: add timeline rendering (queued -> running -> done).
+76. [DONE] Executions: add timeline rendering (queued -> running -> done).
 77. [DONE] Executions: show source/target accounts with platform chips.
-78. [PLANNED] Executions: add pagination/infinite scroll with visible loading footer.
+78. [DONE] Executions: add pagination/infinite scroll with visible loading footer.
 79. [PLANNED] Executions: add offline indicator and cached last view.
 80. [DONE] Executions: add performance metrics (duration) if available.
 

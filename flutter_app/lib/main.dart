@@ -942,6 +942,8 @@ class _SocialShellState extends State<SocialShell> {
   final TextEditingController _executionsSearchController = TextEditingController();
   String _executionsQuery = '';
   String _executionsStatusFilter = 'all';
+  int _executionsVisibleCount = 24;
+  bool _executionsLoadingMore = false;
   String _analyticsQuery = '';
   String _analyticsSortBy = 'successRate';
   String _analyticsSortDir = 'desc';
@@ -1592,7 +1594,22 @@ class _SocialShellState extends State<SocialShell> {
     _executionsDebounceTimer = Timer(const Duration(milliseconds: 220), () {
       if (!mounted) return;
       if (_executionsQuery == next) return;
-      setState(() => _executionsQuery = next);
+      setState(() {
+        _executionsQuery = next;
+        _executionsVisibleCount = 24;
+      });
+    });
+  }
+
+  Future<void> _loadMoreExecutionsVisible(int totalFilteredCount) async {
+    if (_executionsLoadingMore) return;
+    if (_executionsVisibleCount >= totalFilteredCount) return;
+    setState(() => _executionsLoadingMore = true);
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+    setState(() {
+      _executionsLoadingMore = false;
+      _executionsVisibleCount = (_executionsVisibleCount + 24).clamp(24, totalFilteredCount);
     });
   }
 
@@ -3800,6 +3817,8 @@ class _SocialShellState extends State<SocialShell> {
                                               setState(() {
                                                 _executionsQuery = task['name']?.toString() ?? '';
                                                 _executionsSearchController.text = _executionsQuery;
+                                                _executionsVisibleCount = 24;
+                                                _executionsStatusFilter = 'all';
                                                 _selectedIndex = idx;
                                               });
                                               unawaited(_loadPanel(PanelKind.executions, force: true));
@@ -4204,6 +4223,9 @@ class _SocialShellState extends State<SocialShell> {
     final pendingCount =
         executions.where((e) => normalizeStatus(e['status']?.toString() ?? '') == 'pending').length;
     final hasExecutionFilters = _executionsQuery.isNotEmpty || _executionsStatusFilter != 'all';
+    final visibleCount = filtered.length < _executionsVisibleCount ? filtered.length : _executionsVisibleCount;
+    final visibleExecutions = filtered.take(visibleCount).toList();
+    final canLoadMoreVisible = visibleCount < filtered.length;
 
     String statusLabel(String normalized) {
       if (normalized == 'success') return i18n.isArabic ? 'نجاح' : 'Success';
@@ -4619,27 +4641,42 @@ class _SocialShellState extends State<SocialShell> {
                 ChoiceChip(
                   label: Text(i18n.isArabic ? 'الكل' : 'All'),
                   selected: _executionsStatusFilter == 'all',
-                  onSelected: (_) => setState(() => _executionsStatusFilter = 'all'),
+                  onSelected: (_) => setState(() {
+                    _executionsStatusFilter = 'all';
+                    _executionsVisibleCount = 24;
+                  }),
                 ),
                 ChoiceChip(
                   label: Text('${statusLabel('success')} ($successCount)'),
                   selected: _executionsStatusFilter == 'success',
-                  onSelected: (_) => setState(() => _executionsStatusFilter = 'success'),
+                  onSelected: (_) => setState(() {
+                    _executionsStatusFilter = 'success';
+                    _executionsVisibleCount = 24;
+                  }),
                 ),
                 ChoiceChip(
                   label: Text('${statusLabel('failed')} ($failedCount)'),
                   selected: _executionsStatusFilter == 'failed',
-                  onSelected: (_) => setState(() => _executionsStatusFilter = 'failed'),
+                  onSelected: (_) => setState(() {
+                    _executionsStatusFilter = 'failed';
+                    _executionsVisibleCount = 24;
+                  }),
                 ),
                 ChoiceChip(
                   label: Text('${statusLabel('running')} ($runningCount)'),
                   selected: _executionsStatusFilter == 'running',
-                  onSelected: (_) => setState(() => _executionsStatusFilter = 'running'),
+                  onSelected: (_) => setState(() {
+                    _executionsStatusFilter = 'running';
+                    _executionsVisibleCount = 24;
+                  }),
                 ),
                 ChoiceChip(
                   label: Text('${statusLabel('pending')} ($pendingCount)'),
                   selected: _executionsStatusFilter == 'pending',
-                  onSelected: (_) => setState(() => _executionsStatusFilter = 'pending'),
+                  onSelected: (_) => setState(() {
+                    _executionsStatusFilter = 'pending';
+                    _executionsVisibleCount = 24;
+                  }),
                 ),
                 if (hasExecutionFilters)
                   OutlinedButton.icon(
@@ -4648,6 +4685,7 @@ class _SocialShellState extends State<SocialShell> {
                         _executionsQuery = '';
                         _executionsSearchController.text = '';
                         _executionsStatusFilter = 'all';
+                        _executionsVisibleCount = 24;
                       });
                     },
                     icon: const Icon(Icons.filter_alt_off_rounded),
@@ -4681,6 +4719,43 @@ class _SocialShellState extends State<SocialShell> {
       final title = (taskName == null || taskName.isEmpty)
           ? i18n.t('executions.item', 'Task execution')
           : taskName;
+      final stageText = execution['responseData'] is Map
+          ? ((execution['responseData'] as Map)['stage']?.toString() ?? '').trim()
+          : '';
+
+      String stepState(int stepIndex) {
+        if (normalized == 'success') return 'done';
+        if (normalized == 'failed') {
+          if (stepIndex < 2) return 'done';
+          return 'failed';
+        }
+        if (normalized == 'running') {
+          if (stepIndex == 0) return 'done';
+          if (stepIndex == 1) return 'active';
+          return 'pending';
+        }
+        if (normalized == 'pending') {
+          if (stepIndex == 0) return 'active';
+          return 'pending';
+        }
+        return stepIndex == 0 ? 'active' : 'pending';
+      }
+
+      Color stepTone(int stepIndex) {
+        final state = stepState(stepIndex);
+        if (state == 'done') return Colors.green.shade700;
+        if (state == 'active') return scheme.primary;
+        if (state == 'failed') return scheme.error;
+        return scheme.outline;
+      }
+
+      Color connectorTone(int fromStepIndex) {
+        final fromState = stepState(fromStepIndex);
+        final toState = stepState(fromStepIndex + 1);
+        if (fromState == 'failed' || toState == 'failed') return scheme.error.withAlpha((0.45 * 255).round());
+        if (toState == 'active' || toState == 'done') return scheme.primary.withAlpha((0.45 * 255).round());
+        return scheme.outline.withAlpha((0.32 * 255).round());
+      }
 
       return Card(
         margin: const EdgeInsets.only(bottom: 10),
@@ -4832,6 +4907,101 @@ class _SocialShellState extends State<SocialShell> {
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: stepTone(0).withAlpha((0.14 * 255).round()),
+                          border: Border.all(color: stepTone(0), width: 1.4),
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          height: 2,
+                          color: connectorTone(0),
+                        ),
+                      ),
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: stepTone(1).withAlpha((0.14 * 255).round()),
+                          border: Border.all(color: stepTone(1), width: 1.4),
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          height: 2,
+                          color: connectorTone(1),
+                        ),
+                      ),
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: stepTone(2).withAlpha((0.14 * 255).round()),
+                          border: Border.all(color: stepTone(2), width: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          i18n.isArabic ? 'مجدول' : 'Queued',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: stepTone(0),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          i18n.isArabic ? 'جارٍ التنفيذ' : 'Running',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: stepTone(1),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          i18n.isArabic ? 'مكتمل' : 'Done',
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: stepTone(2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (stageText.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${i18n.isArabic ? 'المرحلة' : 'Stage'}: $stageText',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
               if (errorText.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Container(
@@ -4893,6 +5063,7 @@ class _SocialShellState extends State<SocialShell> {
                         _executionsQuery = '';
                         _executionsSearchController.text = '';
                         _executionsStatusFilter = 'all';
+                        _executionsVisibleCount = 24;
                       });
                     },
                     child: Text(i18n.isArabic ? 'مسح الفلاتر' : 'Clear Filters'),
@@ -4900,7 +5071,32 @@ class _SocialShellState extends State<SocialShell> {
                 : null,
           )
         else
-          ...filtered.take(120).map(executionTile),
+          ...visibleExecutions.map(executionTile),
+        if (canLoadMoreVisible) ...[
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.center,
+            child: OutlinedButton.icon(
+              onPressed: _executionsLoadingMore
+                  ? null
+                  : () => unawaited(_loadMoreExecutionsVisible(filtered.length)),
+              icon: _executionsLoadingMore
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.expand_more_rounded),
+              label: Text(
+                _executionsLoadingMore
+                    ? (i18n.isArabic ? 'جارٍ التحميل...' : 'Loading...')
+                    : (i18n.isArabic
+                        ? 'تحميل المزيد ($visibleCount/${filtered.length})'
+                        : 'Load more ($visibleCount/${filtered.length})'),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
