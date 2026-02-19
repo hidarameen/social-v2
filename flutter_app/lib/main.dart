@@ -10,20 +10,20 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'app_config.dart';
 import 'app_state.dart';
-import 'storage_keys.dart';
 import 'api/api_client.dart';
 import 'firebase_options.dart';
 import 'i18n.dart';
-import 'ui/auth/check_email_screen.dart';
 import 'ui/auth/forgot_password_screen.dart';
 import 'ui/auth/login_screen.dart';
+import 'ui/auth/premium_loading_screen.dart';
 import 'ui/auth/register_screen.dart';
-import 'ui/auth/reset_password_screen.dart';
 import 'ui/auth/verify_email_screen.dart';
+import 'ui/auth/welcome_intro_screen.dart';
 import 'ui/platform_brand.dart';
 import 'ui/sf_theme.dart';
 import 'ui/tasks/task_composer_sheet.dart';
 import 'ui/widgets/sf_ui.dart';
+import 'storage_keys.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,7 +70,10 @@ class _StateLoaderState extends State<_StateLoader> {
     if (state == null) {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+        home: PremiumLoadingScreen(
+          title: 'Launching SocialFlow',
+          subtitle: 'Preparing your premium workspace...',
+        ),
       );
     }
 
@@ -201,7 +204,10 @@ class _AppBootstrapState extends State<AppBootstrap> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const PremiumLoadingScreen(
+        title: 'Restoring Session',
+        subtitle: 'Checking secure session state...',
+      );
     }
 
     if (_token == null || _token!.isEmpty) {
@@ -746,12 +752,11 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 enum _AuthView {
+  welcome,
   login,
   register,
-  checkEmail,
   verifyEmail,
   forgotPassword,
-  resetPassword,
 }
 
 class AuthFlow extends StatefulWidget {
@@ -771,8 +776,32 @@ class AuthFlow extends StatefulWidget {
 }
 
 class _AuthFlowState extends State<AuthFlow> {
-  _AuthView _view = _AuthView.login;
+  _AuthView _view = _AuthView.welcome;
+  bool _ready = false;
   String _email = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreIntroState());
+  }
+
+  Future<void> _restoreIntroState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getString(StorageKeys.authIntroSeen) == '1';
+    if (!mounted) return;
+    setState(() {
+      _view = seen ? _AuthView.login : _AuthView.welcome;
+      _ready = true;
+    });
+  }
+
+  Future<void> _completeIntro() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(StorageKeys.authIntroSeen, '1');
+    if (!mounted) return;
+    _go(_AuthView.login, email: _email);
+  }
 
   void _go(_AuthView next, {String email = ''}) {
     setState(() {
@@ -785,7 +814,19 @@ class _AuthFlowState extends State<AuthFlow> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_ready) {
+      return const PremiumLoadingScreen(
+        title: 'Preparing Authentication',
+        subtitle: 'Applying secure startup checks...',
+      );
+    }
+
     switch (_view) {
+      case _AuthView.welcome:
+        return WelcomeIntroScreen(
+          state: widget.state,
+          onGetStarted: () => unawaited(_completeIntro()),
+        );
       case _AuthView.login:
         return LoginScreen(
           state: widget.state,
@@ -802,15 +843,7 @@ class _AuthFlowState extends State<AuthFlow> {
           api: widget.api,
           onGoToLogin: () => _go(_AuthView.login, email: _email),
           onRegisteredNeedingVerification: (email) =>
-              _go(_AuthView.checkEmail, email: email),
-        );
-      case _AuthView.checkEmail:
-        return CheckEmailScreen(
-          state: widget.state,
-          api: widget.api,
-          email: _email,
-          onEnterVerificationCode: () =>
-              _go(_AuthView.verifyEmail, email: _email),
+              _go(_AuthView.verifyEmail, email: email),
         );
       case _AuthView.verifyEmail:
         return VerifyEmailScreen(
@@ -824,14 +857,6 @@ class _AuthFlowState extends State<AuthFlow> {
           state: widget.state,
           api: widget.api,
           onBackToLogin: () => _go(_AuthView.login, email: _email),
-          onGoToResetPassword: (email) =>
-              _go(_AuthView.resetPassword, email: email),
-        );
-      case _AuthView.resetPassword:
-        return ResetPasswordScreen(
-          state: widget.state,
-          api: widget.api,
-          onDone: () => _go(_AuthView.login, email: _email),
         );
     }
   }

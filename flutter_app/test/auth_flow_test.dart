@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socialflow_flutter/app_state.dart';
 import 'package:socialflow_flutter/api/api_client.dart';
 import 'package:socialflow_flutter/main.dart';
+import 'package:socialflow_flutter/storage_keys.dart';
 
 class FakeAuthApiClient extends ApiClient {
   FakeAuthApiClient({
@@ -39,7 +40,9 @@ class FakeAuthApiClient extends ApiClient {
 
 void main() {
   testWidgets('login screen calls onSignedIn on success', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues(
+      {StorageKeys.authIntroSeen: '1'},
+    );
     late AuthSession signedIn;
 
     final api = FakeAuthApiClient(
@@ -83,6 +86,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.byKey(const Key('login-email-field')),
@@ -101,9 +105,13 @@ void main() {
   });
 
   testWidgets('register requires terms checkbox', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    var registerCallCount = 0;
+    SharedPreferences.setMockInitialValues(
+      {StorageKeys.authIntroSeen: '1'},
+    );
     final api = FakeAuthApiClient(
       onRegister: ({required name, required email, required password}) async {
+        registerCallCount += 1;
         return {'success': true, 'verificationRequired': true};
       },
       onLogin: ({required email, required password}) async {
@@ -141,8 +149,11 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.textContaining('Create one'));
+    final createAccountLink = find.textContaining('Create Account').first;
+    await tester.ensureVisible(createAccountLink);
+    await tester.tap(createAccountLink);
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -162,9 +173,11 @@ void main() {
       'Password123!',
     );
 
-    final button = tester.widget<FilledButton>(
-      find.byKey(const Key('register-submit-button')),
-    );
-    expect(button.onPressed, isNull);
+    final submitButton = find.byKey(const Key('register-submit-button'));
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
+    await tester.pump();
+
+    expect(registerCallCount, 0);
   });
 }

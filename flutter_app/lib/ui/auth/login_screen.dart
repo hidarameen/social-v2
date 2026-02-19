@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../api/api_client.dart';
 import '../../app_state.dart';
 import '../../i18n.dart';
 import '../../storage_keys.dart';
-import '../../api/api_client.dart';
 import 'auth_shell.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -44,9 +44,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _needsVerification = false;
   String _error = '';
   String _info = '';
-
-  static const _success = Color(0xFF10B981);
-  static const _danger = Color(0xFFEF4444);
 
   @override
   void initState() {
@@ -86,11 +83,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (_busy) return;
-    _error = '';
-    _info = '';
-    _needsVerification = false;
-    if (!mounted) return;
-    setState(() {});
+    setState(() {
+      _error = '';
+      _info = '';
+      _needsVerification = false;
+    });
 
     if (!_formKey.currentState!.validate()) return;
 
@@ -112,8 +109,9 @@ class _LoginScreenState extends State<LoginScreen> {
       await widget.onSignedIn(session);
     } catch (error) {
       if (!mounted) return;
-      final message =
-          error is ApiException ? error.message : 'Unable to sign in.';
+      final message = error is ApiException
+          ? error.message
+          : 'Unable to sign in.';
       final lower = message.toLowerCase();
       setState(() {
         _error = message;
@@ -146,8 +144,9 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error =
-            error is ApiException ? error.message : 'Unable to resend code.';
+        _error = error is ApiException
+            ? error.message
+            : 'Unable to resend code.';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -163,30 +162,32 @@ class _LoginScreenState extends State<LoginScreen> {
     return '';
   }
 
+  void _showSocialMessage(String provider) {
+    final i18n = I18n(widget.state.locale);
+    final text = i18n.isArabic
+        ? 'تسجيل $provider سيُضاف قريبًا.'
+        : '$provider sign in will be added soon.';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final i18n = I18n(widget.state.locale);
     final scheme = Theme.of(context).colorScheme;
-    final isDark = widget.state.themeMode == AppThemeMode.dark;
-    final fg = scheme.onSurface;
-    final muted = scheme.onSurfaceVariant;
 
     return AuthShell(
       state: widget.state,
-      title: i18n.t('auth.signInTitle', 'Sign In'),
-      description: i18n.t(
-        'auth.signInDesc',
-        'Access your verified workspace and continue your automation flow.',
-      ),
+      heroIcon: Icons.account_circle_rounded,
+      title: 'Welcome Back',
+      description: 'Sign in to continue',
       child: AutofillGroup(
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _LabeledField(
-                label: i18n.t('auth.email', 'Email'),
-                icon: Icons.alternate_email_rounded,
+              _FieldFrame(
+                focusNode: _emailFocus,
                 child: TextFormField(
                   key: const Key('login-email-field'),
                   controller: _emailController,
@@ -198,28 +199,31 @@ class _LoginScreenState extends State<LoginScreen> {
                   onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
                   onTapOutside: (_) =>
                       FocusManager.instance.primaryFocus?.unfocus(),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
+                    labelText: i18n.t('auth.email', 'Email'),
                     hintText: 'you@example.com',
-                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                    prefixIcon: const Icon(Icons.mail_outline_rounded),
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
                   ),
                   validator: (value) {
                     final v = (value ?? '').trim();
-                    if (v.isEmpty)
+                    if (v.isEmpty) {
                       return i18n.isArabic
                           ? 'البريد مطلوب.'
                           : 'Email is required.';
-                    if (!_isValidEmail(v))
+                    }
+                    if (!_isValidEmail(v)) {
                       return i18n.isArabic
                           ? 'أدخل بريدًا صحيحًا.'
                           : 'Enter a valid email address.';
+                    }
                     return null;
                   },
                 ),
               ),
               const SizedBox(height: 12),
-              _LabeledField(
-                label: i18n.t('auth.password', 'Password'),
-                icon: Icons.lock_outline_rounded,
+              _FieldFrame(
+                focusNode: _passwordFocus,
                 child: TextFormField(
                   key: const Key('login-password-field'),
                   controller: _passwordController,
@@ -232,114 +236,116 @@ class _LoginScreenState extends State<LoginScreen> {
                   onTapOutside: (_) =>
                       FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: InputDecoration(
+                    labelText: i18n.t('auth.password', 'Password'),
                     hintText: '••••••••',
-                    prefixIcon: const Icon(Icons.password_rounded),
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
                     suffixIcon: IconButton(
                       onPressed: _busy
                           ? null
                           : () =>
-                              setState(() => _showPassword = !_showPassword),
-                      icon: Icon(_showPassword
-                          ? Icons.visibility_off_rounded
-                          : Icons.visibility_rounded),
+                                setState(() => _showPassword = !_showPassword),
+                      icon: Icon(
+                        _showPassword
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded,
+                      ),
                     ),
                   ),
                   validator: (value) {
-                    if ((value ?? '').isEmpty)
+                    if ((value ?? '').isEmpty) {
                       return i18n.isArabic
                           ? 'كلمة المرور مطلوبة.'
                           : 'Password is required.';
+                    }
                     return null;
                   },
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                i18n.isArabic
-                    ? 'استخدم بريدك الموثق وكلمة المرور للمتابعة بأمان.'
-                    : 'Use your verified email and password for secure access.',
-                style: TextStyle(fontSize: 11.5, color: muted),
-              ),
               const SizedBox(height: 12),
               Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
                   color: Color.alphaBlend(
-                    fg.withOpacity(0.03),
+                    scheme.onSurface.withOpacity(0.03),
                     scheme.surface,
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: scheme.outline.withOpacity(0.45)),
+                  border: Border.all(color: scheme.outline.withOpacity(0.28)),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 child: Row(
                   children: [
                     Expanded(
-                      child: CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: _rememberMe,
-                        onChanged: _busy
-                            ? null
-                            : (v) => setState(() => _rememberMe = v == true),
-                        title: Text(i18n.t('auth.rememberMe', 'Remember me'),
-                            style: TextStyle(color: muted)),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _busy ? null : widget.onGoToForgotPassword,
-                      icon: const Icon(Icons.help_outline_rounded, size: 16),
-                      label: Text(
-                          i18n.t('auth.forgotPassword', 'Forgot password?')),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (_error.isNotEmpty)
-                _StatusCard(
-                    icon: Icons.error_outline_rounded,
-                    text: _error,
-                    color: _danger),
-              if (_info.isNotEmpty)
-                _StatusCard(
-                    icon: Icons.check_circle_outline_rounded,
-                    text: _info,
-                    color: _success),
-              if (_needsVerification)
-                Container(
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withOpacity(isDark ? 0.26 : 0.14),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color:
-                            scheme.primary.withOpacity(isDark ? 0.34 : 0.24)),
-                  ),
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.mark_email_read_rounded,
-                              size: 18, color: fg),
-                          const SizedBox(width: 8),
+                          Switch.adaptive(
+                            value: _rememberMe,
+                            onChanged: _busy
+                                ? null
+                                : (v) => setState(() => _rememberMe = v),
+                          ),
                           Expanded(
                             child: Text(
-                              i18n.t('auth.verificationRequired',
-                                  'Verification Required'),
+                              i18n.t('auth.rememberMe', 'Remember me'),
                               style: TextStyle(
-                                  fontWeight: FontWeight.w700, color: fg),
+                                fontSize: 13,
+                                color: scheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                    ),
+                    TextButton(
+                      onPressed: _busy ? null : widget.onGoToForgotPassword,
+                      child: Text(
+                        i18n.t('auth.forgotPassword', 'Forgot password?'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (_error.isNotEmpty)
+                _InlineBanner(
+                  text: _error,
+                  icon: Icons.error_outline_rounded,
+                  color: scheme.error,
+                ),
+              if (_info.isNotEmpty)
+                _InlineBanner(
+                  text: _info,
+                  icon: Icons.check_circle_outline_rounded,
+                  color: scheme.primary,
+                ),
+              if (_needsVerification)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: scheme.primary.withOpacity(0.12),
+                    border: Border.all(color: scheme.primary.withOpacity(0.28)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        i18n.t(
+                          'auth.verificationRequired',
+                          'Verification Required',
+                        ),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
                       Text(
                         i18n.isArabic
-                            ? 'تحقق من بريدك الإلكتروني ثم حاول تسجيل الدخول مرة أخرى.'
-                            : 'Verify your email first, then sign in again.',
-                        style: TextStyle(color: fg.withOpacity(0.75)),
+                            ? 'تحقق من بريدك الإلكتروني ثم سجّل الدخول.'
+                            : 'Verify your email first, then sign in.',
+                        style: TextStyle(color: scheme.onSurfaceVariant),
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton(
@@ -349,61 +355,67 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
-              FilledButton(
+              _GradientCtaButton(
                 key: const Key('login-submit-button'),
+                label: i18n.t('auth.signIn', 'Sign In'),
+                loadingLabel: i18n.isArabic
+                    ? 'جاري تسجيل الدخول...'
+                    : 'Signing in...',
+                loading: _busy,
                 onPressed: _busy ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: scheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(i18n.t('auth.signIn', 'Sign In')),
-                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Divider(color: scheme.outline.withOpacity(0.36)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text(
+                      'Or continue with',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Divider(color: scheme.outline.withOpacity(0.36)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _SocialCircleButton(
+                    icon: Icons.g_mobiledata_rounded,
+                    label: 'Google',
+                    onTap: () => _showSocialMessage('Google'),
+                  ),
+                  const SizedBox(width: 12),
+                  _SocialCircleButton(
+                    icon: Icons.apple_rounded,
+                    label: 'Apple',
+                    onTap: () => _showSocialMessage('Apple'),
+                  ),
+                  const SizedBox(width: 12),
+                  _SocialCircleButton(
+                    icon: Icons.alternate_email_rounded,
+                    label: 'X',
+                    onTap: () => _showSocialMessage('X'),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               TextButton(
                 onPressed: _busy ? null : widget.onGoToRegister,
                 child: Text(
-                  '${i18n.t('auth.noAccount', "Don't have an account?")} ${i18n.t('auth.goToRegister', 'Create one')}',
+                  "Don't have an account? Create Account",
                   textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  _MetaPill(
-                      text: i18n.isArabic ? 'واجهات نظيفة' : 'Clean layouts',
-                      icon: Icons.grid_view_rounded,
-                      fg: fg),
-                  _MetaPill(
-                      text: i18n.isArabic ? 'أيقونات حديثة' : 'Modern icons',
-                      icon: Icons.interests_rounded,
-                      fg: fg),
-                  _MetaPill(
-                      text: i18n.isArabic ? 'UX أسرع' : 'Faster UX',
-                      icon: Icons.speed_rounded,
-                      fg: fg),
-                ],
-              ),
-              const SizedBox(height: 10),
-              _TrustRow(isArabic: i18n.isArabic, muted: muted),
-              const SizedBox(height: 10),
-              Text(
-                '${i18n.t('auth.credit', 'Programming & Design: Oday Algholy')} - ${i18n.t('auth.rights', 'All rights reserved')}',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: muted),
               ),
             ],
           ),
@@ -413,111 +425,194 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child, this.icon});
+class _FieldFrame extends StatelessWidget {
+  const _FieldFrame({required this.focusNode, required this.child});
 
-  final String label;
+  final FocusNode focusNode;
   final Widget child;
-  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 16),
-              const SizedBox(width: 6),
-            ],
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        child,
-      ],
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: focusNode,
+      builder: (context, _) {
+        final focused = focusNode.hasFocus;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: focused
+                ? [
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(0.20),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [],
+          ),
+          child: child,
+        );
+      },
     );
   }
 }
 
-class _StatusCard extends StatelessWidget {
-  const _StatusCard(
-      {required this.icon, required this.text, required this.color});
+class _InlineBanner extends StatelessWidget {
+  const _InlineBanner({
+    required this.text,
+    required this.icon,
+    required this.color,
+  });
 
-  final IconData icon;
   final String text;
+  final IconData icon;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: color.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withOpacity(0.24)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
         children: [
           Icon(icon, size: 16, color: color),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(color: color))),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.text, required this.icon, required this.fg});
+class _GradientCtaButton extends StatelessWidget {
+  const _GradientCtaButton({
+    super.key,
+    required this.label,
+    required this.loadingLabel,
+    required this.loading,
+    required this.onPressed,
+  });
 
-  final String text;
-  final IconData icon;
-  final Color fg;
+  final String label;
+  final String loadingLabel;
+  final bool loading;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: fg.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: fg.withOpacity(0.10)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: fg),
-          const SizedBox(width: 6),
-          Text(text,
-              style: TextStyle(
-                  fontSize: 11.5, color: fg, fontWeight: FontWeight.w600)),
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primary,
+            Color.alphaBlend(
+              scheme.secondary.withOpacity(0.32),
+              scheme.primary,
+            ),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withOpacity(0.30),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
         ],
+      ),
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(56),
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: loading
+              ? Row(
+                  key: const ValueKey('loading'),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: scheme.onPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(loadingLabel),
+                  ],
+                )
+              : Row(
+                  key: const ValueKey('idle'),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(label),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_rounded, size: 18),
+                  ],
+                ),
+        ),
       ),
     );
   }
 }
 
-class _TrustRow extends StatelessWidget {
-  const _TrustRow({required this.isArabic, required this.muted});
+class _SocialCircleButton extends StatelessWidget {
+  const _SocialCircleButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
-  final bool isArabic;
-  final Color muted;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.verified_user_rounded, size: 13, color: muted),
-        const SizedBox(width: 6),
-        Text(
-          isArabic ? 'تسجيل دخول موثّق ومشفّر' : 'Encrypted verified sign in',
-          style: TextStyle(fontSize: 11, color: muted),
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: scheme.outline.withOpacity(0.32)),
+            color: Color.alphaBlend(
+              scheme.onSurface.withOpacity(0.02),
+              scheme.surface,
+            ),
+          ),
+          child: Icon(icon, size: 22, color: scheme.onSurfaceVariant),
         ),
-      ],
+      ),
     );
   }
 }

@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../api/api_client.dart';
 import '../../app_state.dart';
 import '../../i18n.dart';
-import '../../api/api_client.dart';
 import 'auth_shell.dart';
 import 'password_policy.dart';
 
@@ -41,7 +41,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _busy = false;
   bool _showPassword = false;
   bool _showConfirm = false;
-
   String _error = '';
 
   @override
@@ -64,10 +63,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _submit() async {
     if (_busy) return;
-    _error = '';
-    if (!mounted) return;
-    setState(() {});
-
+    setState(() => _error = '');
     if (!_formKey.currentState!.validate()) return;
 
     final email = _email.text.trim().toLowerCase();
@@ -103,37 +99,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     final i18n = I18n(widget.state.locale);
     final scheme = Theme.of(context).colorScheme;
+
     final checks = kPasswordRules
         .map(
-          (r) => _RuleCheck(
-            label: i18n.t(r.testKey, r.testKey),
-            pass: r.test(_password.text),
+          (rule) => _RuleCheck(
+            label: i18n.t(rule.testKey, rule.testKey),
+            pass: rule.test(_password.text),
           ),
         )
         .toList(growable: false);
+
     final score = passwordStrengthScore(_password.text);
+    final progress = (score / kPasswordRules.length).clamp(0.0, 1.0);
     final strengthLabel = score <= 2
-        ? (i18n.isArabic ? 'ضعيفة' : 'Weak')
+        ? (i18n.isArabic ? 'Weak' : 'Weak')
         : score <= 4
-            ? (i18n.isArabic ? 'متوسطة' : 'Medium')
-            : (i18n.isArabic ? 'قوية' : 'Strong');
+        ? (i18n.isArabic ? 'Medium' : 'Medium')
+        : (i18n.isArabic ? 'Strong' : 'Strong');
 
     return AuthShell(
       state: widget.state,
-      title: i18n.t('auth.registerTitle', 'Create Account'),
-      description: i18n.t(
-        'auth.registerDesc',
-        'Start securely with verified email access and strong credential requirements.',
-      ),
+      heroIcon: Icons.person_add_alt_1_rounded,
+      title: 'Create Account',
+      description: 'Set up your workspace and start automating your flow.',
       child: AutofillGroup(
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _LabeledField(
-                label: i18n.t('auth.fullName', 'Full Name'),
-                icon: Icons.badge_outlined,
+              _FieldFrame(
+                focusNode: _nameFocus,
                 child: TextFormField(
                   key: const Key('register-name-field'),
                   controller: _name,
@@ -144,31 +140,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onTapOutside: (_) =>
                       FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: InputDecoration(
+                    labelText: i18n.t('auth.fullName', 'Full Name'),
                     hintText: i18n.isArabic ? 'اسمك الكامل' : 'Your full name',
                     prefixIcon: const Icon(Icons.person_outline_rounded),
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
                   ),
                   validator: (value) {
                     final v = (value ?? '').trim();
-                    if (v.isEmpty)
+                    if (v.isEmpty) {
                       return i18n.isArabic
                           ? 'الاسم مطلوب.'
                           : 'Name is required.';
-                    if (v.length < 2)
+                    }
+                    if (v.length < 2) {
                       return i18n.isArabic
                           ? 'الاسم قصير.'
                           : 'Name must be at least 2 characters.';
-                    if (v.length > 80)
+                    }
+                    if (v.length > 80) {
                       return i18n.isArabic
                           ? 'الاسم طويل.'
                           : 'Name must be 80 characters or fewer.';
+                    }
                     return null;
                   },
                 ),
               ),
               const SizedBox(height: 12),
-              _LabeledField(
-                label: i18n.t('auth.email', 'Email'),
-                icon: Icons.alternate_email_rounded,
+              _FieldFrame(
+                focusNode: _emailFocus,
                 child: TextFormField(
                   key: const Key('register-email-field'),
                   controller: _email,
@@ -180,28 +180,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
                   onTapOutside: (_) =>
                       FocusManager.instance.primaryFocus?.unfocus(),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
+                    labelText: i18n.t('auth.email', 'Email'),
                     hintText: 'you@example.com',
-                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                    prefixIcon: const Icon(Icons.mail_outline_rounded),
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
                   ),
                   validator: (value) {
                     final v = (value ?? '').trim();
-                    if (v.isEmpty)
+                    if (v.isEmpty) {
                       return i18n.isArabic
                           ? 'البريد مطلوب.'
                           : 'Email is required.';
-                    if (!_isValidEmail(v))
+                    }
+                    if (!_isValidEmail(v)) {
                       return i18n.isArabic
                           ? 'أدخل بريدًا صحيحًا.'
                           : 'Enter a valid email address.';
+                    }
                     return null;
                   },
                 ),
               ),
               const SizedBox(height: 12),
-              _LabeledField(
-                label: i18n.t('auth.password', 'Password'),
-                icon: Icons.lock_outline_rounded,
+              _FieldFrame(
+                focusNode: _passwordFocus,
                 child: TextFormField(
                   key: const Key('register-password-field'),
                   controller: _password,
@@ -214,27 +217,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onTapOutside: (_) =>
                       FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: InputDecoration(
+                    labelText: i18n.t('auth.password', 'Password'),
                     hintText: i18n.isArabic
                         ? 'كلمة مرور قوية'
                         : 'Create a strong password',
-                    prefixIcon: const Icon(Icons.password_rounded),
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
                     suffixIcon: IconButton(
                       onPressed: _busy
                           ? null
                           : () =>
-                              setState(() => _showPassword = !_showPassword),
-                      icon: Icon(_showPassword
-                          ? Icons.visibility_off_rounded
-                          : Icons.visibility_rounded),
+                                setState(() => _showPassword = !_showPassword),
+                      icon: Icon(
+                        _showPassword
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded,
+                      ),
                     ),
                   ),
                   onChanged: (_) => setState(() {}),
                   validator: (value) {
                     final v = value ?? '';
-                    if (v.isEmpty)
+                    if (v.isEmpty) {
                       return i18n.isArabic
                           ? 'كلمة المرور مطلوبة.'
                           : 'Password is required.';
+                    }
                     if (!passwordMeetsPolicy(v)) {
                       return i18n.isArabic
                           ? 'كلمة المرور لا تطابق المتطلبات.'
@@ -248,16 +256,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
-                  value: (score / kPasswordRules.length).clamp(0.0, 1.0),
+                  value: progress,
                   minHeight: 8,
+                  color: Color.alphaBlend(
+                    scheme.secondary.withOpacity(0.22),
+                    scheme.primary,
+                  ),
+                  backgroundColor: scheme.onSurface.withOpacity(0.12),
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(
                 '${i18n.t('auth.passwordStrength', 'Password strength')}: $strengthLabel',
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.start,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -271,29 +286,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Icon(
                           c.pass
                               ? Icons.check_circle_rounded
-                              : Icons.error_outline_rounded,
+                              : Icons.radio_button_unchecked_rounded,
                           size: 14,
-                          color: c.pass ? Colors.green : Colors.orange,
+                          color: c.pass
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant.withOpacity(0.74),
                         ),
                         const SizedBox(width: 6),
-                        Text(c.label, style: const TextStyle(fontSize: 12)),
+                        Text(
+                          c.label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: c.pass
+                                ? scheme.onSurface
+                                : scheme.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                i18n.isArabic
-                    ? 'أضف كلمة مرور قوية لحماية الحساب من الوصول غير المصرح.'
-                    : 'Choose a strong password to protect your account.',
-                style: TextStyle(
-                    fontSize: 11.5,
-                    color: scheme.onSurfaceVariant.withOpacity(0.92)),
-              ),
               const SizedBox(height: 10),
-              _LabeledField(
-                label: i18n.t('auth.confirmPassword', 'Confirm Password'),
-                icon: Icons.verified_rounded,
+              _FieldFrame(
+                focusNode: _confirmFocus,
                 child: TextFormField(
                   key: const Key('register-confirm-password-field'),
                   controller: _confirmPassword,
@@ -306,29 +321,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onTapOutside: (_) =>
                       FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: InputDecoration(
+                    labelText: i18n.t(
+                      'auth.confirmPassword',
+                      'Confirm Password',
+                    ),
                     hintText: i18n.isArabic
                         ? 'أعد كتابة كلمة المرور'
                         : 'Re-enter your password',
-                    prefixIcon: const Icon(Icons.shield_outlined),
+                    prefixIcon: const Icon(Icons.verified_user_outlined),
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
                     suffixIcon: IconButton(
                       onPressed: _busy
                           ? null
                           : () => setState(() => _showConfirm = !_showConfirm),
-                      icon: Icon(_showConfirm
-                          ? Icons.visibility_off_rounded
-                          : Icons.visibility_rounded),
+                      icon: Icon(
+                        _showConfirm
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded,
+                      ),
                     ),
                   ),
                   validator: (value) {
                     final v = value ?? '';
-                    if (v.isEmpty)
+                    if (v.isEmpty) {
                       return i18n.isArabic
                           ? 'أكد كلمة المرور.'
                           : 'Please confirm your password.';
-                    if (v != _password.text)
+                    }
+                    if (v != _password.text) {
                       return i18n.isArabic
                           ? 'كلمتا المرور غير متطابقتين.'
                           : 'Passwords do not match.';
+                    }
                     return null;
                   },
                 ),
@@ -337,85 +361,59 @@ class _RegisterScreenState extends State<RegisterScreen> {
               Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: scheme.outline.withOpacity(
-                          widget.state.themeMode == AppThemeMode.dark
-                              ? 0.44
-                              : 0.36)),
+                  border: Border.all(color: scheme.outline.withOpacity(0.30)),
                   color: Color.alphaBlend(
-                    scheme.onSurface.withOpacity(0.03),
+                    scheme.onSurface.withOpacity(0.02),
                     scheme.surface,
                   ),
                 ),
                 child: CheckboxListTile(
                   value: _agree,
-                  onChanged:
-                      _busy ? null : (v) => setState(() => _agree = v == true),
-                  title: Text(i18n.t('auth.termsAgree',
-                      'I agree to the Terms of Service and Privacy Policy.')),
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(() => _agree = v == true),
+                  title: Text(
+                    i18n.t(
+                      'auth.termsAgree',
+                      'I agree to the Terms of Service and Privacy Policy.',
+                    ),
+                  ),
                   controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 2,
+                  ),
                   subtitle: _agree
                       ? null
                       : Text(
                           i18n.isArabic
                               ? 'يجب الموافقة للمتابعة.'
                               : 'You must accept the terms to continue.',
-                          style: const TextStyle(color: Colors.redAccent),
+                          style: TextStyle(color: scheme.error),
                         ),
                 ),
               ),
-              const SizedBox(height: 8),
-              if (_error.isNotEmpty)
-                _InlineStatus(
-                  text: _error,
-                  color: Colors.redAccent,
-                  icon: Icons.error_outline_rounded,
-                ),
-              FilledButton(
-                key: const Key('register-submit-button'),
-                onPressed: (_busy || !_agree) ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: scheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : Text(i18n.t('auth.createAccount', 'Create Account')),
-                ),
-              ),
               const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  _AssistPill(
-                      text: i18n.isArabic
-                          ? 'تحقق بريد إلكتروني'
-                          : 'Email verification',
-                      icon: Icons.verified_user_rounded),
-                  _AssistPill(
-                      text: i18n.isArabic
-                          ? 'قوة كلمة المرور'
-                          : 'Password strength',
-                      icon: Icons.security_rounded),
-                  _AssistPill(
-                      text: i18n.isArabic ? 'سهولة التسجيل' : 'Smooth signup',
-                      icon: Icons.bolt_rounded),
-                ],
+              if (_error.isNotEmpty)
+                _InlineBanner(
+                  text: _error,
+                  icon: Icons.error_outline_rounded,
+                  color: scheme.error,
+                ),
+              _GradientCtaButton(
+                key: const Key('register-submit-button'),
+                label: i18n.t('auth.createAccount', 'Create Account'),
+                loadingLabel: i18n.isArabic
+                    ? 'جارٍ الإنشاء...'
+                    : 'Creating account...',
+                loading: _busy,
+                onPressed: (_busy || !_agree) ? null : _submit,
               ),
+              const SizedBox(height: 12),
               TextButton(
                 onPressed: _busy ? null : widget.onGoToLogin,
                 child: Text(
-                  '${i18n.t('auth.alreadyHaveAccount', 'Already have an account?')} ${i18n.t('auth.goToLogin', 'Sign in')}',
+                  '${i18n.t('auth.alreadyHaveAccount', 'Already have an account?')} ${i18n.t('auth.goToLogin', 'Log in')}',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -427,34 +425,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
-class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child, this.icon});
-
-  final String label;
-  final Widget child;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 16),
-              const SizedBox(width: 6),
-            ],
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        child,
-      ],
-    );
-  }
-}
-
 class _RuleCheck {
   const _RuleCheck({required this.label, required this.pass});
 
@@ -462,13 +432,51 @@ class _RuleCheck {
   final bool pass;
 }
 
-class _InlineStatus extends StatelessWidget {
-  const _InlineStatus(
-      {required this.text, required this.color, required this.icon});
+class _FieldFrame extends StatelessWidget {
+  const _FieldFrame({required this.focusNode, required this.child});
+
+  final FocusNode focusNode;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: focusNode,
+      builder: (context, _) {
+        final focused = focusNode.hasFocus;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: focused
+                ? [
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(0.20),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [],
+          ),
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+class _InlineBanner extends StatelessWidget {
+  const _InlineBanner({
+    required this.text,
+    required this.icon,
+    required this.color,
+  });
 
   final String text;
-  final Color color;
   final IconData icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -477,47 +485,103 @@ class _InlineStatus extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: color.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withOpacity(0.24)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 16),
+          Icon(icon, size: 16, color: color),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(color: color))),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _AssistPill extends StatelessWidget {
-  static const _successColor = Color(0xFF10B981);
-  const _AssistPill({required this.text, required this.icon});
+class _GradientCtaButton extends StatelessWidget {
+  const _GradientCtaButton({
+    super.key,
+    required this.label,
+    required this.loadingLabel,
+    required this.loading,
+    required this.onPressed,
+  });
 
-  final String text;
-  final IconData icon;
+  final String label;
+  final String loadingLabel;
+  final bool loading;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        color: _successColor.withOpacity(0.10),
-        border: Border.all(color: _successColor.withOpacity(0.24)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: _successColor),
-          const SizedBox(width: 6),
-          Text(text,
-              style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: _successColor)),
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primary,
+            Color.alphaBlend(
+              scheme.secondary.withOpacity(0.32),
+              scheme.primary,
+            ),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withOpacity(0.30),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
         ],
+      ),
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(56),
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: loading
+              ? Row(
+                  key: const ValueKey('loading'),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: scheme.onPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(loadingLabel),
+                  ],
+                )
+              : Row(
+                  key: const ValueKey('idle'),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(label),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_rounded, size: 18),
+                  ],
+                ),
+        ),
       ),
     );
   }
