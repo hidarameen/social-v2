@@ -9,9 +9,10 @@ import type {
   PostRequest,
   PostResponse,
 } from './types';
-import { facebookHandler, facebookConfig } from './facebook';
+import { facebookHandler } from './facebook';
 import { getPlatformApiProvider, getPlatformApiProviderForUser } from './provider';
 import { outstandingPlatformHandlers } from './outstanding';
+export { getPlatformConfig, platformConfigs } from './configs';
 
 // Instagram Handler
 class InstagramHandler implements BasePlatformHandler {
@@ -392,16 +393,6 @@ export const nativePlatformHandlers: Record<PlatformId, BasePlatformHandler> = {
 
 export const platformHandlers: Record<PlatformId, BasePlatformHandler> = nativePlatformHandlers;
 
-export const platformConfigs: Record<PlatformId, PlatformConfig> = {
-  facebook: facebookConfig,
-  instagram: { id: 'instagram', name: 'Instagram', icon: '📷', color: '#E4405F', supportedContentTypes: ['image', 'video'], maxContentLength: 2200, requiresMediaUpload: true, supportsScheduling: true, supportsRecurring: false, supportsAnalytics: true } as PlatformConfig,
-  twitter: { id: 'twitter', name: 'Twitter / X', icon: '𝕏', color: '#000000', supportedContentTypes: ['text', 'image', 'video', 'link'], maxContentLength: 280, requiresMediaUpload: true, supportsScheduling: true, supportsRecurring: false, supportsAnalytics: true } as PlatformConfig,
-  tiktok: { id: 'tiktok', name: 'TikTok', icon: '🎵', color: '#000000', supportedContentTypes: ['video'], maxContentLength: 5000, requiresMediaUpload: true, supportsScheduling: true, supportsRecurring: false, supportsAnalytics: true } as PlatformConfig,
-  youtube: { id: 'youtube', name: 'YouTube', icon: '📹', color: '#FF0000', supportedContentTypes: ['video', 'text'], maxContentLength: 5000, requiresMediaUpload: true, supportsScheduling: true, supportsRecurring: false, supportsAnalytics: true } as PlatformConfig,
-  telegram: { id: 'telegram', name: 'Telegram', icon: '✈️', color: '#0088cc', supportedContentTypes: ['text', 'image', 'video'], maxContentLength: 4096, requiresMediaUpload: true, supportsScheduling: false, supportsRecurring: false, supportsAnalytics: false } as PlatformConfig,
-  linkedin: { id: 'linkedin', name: 'LinkedIn', icon: '💼', color: '#0A66C2', supportedContentTypes: ['text', 'image', 'video', 'link'], maxContentLength: 3000, requiresMediaUpload: true, supportsScheduling: true, supportsRecurring: false, supportsAnalytics: true } as PlatformConfig,
-};
-
 export function getPlatformHandler(platformId: PlatformId): BasePlatformHandler {
   const provider = getPlatformApiProvider(platformId);
   if (provider === 'outstanding') {
@@ -419,8 +410,4 @@ export async function getPlatformHandlerForUser(
     return outstandingPlatformHandlers[platformId];
   }
   return nativePlatformHandlers[platformId];
-}
-
-export function getPlatformConfig(platformId: PlatformId): PlatformConfig {
-  return platformConfigs[platformId];
 }

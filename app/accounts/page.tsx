@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { PlatformAccount } from '@/lib/db';
-import { platformConfigs } from '@/lib/platforms/handlers';
+import { platformConfigs } from '@/lib/platforms/configs';
 import { type PlatformId } from '@/lib/platforms/types';
 import { PlatformIcon } from '@/components/common/platform-icon';
 import { AccountAvatar } from '@/components/common/account-avatar';

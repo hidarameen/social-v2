@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import type { PlatformAccount, Task } from '@/lib/db';
-import { platformConfigs } from '@/lib/platforms/handlers';
+import { platformConfigs } from '@/lib/platforms/configs';
 import type { PlatformId } from '@/lib/platforms/types';
 import { PlatformIcon } from '@/components/common/platform-icon';
 import { cn } from '@/lib/utils';
