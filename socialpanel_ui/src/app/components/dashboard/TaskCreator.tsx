@@ -44,6 +44,7 @@ export interface AutomationTask {
   lastRun?: string;
   runCount: number;
   status: "active" | "paused" | "error";
+  transformations?: Record<string, unknown>;
 }
 
 interface TaskCreatorProps {
@@ -148,11 +149,20 @@ export function TaskCreator({ task, onSave, onCancel }: TaskCreatorProps) {
   };
 
   const handleSave = () => {
+    const nextEnabled = task?.enabled ?? true;
+    const nextStatus = task?.status ?? "active";
     onSave({
       id: task?.id || `task_${Date.now()}`,
-      name, description, enabled: true, sources, targets,
+      name,
+      description,
+      enabled: nextEnabled,
+      sources,
+      targets,
       createdAt: task?.createdAt || new Date().toISOString().split("T")[0],
-      lastRun: task?.lastRun, runCount: task?.runCount || 0, status: "active",
+      lastRun: task?.lastRun,
+      runCount: task?.runCount || 0,
+      status: nextStatus,
+      transformations: task?.transformations,
     });
   };
 

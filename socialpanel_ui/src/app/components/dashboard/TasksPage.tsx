@@ -16,6 +16,28 @@ function getTaskAccountIds(items: Array<{ accountId?: string }>): string[] {
   return [...new Set(items.map((item) => String(item.accountId || "").trim()).filter(Boolean))];
 }
 
+function asObject(value: unknown): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, any>;
+}
+
+function extractAutomationMappings(task: AutomationTask) {
+  return {
+    automationSources: task.sources.map((source) => ({
+      accountId: source.accountId,
+      platformId: source.platformId,
+      accountLabel: source.accountLabel,
+      triggerId: source.triggerId,
+    })),
+    automationTargets: task.targets.map((target) => ({
+      accountId: target.accountId,
+      platformId: target.platformId,
+      accountLabel: target.accountLabel,
+      actionId: target.actionId,
+    })),
+  };
+}
+
 export function TasksPage() {
   const [tasks, setTasks] = useState<AutomationTask[]>([]);
   const [showCreator, setShowCreator] = useState(false);
@@ -34,24 +56,37 @@ export function TasksPage() {
         if (!active) return;
         const accountsById = (payload.accountsById || {}) as Record<string, any>;
         const mapped = ((payload.tasks || []) as any[]).map((task) => {
+          const transformations = asObject(task.transformations);
+          const automationSources = Array.isArray(transformations.automationSources)
+            ? (transformations.automationSources as Array<Record<string, any>>)
+            : [];
+          const automationTargets = Array.isArray(transformations.automationTargets)
+            ? (transformations.automationTargets as Array<Record<string, any>>)
+            : [];
           const sourceAccounts = Array.isArray(task.sourceAccounts) ? task.sourceAccounts : [];
           const targetAccounts = Array.isArray(task.targetAccounts) ? task.targetAccounts : [];
           const sources = sourceAccounts.map((id: string) => {
             const account = accountsById[id] || {};
+            const meta = automationSources.find((item) => String(item?.accountId || "") === String(id)) || {};
             return {
-              platformId: (account.platformId || "twitter") as PlatformType,
+              platformId: (meta.platformId || account.platformId || "twitter") as PlatformType,
               accountId: String(id),
-              accountLabel: String(account.accountName || account.accountUsername || id),
-              triggerId: "trigger",
+              accountLabel: String(
+                meta.accountLabel || account.accountName || account.accountUsername || id
+              ),
+              triggerId: String(meta.triggerId || "trigger"),
             };
           });
           const targets = targetAccounts.map((id: string) => {
             const account = accountsById[id] || {};
+            const meta = automationTargets.find((item) => String(item?.accountId || "") === String(id)) || {};
             return {
-              platformId: (account.platformId || "facebook") as PlatformType,
+              platformId: (meta.platformId || account.platformId || "facebook") as PlatformType,
               accountId: String(id),
-              accountLabel: String(account.accountName || account.accountUsername || id),
-              actionId: "action",
+              accountLabel: String(
+                meta.accountLabel || account.accountName || account.accountUsername || id
+              ),
+              actionId: String(meta.actionId || "action"),
             };
           });
           return {
@@ -67,6 +102,7 @@ export function TasksPage() {
             lastRun: task.lastExecuted ? new Date(task.lastExecuted).toLocaleString("ar") : undefined,
             runCount: Number(task.executionCount || 0),
             status: (String(task.status || "paused") as "active" | "paused" | "error"),
+            transformations,
           } satisfies AutomationTask;
         });
         setTasks(mapped);
@@ -131,6 +167,7 @@ export function TasksPage() {
   const duplicateTask = (task: AutomationTask) => {
     const dup = { ...task, id: `task_${Date.now()}`, name: `${task.name} (نسخة)`, runCount: 0, lastRun: undefined };
     setTasks((prev) => [...prev, dup]);
+    const mapping = extractAutomationMappings(dup);
     void apiRequest("/api/tasks", {
       method: "POST",
       body: {
@@ -139,6 +176,10 @@ export function TasksPage() {
         sourceAccounts: getTaskAccountIds(dup.sources),
         targetAccounts: getTaskAccountIds(dup.targets),
         status: "paused",
+        transformations: {
+          ...asObject(dup.transformations),
+          ...mapping,
+        },
       },
     }).then((payload: any) => {
       const createdId = String(payload?.task?.id || "").trim();
@@ -156,12 +197,17 @@ export function TasksPage() {
     setShowCreator(false);
     setEditingTask(null);
 
+    const mapping = extractAutomationMappings(task);
     const payload = {
       name: task.name,
       description: task.description,
       sourceAccounts: getTaskAccountIds(task.sources),
       targetAccounts: getTaskAccountIds(task.targets),
       status: task.enabled ? "active" : "paused",
+      transformations: {
+        ...asObject(task.transformations),
+        ...mapping,
+      },
     };
     if (isEditing) {
       void apiRequest(`/api/tasks/${task.id}`, { method: "PATCH", body: payload }).catch(() => {
