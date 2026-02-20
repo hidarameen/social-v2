@@ -131,16 +131,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final score = passwordStrengthScore(_password.text);
     final progress = (score / kPasswordRules.length).clamp(0.0, 1.0);
     final strengthLabel = score <= 2
-        ? (i18n.isArabic ? 'Weak' : 'Weak')
+        ? (i18n.isArabic ? 'ضعيف' : 'Weak')
         : score <= 4
-            ? (i18n.isArabic ? 'Medium' : 'Medium')
-            : (i18n.isArabic ? 'Strong' : 'Strong');
+            ? (i18n.isArabic ? 'متوسط' : 'Medium')
+            : (i18n.isArabic ? 'قوي' : 'Strong');
 
     return AuthShell(
       state: widget.state,
       heroIcon: Icons.person_add_alt_1_rounded,
-      title: 'Create Account',
-      description: 'Set up your workspace and start automating your flow.',
+      title: i18n.t('auth.registerTitle', 'Create Account'),
+      description: i18n.t(
+        'auth.registerDesc',
+        'Set up your workspace and start automating your flow.',
+      ),
       child: AutofillGroup(
         child: Form(
           key: _formKey,
@@ -508,13 +511,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     SocialAuthButton(
                       provider: SocialProvider.google,
-                      label: 'Continue with Google',
+                      label: i18n.isArabic
+                          ? 'المتابعة عبر Google'
+                          : 'Continue with Google',
                       onPressed: () => _showSocialMessage('Google'),
                     ),
                     const SizedBox(height: 10),
                     SocialAuthButton(
                       provider: SocialProvider.apple,
-                      label: 'Continue with Apple',
+                      label: i18n.isArabic
+                          ? 'المتابعة عبر Apple'
+                          : 'Continue with Apple',
                       onPressed: () => _showSocialMessage('Apple'),
                     ),
                   ],
