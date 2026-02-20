@@ -64,6 +64,8 @@ export async function GET(
       ? `${baseUrl}/api/oauth/${platform.id}/callback?provider=outstanding`
       : `${baseUrl}/api/oauth/${platform.id}/callback`;
   const returnTo = request.nextUrl.searchParams.get('returnTo') || '/accounts';
+  const responseMode = String(request.nextUrl.searchParams.get('mode') || '').trim().toLowerCase();
+  const wantsJson = responseMode === 'json';
 
   const cookieStore = await cookies();
   cookieStore.set({
@@ -112,6 +114,9 @@ export async function GET(
     if (!authUrl) {
       return NextResponse.json({ success: false, error: 'Failed to get Outstand auth URL' }, { status: 502 });
     }
+    if (wantsJson) {
+      return NextResponse.json({ success: true, url: authUrl });
+    }
     return NextResponse.redirect(authUrl);
   }
 
@@ -148,5 +153,8 @@ export async function GET(
   }
 
   const authUrl = `${platform.authUrl}?${paramsOut.toString()}`;
+  if (wantsJson) {
+    return NextResponse.json({ success: true, url: authUrl });
+  }
   return NextResponse.redirect(authUrl);
 }

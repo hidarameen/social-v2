@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Shield, Loader2, Eye, EyeOff, KeyRound, CheckCircle, Smartphone } from "lucide-react";
+import { X, Shield, Loader2, CheckCircle, Smartphone } from "lucide-react";
 import { getPlatformIcon, type PlatformInfo } from "./PlatformIcons";
 import { apiRequest } from "../services/api";
 
@@ -117,7 +117,7 @@ function compactCredentials(input: Record<string, string>): Record<string, strin
 }
 
 export interface ConnectPayload {
-  accountName: string;
+  accountName?: string;
   accountUsername?: string;
   accountId?: string;
   accessToken?: string;
@@ -139,8 +139,6 @@ export function ConnectModal({
   onConnect,
 }: ConnectModalProps) {
   const [form, setForm] = useState<ConnectFormState>(EMPTY_FORM);
-  const [showSecrets, setShowSecrets] = useState(false);
-  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [telegramAuthId, setTelegramAuthId] = useState("");
   const [telegramNeedsPassword, setTelegramNeedsPassword] = useState(false);
   const [telegramPasswordHint, setTelegramPasswordHint] = useState("");
@@ -162,8 +160,6 @@ export function ConnectModal({
   useEffect(() => {
     if (!isOpen || !platform) return;
     setForm(EMPTY_FORM);
-    setShowAdvancedFields(false);
-    setShowSecrets(false);
     setTelegramAuthId("");
     setTelegramNeedsPassword(false);
     setTelegramPasswordHint("");
@@ -237,12 +233,6 @@ export function ConnectModal({
       webhookSecret: form.webhookSecret,
       botToken: form.botToken,
     });
-
-  const buildAccountCredentials = () => ({
-    ...buildPlatformCredentialPayload(),
-    ...(trimValue(form.pageId) ? { pageId: trimValue(form.pageId) } : {}),
-    ...(trimValue(form.channelId) ? { channelId: trimValue(form.channelId) } : {}),
-  });
 
   const handleStartTelegramAuth = async () => {
     if (!telegramFullPhoneNumber) {
@@ -345,34 +335,18 @@ export function ConnectModal({
     }
   };
 
-  const handleManualConnect = async () => {
-    const accountName = trimValue(form.accountName);
-    const accessToken = trimValue(form.accessToken);
-
-    if (!accountName) {
-      setErrorText("يرجى إدخال اسم الحساب.");
-      return;
-    }
-    if (!accessToken) {
-      setErrorText("يرجى إدخال Access Token.");
-      return;
-    }
-
+  const handleOAuthConnect = async () => {
     setIsSubmitting(true);
     setErrorText("");
     setNoticeText("");
     try {
       await onConnect(platform, {
-        accountName,
-        accountUsername: trimValue(form.accountUsername) || accountName,
-        accessToken,
-        credentials: buildAccountCredentials(),
         platformCredentialPayload: buildPlatformCredentialPayload(),
       });
-      setNoticeText("تم ربط الحساب بنجاح.");
+      setNoticeText("جاري تحويلك لإكمال الربط...");
       onClose();
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : "تعذر ربط الحساب.");
+      setErrorText(error instanceof Error ? error.message : "تعذر بدء عملية الربط.");
     } finally {
       setIsSubmitting(false);
     }
@@ -387,7 +361,7 @@ export function ConnectModal({
       await handleVerifyTelegramAuth();
       return;
     }
-    await handleManualConnect();
+    await handleOAuthConnect();
   };
 
   const actionLabel =
@@ -398,6 +372,11 @@ export function ConnectModal({
         ? "تأكيد كلمة المرور"
         : "تأكيد الكود"
       : "ربط الحساب";
+
+  const nonTelegramSavedKeyCount = currentApiFields.reduce(
+    (count, field) => (trimValue(form[field.key]) ? count + 1 : count),
+    0
+  );
 
   return (
     <AnimatePresence>
@@ -469,7 +448,7 @@ export function ConnectModal({
                 <p className="text-slate-500 mb-5" style={{ fontSize: "0.875rem" }}>
                   {platform.id === "telegram"
                     ? "تسجيل دخول تيليجرام عبر رقم الهاتف بنفس منطق النسخة السابقة."
-                    : "اربط الحساب فعلياً عبر Access Token ومفاتيح API الخاصة بك."}
+                    : "الربط يتم تلقائياً باستخدام مفاتيح API المحفوظة وطريقة API المحددة من الإعدادات."}
                 </p>
               </div>
 
@@ -575,125 +554,19 @@ export function ConnectModal({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                      اسم الحساب
-                    </label>
-                    <input
-                      type="text"
-                      value={form.accountName}
-                      onChange={(event) => updateField("accountName", event.target.value)}
-                      placeholder="My Business Account"
-                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                      style={{ fontSize: "0.875rem" }}
-                      dir="ltr"
-                    />
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                    <p className="text-slate-700" style={{ fontSize: "0.8125rem" }}>
+                      سيتم استخدام المفاتيح المحفوظة تلقائياً لهذه المنصة ثم استخراج بيانات الحساب بدون إدخال يدوي.
+                    </p>
+                    <p className="text-slate-500 mt-1" style={{ fontSize: "0.75rem" }}>
+                      المفاتيح المكتشفة: {nonTelegramSavedKeyCount}
+                    </p>
+                    {nonTelegramSavedKeyCount === 0 ? (
+                      <p className="text-amber-600 mt-1" style={{ fontSize: "0.75rem" }}>
+                        لم يتم العثور على مفاتيح منصة محفوظة. تأكد من إعدادها من صفحة Settings.
+                      </p>
+                    ) : null}
                   </div>
-
-                  <div>
-                    <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                      Username
-                    </label>
-                    <input
-                      type="text"
-                      value={form.accountUsername}
-                      onChange={(event) => updateField("accountUsername", event.target.value)}
-                      placeholder="@username"
-                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                      style={{ fontSize: "0.875rem" }}
-                      dir="ltr"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                      Access Token
-                    </label>
-                    <input
-                      type={showSecrets ? "text" : "password"}
-                      value={form.accessToken}
-                      onChange={(event) => updateField("accessToken", event.target.value)}
-                      placeholder="Access token"
-                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                      style={{ fontSize: "0.875rem", fontFamily: "monospace" }}
-                      dir="ltr"
-                    />
-                  </div>
-
-                  {platform.id === "facebook" && (
-                    <div>
-                      <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                        Page ID
-                      </label>
-                      <input
-                        type="text"
-                        value={form.pageId}
-                        onChange={(event) => updateField("pageId", event.target.value)}
-                        placeholder="Facebook page id"
-                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                        style={{ fontSize: "0.875rem" }}
-                        dir="ltr"
-                      />
-                    </div>
-                  )}
-
-                  {platform.id === "youtube" && (
-                    <div>
-                      <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                        Channel ID
-                      </label>
-                      <input
-                        type="text"
-                        value={form.channelId}
-                        onChange={(event) => updateField("channelId", event.target.value)}
-                        placeholder="YouTube channel id"
-                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                        style={{ fontSize: "0.875rem" }}
-                        dir="ltr"
-                      />
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedFields((prev) => !prev)}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
-                    style={{ fontSize: "0.8125rem" }}
-                  >
-                    <KeyRound className="w-4 h-4" />
-                    {showAdvancedFields ? "إخفاء مفاتيح API الإضافية" : "إظهار مفاتيح API الإضافية"}
-                  </button>
-
-                  {showAdvancedFields && (
-                    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowSecrets((prev) => !prev)}
-                        className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-700 transition-colors"
-                        style={{ fontSize: "0.75rem" }}
-                      >
-                        {showSecrets ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        {showSecrets ? "إخفاء القيم الحساسة" : "إظهار القيم الحساسة"}
-                      </button>
-
-                      {currentApiFields.map((field) => (
-                        <div key={field.key}>
-                          <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.75rem" }}>
-                            {field.label}
-                          </label>
-                          <input
-                            type={field.secret && !showSecrets ? "password" : "text"}
-                            value={form[field.key]}
-                            onChange={(event) => updateField(field.key, event.target.value)}
-                            placeholder={field.placeholder}
-                            className="w-full py-2 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                            style={{ fontSize: "0.8125rem", fontFamily: "monospace" }}
-                            dir="ltr"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
 

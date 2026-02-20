@@ -134,6 +134,36 @@ export function AccountsDashboard() {
   };
 
   const handleConnect = async (platform: PlatformInfo, payload: ConnectPayload) => {
+    if (platform.id !== "telegram") {
+      try {
+        if (payload.platformCredentialPayload && Object.keys(payload.platformCredentialPayload).length > 0) {
+          await apiRequest("/api/platform-credentials", {
+            method: "PUT",
+            body: {
+              platformId: platform.id,
+              credentials: payload.platformCredentialPayload,
+            },
+          });
+        }
+
+        const returnTo = "/social-v2/index.html#/dashboard/accounts";
+        const startPayload = await apiRequest<{ success: boolean; url?: string; authUrl?: string }>(
+          `/api/oauth/${platform.id}/start?returnTo=${encodeURIComponent(returnTo)}&mode=json`
+        );
+        const authUrl = trimInput(startPayload?.url || startPayload?.authUrl);
+        if (!authUrl) {
+          throw new Error("تعذر بدء الربط. تحقق من إعدادات API/OAuth لهذه المنصة.");
+        }
+
+        window.location.assign(authUrl);
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "تعذر بدء عملية ربط الحساب";
+        toast.error(message);
+        throw new Error(message);
+      }
+    }
+
     const normalizedName = trimInput(payload.accountName);
     if (!normalizedName) {
       toast.error("يرجى إدخال اسم الحساب");
