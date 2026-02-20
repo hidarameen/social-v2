@@ -23,8 +23,8 @@ import {
   ArrowRight,
   AlertCircle,
   CheckCircle,
-  Clock,
   Zap,
+  Sparkles,
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -410,11 +410,20 @@ export default function TaskDetailPage() {
 
   if (!task || !stats) {
     return (
-      <div className="min-h-screen bg-background control-app">
+      <div className="min-h-screen bg-background control-app dashboard-shell-bg">
         <Sidebar />
         <Header />
-        <main className="control-main">
-          <p className="text-muted-foreground">Loading...</p>
+        <main className="control-main premium-main">
+          <div className="page-header premium-page-header animate-fade-up">
+            <div>
+              <p className="kpi-pill mb-3 inline-flex items-center gap-1.5">
+                <Sparkles size={12} />
+                Task Operations
+              </p>
+              <h1 className="page-title">Loading task details</h1>
+              <p className="page-subtitle">Preparing task overview and runtime insights.</p>
+            </div>
+          </div>
         </main>
       </div>
     );
@@ -457,23 +466,28 @@ export default function TaskDetailPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background control-app">
+    <div className="min-h-screen bg-background control-app dashboard-shell-bg">
       <Sidebar />
       <Header />
 
-      <main className="control-main">
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <main className="control-main premium-main">
+        <div className="page-header premium-page-header animate-fade-up">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              {task.name}
-            </h1>
-            <p className="text-muted-foreground">
-              Task ID: {taskId.substring(0, 8)}...
+            <p className="kpi-pill mb-3 inline-flex items-center gap-1.5">
+              <Sparkles size={12} />
+              Task Operations
+            </p>
+            <h1 className="page-title">{task.name}</h1>
+            <p className="page-subtitle">
+              Task ID: {taskId.substring(0, 8)}... • Real-time execution diagnostics
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Button onClick={handleRunTask}>
+              <Play size={18} className="mr-2" />
+              Run Now
+            </Button>
             <Button
               variant="outline"
               onClick={handleToggleStatus}
@@ -491,8 +505,26 @@ export default function TaskDetailPage() {
               )}
             </Button>
 
-            <Button variant="outline" size="icon" onClick={() => router.push(`/tasks/${taskId}/edit`)}>
-              <Edit2 size={18} />
+            <Button variant="outline" onClick={() => setIsEditing((prev) => !prev)}>
+              <Edit2 size={18} className="mr-2" />
+              {isEditing ? 'Close Quick Edit' : 'Quick Edit'}
+            </Button>
+
+            <Button variant="outline" onClick={() => router.push(`/tasks/${taskId}/edit`)}>
+              <Edit2 size={18} className="mr-2" />
+              Full Editor
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(
+                  `/executions?taskId=${encodeURIComponent(taskId)}&taskName=${encodeURIComponent(task.name)}`
+                )
+              }
+            >
+              <ArrowRight size={18} className="mr-2" />
+              View Logs
             </Button>
 
             <Button
@@ -507,7 +539,7 @@ export default function TaskDetailPage() {
         </div>
 
         {isEditing && editForm && (
-          <Card className="mb-8">
+          <Card className="mb-8 surface-card">
             <CardHeader>
               <CardTitle>Edit Task</CardTitle>
             </CardHeader>
@@ -1211,7 +1243,7 @@ export default function TaskDetailPage() {
         {/* Status Badge */}
         <div className="mb-8">
           <span
-            className={`inline-block px-4 py-2 rounded-full text-sm font-semibold ${
+            className={`kpi-pill inline-flex px-4 py-2 text-sm font-semibold ${
               task.status === 'active'
                 ? 'border border-primary/30 bg-primary/10 text-primary'
                 : 'border border-border/70 bg-muted/55 text-muted-foreground'
@@ -1222,15 +1254,15 @@ export default function TaskDetailPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card>
+        <div className="equal-grid mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card className="surface-card h-full">
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-sm mb-2">Total Executions</p>
               <p className="text-3xl font-bold text-foreground">{stats.total}</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card h-full">
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-sm mb-2">Successful</p>
               <p className="text-3xl font-bold text-primary">
@@ -1239,7 +1271,7 @@ export default function TaskDetailPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card h-full">
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-sm mb-2">Failed</p>
               <p className="text-3xl font-bold text-destructive">
@@ -1248,7 +1280,7 @@ export default function TaskDetailPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface-card h-full">
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-sm mb-2">Success Rate</p>
               <p className="text-3xl font-bold text-primary">
@@ -1258,10 +1290,10 @@ export default function TaskDetailPage() {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="equal-grid grid grid-cols-1 gap-8 lg:grid-cols-3">
           {/* Task Details */}
           <div className="lg:col-span-2 space-y-6">
-            <Card>
+            <Card className="surface-card">
               <CardHeader>
                 <CardTitle>Task Configuration</CardTitle>
               </CardHeader>
@@ -1309,7 +1341,7 @@ export default function TaskDetailPage() {
             </Card>
 
             {/* Recent Executions */}
-            <Card>
+            <Card className="surface-card">
               <CardHeader>
                 <CardTitle>Recent Executions</CardTitle>
               </CardHeader>
@@ -1370,7 +1402,7 @@ export default function TaskDetailPage() {
           {/* Insights */}
           <div className="space-y-6">
             {/* Performance Report */}
-            <Card>
+            <Card className="surface-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Zap size={18} />
@@ -1402,7 +1434,9 @@ export default function TaskDetailPage() {
 
             {/* Failure Prediction */}
             {failurePrediction && failurePrediction.riskLevel > 0 && (
-              <Card className={failurePrediction.riskLevel > 50 ? 'border-destructive' : ''}>
+              <Card
+                className={`surface-card ${failurePrediction.riskLevel > 50 ? 'border-destructive' : ''}`}
+              >
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <AlertCircle size={18} />
@@ -1447,7 +1481,7 @@ export default function TaskDetailPage() {
 
             {/* Error Analysis */}
             {errorAnalysis.length > 0 && (
-              <Card>
+              <Card className="surface-card">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <AlertCircle size={18} />

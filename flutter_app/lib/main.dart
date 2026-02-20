@@ -4023,6 +4023,60 @@ class _SocialShellState extends State<SocialShell> {
       }
     }
 
+    Widget tasksKpiGrid() {
+      final width = MediaQuery.sizeOf(context).width;
+      final columns = width >= 1320
+          ? 4
+          : width >= 980
+              ? 3
+              : width >= 680
+                  ? 2
+                  : 1;
+      final aspectRatio = width >= 1320
+          ? 2.9
+          : width >= 980
+              ? 2.55
+              : width >= 680
+                  ? 2.3
+                  : 3.0;
+      final totalVisible = filtered.length;
+
+      return GridView.count(
+        crossAxisCount: columns,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: aspectRatio,
+        children: [
+          SfKpiTile(
+            label: i18n.isArabic ? 'المهام الظاهرة' : 'Visible Tasks',
+            value: '$totalVisible',
+            icon: Icons.view_agenda_rounded,
+            tone: scheme.primary,
+          ),
+          SfKpiTile(
+            label: i18n.isArabic ? 'نشطة' : 'Active',
+            value: '$activeCount',
+            icon: Icons.play_circle_filled_rounded,
+            tone: scheme.primary,
+          ),
+          SfKpiTile(
+            label: i18n.isArabic ? 'متوقفة' : 'Paused',
+            value: '$pausedCount',
+            icon: Icons.pause_circle_filled_rounded,
+            tone: scheme.secondary,
+          ),
+          SfKpiTile(
+            label: i18n.isArabic ? 'تحتاج تدخل' : 'Need Attention',
+            value: '$errorCount',
+            icon: Icons.error_rounded,
+            tone: scheme.error,
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4081,6 +4135,8 @@ class _SocialShellState extends State<SocialShell> {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        tasksKpiGrid(),
         const SizedBox(height: 14),
         SfPanelCard(
           padding: const EdgeInsets.all(16),
