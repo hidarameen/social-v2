@@ -1,84 +1,67 @@
-import { getToken } from 'next-auth/jwt';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const AUTH_PATHS = new Set([
-  '/login',
-  '/register',
-  '/verify-email',
-  '/forgot-password',
-  '/reset-password',
-]);
+function isBypassPath(pathname: string): boolean {
+  if (pathname.startsWith('/api/')) return true;
+  if (pathname.startsWith('/_next/')) return true;
+  if (pathname.startsWith('/_vercel/')) return true;
+  if (pathname.startsWith('/social-v2')) return true;
+  if (pathname === '/social-v2-app.html') return true;
+  if (pathname.startsWith('/public/')) return true;
+  if (pathname === '/favicon.ico') return true;
+  if (pathname === '/robots.txt') return true;
+  if (pathname === '/sitemap.xml') return true;
+  if (pathname === '/manifest.webmanifest') return true;
+  if (pathname === '/manifest.json') return true;
+  if (/\.[^/]+$/.test(pathname)) return true;
+  return false;
+}
 
-const PUBLIC_PATHS = new Set([
-  ...AUTH_PATHS,
-  '/terms',
-  '/privacy',
-  '/offline',
-]);
+function normalizeV2Route(pathname: string): string {
+  if (pathname === '/' || pathname === '') return '/login';
 
-export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  const forceLogin = request.nextUrl.searchParams.get('forceLogin') === '1';
-  const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-request-id', requestId);
+  if (pathname === '/login') return '/login';
+  if (pathname === '/register') return '/signup';
+  if (pathname === '/forgot-password') return '/forgot-password';
+  if (pathname === '/verify-email') return '/verify-email';
+  if (pathname === '/reset-password') return '/forgot-password';
 
-  const next = () => {
-    const response = NextResponse.next({
-      request: { headers: requestHeaders },
-    });
-    response.headers.set('x-request-id', requestId);
-    return response;
-  };
+  if (pathname.startsWith('/dashboard/accounts') || pathname === '/accounts') {
+    return '/dashboard/accounts';
+  }
+  if (pathname.startsWith('/dashboard/tasks') || pathname.startsWith('/tasks')) {
+    return '/dashboard/tasks';
+  }
+  if (pathname.startsWith('/dashboard/executions') || pathname.startsWith('/executions')) {
+    return '/dashboard/executions';
+  }
+  if (pathname.startsWith('/dashboard/analytics') || pathname === '/analytics') {
+    return '/dashboard/analytics';
+  }
+  if (pathname.startsWith('/dashboard/settings') || pathname === '/settings') {
+    return '/dashboard/settings';
+  }
+  if (pathname.startsWith('/dashboard')) return '/dashboard';
 
-  if (pathname.startsWith('/api/')) return next();
-  if (/\.[^/]+$/.test(pathname)) return next();
-  if (pathname.startsWith('/api/auth')) return next();
-  if (pathname.startsWith('/api/oauth')) return next();
-  if (pathname.startsWith('/api/twitter/webhook')) return next();
-  if (pathname.startsWith('/api/twitter/stream/sync')) return next();
-  if (pathname.startsWith('/api/twitter/stream/debug')) return next();
-  if (pathname.startsWith('/api/twitter/poll/now')) return next();
-  if (pathname.startsWith('/api/telegram/webhook')) return next();
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/_vercel') ||
-    pathname.startsWith('/favicon') ||
-    pathname.startsWith('/public')
-  ) {
-    return next();
+  return '/dashboard';
+}
+
+export function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+
+  if (isBypassPath(pathname)) {
+    return NextResponse.next();
   }
 
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-  if (PUBLIC_PATHS.has(pathname)) {
-    if (!AUTH_PATHS.has(pathname)) {
-      return next();
-    }
-    if (forceLogin) {
-      return next();
-    }
-    if (!token) return next();
-    const url = request.nextUrl.clone();
-    url.pathname = '/';
-    const response = NextResponse.redirect(url);
-    response.headers.set('x-request-id', requestId);
-    return response;
-  }
+  const nextUrl = request.nextUrl.clone();
+  nextUrl.pathname = '/social-v2-app.html';
+  nextUrl.search = '';
 
-  if (!token) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    const callbackUrl = `${pathname}${request.nextUrl.search}`;
-    url.searchParams.set('callbackUrl', callbackUrl);
-    const response = NextResponse.redirect(url);
-    response.headers.set('x-request-id', requestId);
-    return response;
-  }
-
-  return next();
+  const mappedRoute = normalizeV2Route(pathname);
+  nextUrl.hash = `${mappedRoute}${search || ''}`;
+  return NextResponse.redirect(nextUrl);
 }
 
 export const config = {
-  matcher: ['/((?!api/auth|api/oauth|api/telegram/webhook|api/twitter/webhook|api/twitter/stream/sync|api/twitter/stream/debug|api/twitter/poll/now|_next|_vercel|static|public|favicon.ico).*)'],
+  matcher: ['/((?!api|_next|_vercel|social-v2|favicon.ico|robots.txt|sitemap.xml).*)'],
 };

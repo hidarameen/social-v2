@@ -1,0 +1,101 @@
+@import 'tailwindcss' source(none);
+@source '../**/*.{js,ts,jsx,tsx}';
+
+@import 'tw-animate-css';
+
+@layer base {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.2);
+    border-radius: 20px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.35);
+  }
+
+  /* Prevent body overflow when modal is open */
+  body.modal-open {
+    overflow: hidden;
+  }
+
+  /* Smooth scrolling for the whole page */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Touch targets for mobile */
+  @media (pointer: coarse) {
+    button, a, [role="button"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
+  /* Focus visible styles */
+  *:focus-visible {
+    outline: 2px solid rgba(139, 92, 246, 0.5);
+    outline-offset: 2px;
+  }
+
+  /* Selection color */
+  ::selection {
+    background: rgba(139, 92, 246, 0.15);
+    color: #1e293b;
+  }
+
+  /* Dark mode scrollbar */
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.2);
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.35);
+  }
+
+  /* Orientation support - landscape */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .min-h-screen {
+      min-height: 100dvh;
+    }
+  }
+
+  /* Safe area for mobile notches */
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* Prevent text size adjustment */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Dark mode selection */
+  .dark ::selection {
+    background: rgba(139, 92, 246, 0.3);
+    color: #e2e8f0;
+  }
+
+  /* Smooth transitions for theme switching */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color;
+    transition-duration: 200ms;
+    transition-timing-function: ease-out;
+  }
+
+  /* Override for motion elements */
+  [style*="transform"], [style*="opacity"] {
+    transition-property: none;
+  }
+
+  /* Flutter-ready viewport */
+  @supports (height: 100dvh) {
+    .min-h-screen {
+      min-height: 100dvh;
+    }
+  }
+}
