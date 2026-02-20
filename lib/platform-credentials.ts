@@ -7,6 +7,12 @@ export const MANAGED_PLATFORM_IDS = [
   'youtube',
   'tiktok',
   'linkedin',
+  'telegram',
+  'whatsapp',
+  'pinterest',
+  'google_business',
+  'threads',
+  'snapchat',
 ] as const;
 
 export type ManagedPlatformId = (typeof MANAGED_PLATFORM_IDS)[number];

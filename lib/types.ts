@@ -1,6 +1,18 @@
 // ==================== PLATFORM TYPES ====================
 
-export type SocialPlatform = 'facebook' | 'instagram' | 'twitter' | 'tiktok' | 'youtube' | 'telegram' | 'linkedin' | 'threads'
+export type SocialPlatform =
+  | 'facebook'
+  | 'instagram'
+  | 'twitter'
+  | 'tiktok'
+  | 'youtube'
+  | 'telegram'
+  | 'linkedin'
+  | 'threads'
+  | 'pinterest'
+  | 'google_business'
+  | 'snapchat'
+  | 'whatsapp'
 
 export type AccountAuthType = 'oauth' | 'manual'
 

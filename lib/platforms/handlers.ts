@@ -380,6 +380,152 @@ class LinkedInHandler implements BasePlatformHandler {
   }
 }
 
+class GenericNativeHandler implements BasePlatformHandler {
+  config: PlatformConfig;
+  private idPrefix: string;
+  private demoName: string;
+
+  constructor(config: PlatformConfig, idPrefix: string, demoName: string) {
+    this.config = config;
+    this.idPrefix = idPrefix;
+    this.demoName = demoName;
+  }
+
+  async authenticate(config: AuthConfig): Promise<AuthResponse> {
+    if (!config.accessToken && !config.apiKey) {
+      return { success: false, error: `${this.config.name} credentials are required` };
+    }
+    return { success: true, accessToken: config.accessToken || config.apiKey };
+  }
+
+  async refreshAuth(_refreshToken: string): Promise<AuthResponse> {
+    return { success: true };
+  }
+
+  async revokeAuth(_accessToken: string): Promise<boolean> {
+    return true;
+  }
+
+  async publishPost(_post: PostRequest, _token: string): Promise<PostResponse> {
+    return { success: true, postId: `${this.idPrefix}_${Date.now()}` };
+  }
+
+  async schedulePost(post: PostRequest, _token: string): Promise<PostResponse> {
+    return { success: true, postId: `${this.idPrefix}_${Date.now()}`, scheduledFor: post.scheduleTime };
+  }
+
+  async editPost(postId: string, _post: PostRequest, _token: string): Promise<PostResponse> {
+    return { success: true, postId };
+  }
+
+  async deletePost(_postId: string, _token: string): Promise<boolean> {
+    return true;
+  }
+
+  async getAccountInfo(_token: string): Promise<AccountInfo | null> {
+    return {
+      id: `${this.idPrefix}_123456`,
+      username: `demo_${this.idPrefix}`,
+      name: this.demoName,
+      followers: 1000,
+    };
+  }
+
+  async getAnalytics(_token: string, _startDate: Date, _endDate: Date): Promise<AnalyticsData[]> {
+    return [{ date: new Date(), posts: 6, engagements: 300, clicks: 120, reach: 3500, impressions: 7200 }];
+  }
+}
+
+const pinterestHandler = new GenericNativeHandler(
+  {
+    id: 'pinterest',
+    name: 'Pinterest',
+    icon: '📌',
+    color: '#BD081C',
+    apiUrl: 'https://api.pinterest.com/v5',
+    supportedContentTypes: ['text', 'image', 'link'],
+    maxContentLength: 500,
+    requiresMediaUpload: true,
+    supportsScheduling: true,
+    supportsRecurring: false,
+    supportsAnalytics: true,
+  },
+  'pin',
+  'Demo Pinterest Account'
+);
+
+const googleBusinessHandler = new GenericNativeHandler(
+  {
+    id: 'google_business',
+    name: 'Google Business',
+    icon: '🗺️',
+    color: '#4285F4',
+    apiUrl: 'https://mybusinessbusinessinformation.googleapis.com',
+    supportedContentTypes: ['text', 'image', 'video', 'link'],
+    maxContentLength: 1500,
+    requiresMediaUpload: true,
+    supportsScheduling: true,
+    supportsRecurring: false,
+    supportsAnalytics: true,
+  },
+  'gmb',
+  'Demo Google Business Profile'
+);
+
+const threadsHandler = new GenericNativeHandler(
+  {
+    id: 'threads',
+    name: 'Threads',
+    icon: '🧵',
+    color: '#101010',
+    apiUrl: 'https://graph.threads.net',
+    supportedContentTypes: ['text', 'image', 'video', 'link'],
+    maxContentLength: 500,
+    requiresMediaUpload: true,
+    supportsScheduling: true,
+    supportsRecurring: false,
+    supportsAnalytics: true,
+  },
+  'th',
+  'Demo Threads Account'
+);
+
+const snapchatHandler = new GenericNativeHandler(
+  {
+    id: 'snapchat',
+    name: 'Snapchat',
+    icon: '👻',
+    color: '#FFFC00',
+    apiUrl: 'https://adsapi.snapchat.com',
+    supportedContentTypes: ['image', 'video', 'text'],
+    maxContentLength: 250,
+    requiresMediaUpload: true,
+    supportsScheduling: true,
+    supportsRecurring: false,
+    supportsAnalytics: true,
+  },
+  'sc',
+  'Demo Snapchat Account'
+);
+
+const whatsappHandler = new GenericNativeHandler(
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp',
+    icon: '💬',
+    color: '#25D366',
+    apiUrl: 'https://graph.facebook.com/v22.0',
+    supportedContentTypes: ['text', 'image', 'video', 'link'],
+    maxContentLength: 4096,
+    requiresMediaUpload: true,
+    supportsScheduling: true,
+    supportsRecurring: false,
+    supportsAnalytics: true,
+  },
+  'wa',
+  'Demo WhatsApp Account'
+);
+
 // Platform Registry
 export const nativePlatformHandlers: Record<PlatformId, BasePlatformHandler> = {
   facebook: facebookHandler,
@@ -389,6 +535,11 @@ export const nativePlatformHandlers: Record<PlatformId, BasePlatformHandler> = {
   youtube: new YouTubeHandler(),
   telegram: new TelegramHandler(),
   linkedin: new LinkedInHandler(),
+  pinterest: pinterestHandler,
+  google_business: googleBusinessHandler,
+  threads: threadsHandler,
+  snapchat: snapchatHandler,
+  whatsapp: whatsappHandler,
 };
 
 export const platformHandlers: Record<PlatformId, BasePlatformHandler> = nativePlatformHandlers;

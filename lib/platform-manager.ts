@@ -18,6 +18,11 @@ const MANAGED_PLATFORMS: ReadonlySet<PlatformId> = new Set([
   'youtube',
   'telegram',
   'linkedin',
+  'pinterest',
+  'google_business',
+  'threads',
+  'snapchat',
+  'whatsapp',
 ])
 
 function asPlatformId(platform: SocialPlatform): PlatformId | null {
@@ -264,7 +269,26 @@ export class PlatformManager {
 
         case 'linkedin':
         case 'threads':
-          return { success: false, error: `${platform} client not yet implemented` }
+        case 'pinterest':
+        case 'google_business':
+        case 'snapchat':
+        case 'whatsapp': {
+          const platformId = asPlatformId(platform)
+          if (!platformId) return { success: false, error: `Unknown platform: ${platform}` }
+          const handler = account.userId
+            ? await getPlatformHandlerForUser(account.userId, platformId)
+            : getPlatformHandler(platformId)
+          const result = await handler.publishPost(
+            mapContentToPostRequest(content),
+            account.credentials.accessToken || account.credentials.apiKey || ''
+          )
+          return {
+            success: result.success,
+            postId: result.postId,
+            url: result.url,
+            error: result.error,
+          }
+        }
 
         default:
           return { success: false, error: `Unknown platform: ${platform}` }
@@ -380,6 +404,24 @@ export class PlatformManager {
             if (client) {
               isValid = await client.verifyToken()
             }
+            break
+          }
+
+          case 'linkedin':
+          case 'threads':
+          case 'pinterest':
+          case 'google_business':
+          case 'snapchat':
+          case 'whatsapp': {
+            const platformId = asPlatformId(account.platform)
+            if (!platformId) break
+            const handler = account.userId
+              ? await getPlatformHandlerForUser(account.userId, platformId)
+              : getPlatformHandler(platformId)
+            const info = await handler.getAccountInfo(
+              account.credentials.accessToken || account.credentials.apiKey || ''
+            )
+            isValid = Boolean(info)
             break
           }
         }

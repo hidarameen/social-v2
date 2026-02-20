@@ -12,6 +12,12 @@ const PLATFORM_TOKEN_MAP: Record<string, PlatformId> = {
   youtube: 'youtube',
   telegram: 'telegram',
   linkedin: 'linkedin',
+  pinterest: 'pinterest',
+  google_business: 'google_business',
+  googlebusiness: 'google_business',
+  threads: 'threads',
+  snapchat: 'snapchat',
+  whatsapp: 'whatsapp',
 };
 
 function normalizeProvider(value: string | undefined): PlatformApiProvider {

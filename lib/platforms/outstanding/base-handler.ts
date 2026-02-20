@@ -130,6 +130,13 @@ function buildBestEffortPostUrl(network: OutstandingNetworkId, post: Outstanding
       return `https://www.tiktok.com/video/${platformPostId}`;
     case 'linkedin':
       return `https://www.linkedin.com/feed/update/${platformPostId}`;
+    case 'pinterest':
+      return `https://www.pinterest.com/pin/${platformPostId}`;
+    case 'threads':
+      return `https://www.threads.net/t/${platformPostId}`;
+    case 'snapchat':
+    case 'google_business':
+    case 'whatsapp':
     case 'telegram':
     default:
       return undefined;

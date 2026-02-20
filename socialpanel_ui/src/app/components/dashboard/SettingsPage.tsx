@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   User, Lock, Key, Bell, Shield, Globe, Palette, Smartphone,
@@ -12,6 +12,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { platforms, type PlatformType } from "../PlatformIcons";
 import { getPlatformIcon } from "../PlatformIcons";
 import { toast } from "sonner";
+import { apiRequest } from "../../services/api";
 
 type SettingsTab = "profile" | "security" | "apikeys" | "notifications" | "general" | "about";
 
@@ -24,13 +25,128 @@ const tabs: { id: SettingsTab; labelAr: string; labelEn: string; icon: typeof Us
   { id: "about", labelAr: "حول التطبيق", labelEn: "About", icon: Info },
 ];
 
+const CREDENTIAL_FIELDS = [
+  "clientId",
+  "clientSecret",
+  "apiKey",
+  "apiSecret",
+  "bearerToken",
+  "webhookSecret",
+  "accessToken",
+  "accessTokenSecret",
+  "botToken",
+] as const;
+
+type CredentialFieldKey = (typeof CREDENTIAL_FIELDS)[number];
+
+type CredentialFieldConfig = {
+  key: CredentialFieldKey;
+  label: string;
+  secret?: boolean;
+};
+
+const DEFAULT_CREDENTIAL_FIELDS: CredentialFieldConfig[] = [
+  { key: "apiKey", label: "API Key" },
+  { key: "apiSecret", label: "API Secret", secret: true },
+  { key: "accessToken", label: "Access Token", secret: true },
+];
+
+const CREDENTIAL_FIELDS_BY_PLATFORM: Partial<Record<PlatformType, CredentialFieldConfig[]>> = {
+  twitter: [
+    { key: "clientId", label: "OAuth Client ID" },
+    { key: "clientSecret", label: "OAuth Client Secret", secret: true },
+    { key: "apiKey", label: "API Key" },
+    { key: "apiSecret", label: "API Secret", secret: true },
+    { key: "accessToken", label: "Access Token", secret: true },
+    { key: "accessTokenSecret", label: "Access Token Secret", secret: true },
+    { key: "bearerToken", label: "Bearer Token", secret: true },
+    { key: "webhookSecret", label: "Webhook Secret", secret: true },
+  ],
+  facebook: [
+    { key: "clientId", label: "Client ID" },
+    { key: "clientSecret", label: "Client Secret", secret: true },
+    { key: "accessToken", label: "Page Access Token", secret: true },
+  ],
+  instagram: [
+    { key: "clientId", label: "Client ID" },
+    { key: "clientSecret", label: "Client Secret", secret: true },
+    { key: "accessToken", label: "Access Token", secret: true },
+  ],
+  youtube: [
+    { key: "clientId", label: "Google Client ID" },
+    { key: "clientSecret", label: "Google Client Secret", secret: true },
+    { key: "accessToken", label: "Access Token", secret: true },
+  ],
+  tiktok: [
+    { key: "clientId", label: "Client ID" },
+    { key: "clientSecret", label: "Client Secret", secret: true },
+    { key: "accessToken", label: "Access Token", secret: true },
+  ],
+  linkedin: [
+    { key: "clientId", label: "Client ID" },
+    { key: "clientSecret", label: "Client Secret", secret: true },
+    { key: "accessToken", label: "Access Token", secret: true },
+  ],
+  telegram: [
+    { key: "botToken", label: "Bot Token", secret: true },
+  ],
+};
+
 interface ApiKeyEntry {
   platform: PlatformType;
+  clientId: string;
+  clientSecret: string;
   apiKey: string;
   apiSecret: string;
+  bearerToken: string;
+  webhookSecret: string;
   accessToken: string;
+  accessTokenSecret: string;
+  botToken: string;
   isVisible: boolean;
   connected: boolean;
+}
+
+function trimInput(value: unknown): string {
+  return String(value || "").trim();
+}
+
+function hasConnectedCredentials(entry: ApiKeyEntry): boolean {
+  return CREDENTIAL_FIELDS.some((field) => trimInput(entry[field]).length > 0);
+}
+
+function sanitizeForSave(entry: ApiKeyEntry): Record<string, string> {
+  const payload: Record<string, string> = {};
+  for (const field of CREDENTIAL_FIELDS) {
+    const value = trimInput(entry[field]);
+    if (value) payload[field] = value;
+  }
+  return payload;
+}
+
+function normalizeCredentialEntry(platform: PlatformType, raw?: Record<string, unknown>): ApiKeyEntry {
+  const entry: ApiKeyEntry = {
+    platform,
+    clientId: "",
+    clientSecret: "",
+    apiKey: "",
+    apiSecret: "",
+    bearerToken: "",
+    webhookSecret: "",
+    accessToken: "",
+    accessTokenSecret: "",
+    botToken: "",
+    isVisible: false,
+    connected: false,
+  };
+  if (!raw || typeof raw !== "object") {
+    return entry;
+  }
+  for (const field of CREDENTIAL_FIELDS) {
+    entry[field] = trimInput((raw as Record<string, unknown>)[field]);
+  }
+  entry.connected = hasConnectedCredentials(entry);
+  return entry;
 }
 
 export function SettingsPageFull() {
@@ -64,16 +180,11 @@ export function SettingsPageFull() {
 
   // API Keys state
   const [apiKeys, setApiKeys] = useState<ApiKeyEntry[]>(
-    platforms.map((p) => ({
-      platform: p.id,
-      apiKey: "",
-      apiSecret: "",
-      accessToken: "",
-      isVisible: false,
-      connected: false,
-    }))
+    platforms.map((p) => normalizeCredentialEntry(p.id))
   );
   const [expandedPlatform, setExpandedPlatform] = useState<PlatformType | null>(null);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [apiKeysSavingPlatform, setApiKeysSavingPlatform] = useState<PlatformType | null>(null);
 
   // Notifications state
   const [notifSettings, setNotifSettings] = useState({
@@ -109,15 +220,103 @@ export function SettingsPageFull() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const maskKey = (key: string) => {
-    if (!key) return "—";
-    if (key.length <= 8) return "••••••••";
-    return key.slice(0, 4) + "••••••••" + key.slice(-4);
-  };
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success(t("تم النسخ", "Copied"));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPlatformCredentials() {
+      try {
+        setApiKeysLoading(true);
+        const payload = await apiRequest<any>("/api/platform-credentials");
+        if (cancelled) return;
+        const credentialsMap = payload?.credentials || {};
+        setApiKeys((prev) =>
+          prev.map((entry) =>
+            normalizeCredentialEntry(
+              entry.platform,
+              credentialsMap[entry.platform] as Record<string, unknown>
+            )
+          )
+        );
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : t("تعذر تحميل المفاتيح", "Failed to load API keys"));
+        }
+      } finally {
+        if (!cancelled) {
+          setApiKeysLoading(false);
+        }
+      }
+    }
+    void loadPlatformCredentials();
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const savePlatformKeys = async (platformId: PlatformType) => {
+    const current = apiKeys.find((entry) => entry.platform === platformId);
+    if (!current) return;
+
+    try {
+      setApiKeysSavingPlatform(platformId);
+      const payload = await apiRequest<any>("/api/platform-credentials", {
+        method: "PUT",
+        body: {
+          platformId,
+          credentials: sanitizeForSave(current),
+        },
+      });
+      const nextEntry = normalizeCredentialEntry(
+        platformId,
+        payload?.credentials as Record<string, unknown>
+      );
+      setApiKeys((prev) =>
+        prev.map((entry) =>
+          entry.platform === platformId
+            ? { ...nextEntry, isVisible: entry.isVisible }
+            : entry
+        )
+      );
+      toast.success(
+        t(
+          `تم حفظ مفاتيح ${platforms.find((p) => p.id === platformId)?.name || ""}`,
+          `${platforms.find((p) => p.id === platformId)?.name || "Platform"} keys saved`
+        )
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("تعذر حفظ المفاتيح", "Failed to save API keys"));
+    } finally {
+      setApiKeysSavingPlatform(null);
+    }
+  };
+
+  const clearPlatformKeys = async (platformId: PlatformType) => {
+    try {
+      setApiKeysSavingPlatform(platformId);
+      await apiRequest<any>("/api/platform-credentials", {
+        method: "PUT",
+        body: {
+          platformId,
+          credentials: {},
+        },
+      });
+      setApiKeys((prev) =>
+        prev.map((entry) =>
+          entry.platform === platformId
+            ? { ...normalizeCredentialEntry(platformId), isVisible: entry.isVisible }
+            : entry
+        )
+      );
+      toast.success(t("تم حذف المفاتيح", "Keys deleted"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("تعذر حذف المفاتيح", "Failed to delete keys"));
+    } finally {
+      setApiKeysSavingPlatform(null);
+    }
   };
 
   const getPasswordStrength = (pass: string) => {
@@ -402,16 +601,25 @@ export function SettingsPageFull() {
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
           <p className="text-amber-700 dark:text-amber-300" style={{ fontSize: "0.8125rem" }}>
             {t(
-              "احتفظ بمفاتيح API سرية. لا تشاركها مع أحد. يتم تشفيرها وتخزينها بشكل آمن.",
-              "Keep your API keys secret. Never share them. They are encrypted and stored securely."
+              "احتفظ بمفاتيح API سرية. لا تشاركها مع أحد. يتم تشفيرها وتخزينها بشكل آمن في قاعدة البيانات.",
+              "Keep your API keys secret. Never share them. They are encrypted and stored securely in the database."
             )}
           </p>
         </div>
       </div>
 
+      {apiKeysLoading && (
+        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm">
+          {t("جاري تحميل مفاتيح المنصات...", "Loading platform keys...")}
+        </div>
+      )}
+
       {platforms.map((platform, idx) => {
         const keyEntry = apiKeys.find((k) => k.platform === platform.id);
+        if (!keyEntry) return null;
         const isExpanded = expandedPlatform === platform.id;
+        const fields = CREDENTIAL_FIELDS_BY_PLATFORM[platform.id] || DEFAULT_CREDENTIAL_FIELDS;
+        const isSaving = apiKeysSavingPlatform === platform.id;
 
         return (
           <motion.div
@@ -434,7 +642,7 @@ export function SettingsPageFull() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {keyEntry?.connected && (
+                {keyEntry.connected && (
                   <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" style={{ fontSize: "0.625rem" }}>
                     {t("مربوط", "Connected")}
                   </span>
@@ -455,22 +663,30 @@ export function SettingsPageFull() {
                   className="overflow-hidden"
                 >
                   <div className="px-4 pb-4 space-y-3 border-t border-slate-100 dark:border-slate-700 pt-3">
-                    {[
-                      { label: "API Key", key: "apiKey" },
-                      { label: "API Secret", key: "apiSecret" },
-                      { label: "Access Token", key: "accessToken" },
-                    ].map((field) => (
+                    {fields.map((field) => (
                       <div key={field.key}>
                         <label className="block text-slate-500 mb-1" style={{ fontSize: "0.75rem" }}>{field.label}</label>
                         <div className="flex items-center gap-2">
                           <div className="relative flex-1">
                             <Key className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                             <input
-                              type={keyEntry?.isVisible ? "text" : "password"}
-                              value={(keyEntry as any)?.[field.key] || ""}
+                              type={field.secret && !keyEntry.isVisible ? "password" : "text"}
+                              value={keyEntry[field.key]}
                               onChange={(e) => {
+                                const value = e.target.value;
                                 setApiKeys((prev) =>
-                                  prev.map((k) => k.platform === platform.id ? { ...k, [field.key]: e.target.value } : k)
+                                  prev.map((entry) =>
+                                    entry.platform === platform.id
+                                      ? {
+                                          ...entry,
+                                          [field.key]: value,
+                                          connected: hasConnectedCredentials({
+                                            ...entry,
+                                            [field.key]: value,
+                                          }),
+                                        }
+                                      : entry
+                                  )
                                 );
                               }}
                               placeholder={`${t("أدخل", "Enter")} ${field.label}...`}
@@ -480,13 +696,19 @@ export function SettingsPageFull() {
                             />
                           </div>
                           <button
-                            onClick={() => setApiKeys((prev) => prev.map((k) => k.platform === platform.id ? { ...k, isVisible: !k.isVisible } : k))}
+                            onClick={() =>
+                              setApiKeys((prev) =>
+                                prev.map((entry) =>
+                                  entry.platform === platform.id ? { ...entry, isVisible: !entry.isVisible } : entry
+                                )
+                              )
+                            }
                             className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-400 transition-colors"
                           >
-                            {keyEntry?.isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {keyEntry.isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                           <button
-                            onClick={() => copyToClipboard((keyEntry as any)?.[field.key] || "")}
+                            onClick={() => copyToClipboard(keyEntry[field.key] || "")}
                             className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-400 transition-colors"
                           >
                             <Copy className="w-4 h-4" />
@@ -496,25 +718,21 @@ export function SettingsPageFull() {
                     ))}
                     <div className="flex items-center gap-2 pt-2">
                       <motion.button
-                        onClick={() => {
-                          setApiKeys((prev) => prev.map((k) => k.platform === platform.id ? { ...k, connected: true } : k));
-                          toast.success(t(`تم حفظ مفاتيح ${platform.name}`, `${platform.name} keys saved`));
-                        }}
-                        className="px-4 py-2 rounded-lg bg-slate-800 dark:bg-violet-600 text-white flex items-center gap-1.5"
+                        onClick={() => void savePlatformKeys(platform.id)}
+                        disabled={isSaving}
+                        className="px-4 py-2 rounded-lg bg-slate-800 dark:bg-violet-600 text-white flex items-center gap-1.5 disabled:opacity-70"
                         style={{ fontSize: "0.8125rem" }}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                       >
-                        <Save className="w-3.5 h-3.5" />
-                        {t("حفظ", "Save")}
+                        {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        {isSaving ? t("جاري الحفظ...", "Saving...") : t("حفظ", "Save")}
                       </motion.button>
-                      {keyEntry?.connected && (
+                      {keyEntry.connected && (
                         <motion.button
-                          onClick={() => {
-                            setApiKeys((prev) => prev.map((k) => k.platform === platform.id ? { ...k, apiKey: "", apiSecret: "", accessToken: "", connected: false } : k));
-                            toast.success(t("تم حذف المفاتيح", "Keys deleted"));
-                          }}
-                          className="px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 flex items-center gap-1.5"
+                          onClick={() => void clearPlatformKeys(platform.id)}
+                          disabled={isSaving}
+                          className="px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 flex items-center gap-1.5 disabled:opacity-70"
                           style={{ fontSize: "0.8125rem" }}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}

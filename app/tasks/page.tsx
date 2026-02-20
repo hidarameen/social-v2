@@ -92,6 +92,11 @@ const PLATFORM_LABELS: Record<PlatformId, string> = {
   youtube: 'YouTube',
   telegram: 'Telegram',
   linkedin: 'LinkedIn',
+  pinterest: 'Pinterest',
+  google_business: 'Google Business',
+  threads: 'Threads',
+  snapchat: 'Snapchat',
+  whatsapp: 'WhatsApp',
 };
 
 function uniquePlatformIdsForTask(task: Task, accountById: Record<string, PlatformAccount>): PlatformId[] {

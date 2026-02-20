@@ -34,7 +34,7 @@ type OAuthStateCookie = {
   provider?: 'native' | 'outstanding';
 };
 
-const OUTSTAND_NETWORK_BY_PLATFORM: Record<PlatformId, OutstandingNetworkId> = {
+const OUTSTAND_NETWORK_BY_PLATFORM: Partial<Record<PlatformId, OutstandingNetworkId>> = {
   twitter: 'x',
   facebook: 'facebook',
   instagram: 'instagram',
@@ -42,10 +42,16 @@ const OUTSTAND_NETWORK_BY_PLATFORM: Record<PlatformId, OutstandingNetworkId> = {
   tiktok: 'tiktok',
   telegram: 'telegram',
   linkedin: 'linkedin',
+  pinterest: 'pinterest',
+  google_business: 'google_business',
+  threads: 'threads',
+  snapchat: 'snapchat',
+  whatsapp: 'whatsapp',
 };
 
 function asOutstandPlatformId(value: string): PlatformId | null {
-  return value in OUTSTAND_NETWORK_BY_PLATFORM ? (value as PlatformId) : null;
+  const platformId = value as PlatformId;
+  return OUTSTAND_NETWORK_BY_PLATFORM[platformId] ? platformId : null;
 }
 
 function mapOutstandAccountInfo(account: OutstandingSocialAccount): {

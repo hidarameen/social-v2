@@ -17,6 +17,11 @@ const PLATFORM_ICON_META: Record<PlatformId, PlatformMeta> = {
   youtube: { icon: siYoutube, label: 'YouTube' },
   telegram: { icon: siTelegram, label: 'Telegram' },
   linkedin: { label: 'LinkedIn', fallbackBg: '#0A66C2', fallbackText: 'in' },
+  pinterest: { label: 'Pinterest', fallbackBg: '#BD081C', fallbackText: 'P' },
+  google_business: { label: 'Google Business', fallbackBg: '#4285F4', fallbackText: 'G' },
+  threads: { label: 'Threads', fallbackBg: '#101010', fallbackText: 'Th' },
+  snapchat: { label: 'Snapchat', fallbackBg: '#FACC15', fallbackText: 'S' },
+  whatsapp: { label: 'WhatsApp', fallbackBg: '#25D366', fallbackText: 'W' },
 };
 
 type PlatformIconProps = {

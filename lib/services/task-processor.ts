@@ -12,7 +12,20 @@ import {
   getOutstandUserSettings,
 } from '@/lib/outstand-user-settings';
 
-const GENERIC_TASK_SUPPORTED_TARGETS_NATIVE = new Set<PlatformId>(['facebook']);
+const GENERIC_TASK_SUPPORTED_TARGETS_NATIVE = new Set<PlatformId>([
+  'facebook',
+  'instagram',
+  'twitter',
+  'tiktok',
+  'youtube',
+  'telegram',
+  'linkedin',
+  'pinterest',
+  'google_business',
+  'threads',
+  'snapchat',
+  'whatsapp',
+]);
 
 export class TaskProcessor {
   /**

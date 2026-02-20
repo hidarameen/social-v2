@@ -5,7 +5,12 @@ export type OutstandingNetworkId =
   | 'tiktok'
   | 'youtube'
   | 'telegram'
-  | 'linkedin';
+  | 'linkedin'
+  | 'pinterest'
+  | 'google_business'
+  | 'threads'
+  | 'snapchat'
+  | 'whatsapp';
 
 export interface OutstandingSocialAccount {
   id: string;

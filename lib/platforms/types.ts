@@ -7,7 +7,12 @@ export type PlatformId =
   | 'tiktok' 
   | 'youtube' 
   | 'telegram' 
-  | 'linkedin';
+  | 'linkedin'
+  | 'pinterest'
+  | 'google_business'
+  | 'threads'
+  | 'snapchat'
+  | 'whatsapp';
 
 export interface PlatformConfig {
   id: PlatformId;

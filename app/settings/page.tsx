@@ -28,6 +28,12 @@ const MANAGED_PLATFORM_IDS = [
   'youtube',
   'tiktok',
   'linkedin',
+  'telegram',
+  'whatsapp',
+  'pinterest',
+  'google_business',
+  'threads',
+  'snapchat',
 ] as const;
 
 type ManagedPlatformId = (typeof MANAGED_PLATFORM_IDS)[number];
@@ -70,6 +76,12 @@ const PLATFORM_LABELS: Record<ManagedPlatformId, string> = {
   youtube: 'YouTube',
   tiktok: 'TikTok',
   linkedin: 'LinkedIn',
+  telegram: 'Telegram',
+  whatsapp: 'WhatsApp',
+  pinterest: 'Pinterest',
+  google_business: 'Google Business',
+  threads: 'Threads',
+  snapchat: 'Snapchat',
 };
 
 const PLATFORM_FIELDS: Record<ManagedPlatformId, CredentialField[]> = {
@@ -103,6 +115,36 @@ const PLATFORM_FIELDS: Record<ManagedPlatformId, CredentialField[]> = {
     { key: 'clientId', label: 'Client ID', placeholder: 'LinkedIn client id' },
     { key: 'clientSecret', label: 'Client Secret', placeholder: 'LinkedIn client secret', secret: true },
   ],
+  telegram: [
+    { key: 'botToken', label: 'Bot Token', placeholder: 'Telegram bot token', secret: true },
+    { key: 'apiKey', label: 'API Key / App ID', placeholder: 'Telegram app id (optional)' },
+    { key: 'apiSecret', label: 'API Secret / Hash', placeholder: 'Telegram app hash (optional)', secret: true },
+  ],
+  whatsapp: [
+    { key: 'clientId', label: 'Client ID', placeholder: 'Meta app/client id' },
+    { key: 'clientSecret', label: 'Client Secret', placeholder: 'Meta app/client secret', secret: true },
+    { key: 'accessToken', label: 'Access Token', placeholder: 'WhatsApp access token', secret: true },
+  ],
+  pinterest: [
+    { key: 'clientId', label: 'Client ID', placeholder: 'Pinterest client id' },
+    { key: 'clientSecret', label: 'Client Secret', placeholder: 'Pinterest client secret', secret: true },
+    { key: 'accessToken', label: 'Access Token', placeholder: 'Pinterest access token', secret: true },
+  ],
+  google_business: [
+    { key: 'clientId', label: 'Google Client ID', placeholder: 'Google OAuth client id' },
+    { key: 'clientSecret', label: 'Google Client Secret', placeholder: 'Google OAuth client secret', secret: true },
+    { key: 'accessToken', label: 'Access Token', placeholder: 'Google Business access token', secret: true },
+  ],
+  threads: [
+    { key: 'clientId', label: 'Client ID', placeholder: 'Threads app client id' },
+    { key: 'clientSecret', label: 'Client Secret', placeholder: 'Threads app client secret', secret: true },
+    { key: 'accessToken', label: 'Access Token', placeholder: 'Threads access token', secret: true },
+  ],
+  snapchat: [
+    { key: 'clientId', label: 'Client ID', placeholder: 'Snapchat client id' },
+    { key: 'clientSecret', label: 'Client Secret', placeholder: 'Snapchat client secret', secret: true },
+    { key: 'accessToken', label: 'Access Token', placeholder: 'Snapchat access token', secret: true },
+  ],
 };
 
 const OUTSTAND_PLATFORM_OPTIONS = [
@@ -113,6 +155,11 @@ const OUTSTAND_PLATFORM_OPTIONS = [
   { id: 'youtube', label: 'YouTube' },
   { id: 'telegram', label: 'Telegram' },
   { id: 'linkedin', label: 'LinkedIn' },
+  { id: 'whatsapp', label: 'WhatsApp' },
+  { id: 'pinterest', label: 'Pinterest' },
+  { id: 'google_business', label: 'Google Business' },
+  { id: 'threads', label: 'Threads' },
+  { id: 'snapchat', label: 'Snapchat' },
 ] as const;
 
 type OutstandPlatformId = (typeof OUTSTAND_PLATFORM_OPTIONS)[number]['id'];

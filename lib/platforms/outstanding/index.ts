@@ -6,6 +6,11 @@ import { outstandingTikTokHandler } from './tiktok';
 import { outstandingYouTubeHandler } from './youtube';
 import { outstandingTelegramHandler } from './telegram';
 import { outstandingLinkedInHandler } from './linkedin';
+import { outstandingPinterestHandler } from './pinterest';
+import { outstandingGoogleBusinessHandler } from './google-business';
+import { outstandingThreadsHandler } from './threads';
+import { outstandingSnapchatHandler } from './snapchat';
+import { outstandingWhatsAppHandler } from './whatsapp';
 
 export const outstandingPlatformHandlers: Record<PlatformId, BasePlatformHandler> = {
   facebook: outstandingFacebookHandler,
@@ -15,4 +20,9 @@ export const outstandingPlatformHandlers: Record<PlatformId, BasePlatformHandler
   youtube: outstandingYouTubeHandler,
   telegram: outstandingTelegramHandler,
   linkedin: outstandingLinkedInHandler,
+  pinterest: outstandingPinterestHandler,
+  google_business: outstandingGoogleBusinessHandler,
+  threads: outstandingThreadsHandler,
+  snapchat: outstandingSnapchatHandler,
+  whatsapp: outstandingWhatsAppHandler,
 };

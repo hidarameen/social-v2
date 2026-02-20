@@ -12,6 +12,12 @@ const PLATFORM_TOKEN_MAP: Record<string, PlatformId> = {
   youtube: 'youtube',
   telegram: 'telegram',
   linkedin: 'linkedin',
+  pinterest: 'pinterest',
+  google_business: 'google_business',
+  googlebusiness: 'google_business',
+  threads: 'threads',
+  snapchat: 'snapchat',
+  whatsapp: 'whatsapp',
 };
 
 export const ALL_OUTSTAND_PLATFORM_IDS: PlatformId[] = [
@@ -22,6 +28,11 @@ export const ALL_OUTSTAND_PLATFORM_IDS: PlatformId[] = [
   'youtube',
   'telegram',
   'linkedin',
+  'pinterest',
+  'google_business',
+  'threads',
+  'snapchat',
+  'whatsapp',
 ];
 
 export type OutstandUserSettings = {

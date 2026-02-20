@@ -1,16 +1,136 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Shield, CheckCircle, Loader2, ExternalLink, Zap } from "lucide-react";
+import { X, Shield, Loader2, Eye, EyeOff, KeyRound, CheckCircle, Smartphone } from "lucide-react";
 import { getPlatformIcon, type PlatformInfo } from "./PlatformIcons";
+import { apiRequest } from "../services/api";
+
+const COUNTRY_DIAL_CODES = [
+  { value: "+1", label: "US +1", flag: "🇺🇸" },
+  { value: "+44", label: "UK +44", flag: "🇬🇧" },
+  { value: "+49", label: "DE +49", flag: "🇩🇪" },
+  { value: "+33", label: "FR +33", flag: "🇫🇷" },
+  { value: "+39", label: "IT +39", flag: "🇮🇹" },
+  { value: "+34", label: "ES +34", flag: "🇪🇸" },
+  { value: "+90", label: "TR +90", flag: "🇹🇷" },
+  { value: "+966", label: "SA +966", flag: "🇸🇦" },
+  { value: "+971", label: "AE +971", flag: "🇦🇪" },
+  { value: "+20", label: "EG +20", flag: "🇪🇬" },
+  { value: "+964", label: "IQ +964", flag: "🇮🇶" },
+  { value: "+963", label: "SY +963", flag: "🇸🇾" },
+  { value: "+962", label: "JO +962", flag: "🇯🇴" },
+  { value: "+974", label: "QA +974", flag: "🇶🇦" },
+  { value: "+965", label: "KW +965", flag: "🇰🇼" },
+];
+
+type ConnectFormState = {
+  accountName: string;
+  accountUsername: string;
+  accessToken: string;
+  apiKey: string;
+  apiSecret: string;
+  clientId: string;
+  clientSecret: string;
+  accessTokenSecret: string;
+  bearerToken: string;
+  webhookSecret: string;
+  pageId: string;
+  channelId: string;
+  botToken: string;
+  phoneCountryCode: string;
+  phoneNumber: string;
+  phoneCode: string;
+  twoFactorPassword: string;
+};
+
+const EMPTY_FORM: ConnectFormState = {
+  accountName: "",
+  accountUsername: "",
+  accessToken: "",
+  apiKey: "",
+  apiSecret: "",
+  clientId: "",
+  clientSecret: "",
+  accessTokenSecret: "",
+  bearerToken: "",
+  webhookSecret: "",
+  pageId: "",
+  channelId: "",
+  botToken: "",
+  phoneCountryCode: "+1",
+  phoneNumber: "",
+  phoneCode: "",
+  twoFactorPassword: "",
+};
+
+type ConnectFieldKey = keyof Omit<
+  ConnectFormState,
+  | "accountName"
+  | "accountUsername"
+  | "phoneCountryCode"
+  | "phoneNumber"
+  | "phoneCode"
+  | "twoFactorPassword"
+  | "pageId"
+  | "channelId"
+>;
+
+type ApiFieldConfig = {
+  key: ConnectFieldKey;
+  label: string;
+  secret?: boolean;
+  placeholder: string;
+};
+
+const COMMON_API_FIELDS: ApiFieldConfig[] = [
+  { key: "clientId", label: "Client ID", placeholder: "App client id" },
+  { key: "clientSecret", label: "Client Secret", secret: true, placeholder: "App client secret" },
+  { key: "apiKey", label: "API Key", placeholder: "API key" },
+  { key: "apiSecret", label: "API Secret", secret: true, placeholder: "API secret" },
+];
+
+function getApiFields(platformId: PlatformInfo["id"]): ApiFieldConfig[] {
+  if (platformId === "twitter") {
+    return [
+      ...COMMON_API_FIELDS,
+      { key: "accessTokenSecret", label: "Access Token Secret", secret: true, placeholder: "OAuth1 token secret" },
+      { key: "bearerToken", label: "Bearer Token", secret: true, placeholder: "Streaming bearer token" },
+      { key: "webhookSecret", label: "Webhook Secret", secret: true, placeholder: "Webhook/API secret" },
+    ];
+  }
+  if (platformId === "telegram") {
+    return [{ key: "botToken", label: "Bot Token", secret: true, placeholder: "Optional bot token" }];
+  }
+  return COMMON_API_FIELDS;
+}
+
+function trimValue(value: string): string {
+  return String(value || "").trim();
+}
+
+function compactCredentials(input: Record<string, string>): Record<string, string> {
+  const output: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const normalized = trimValue(value);
+    if (normalized) output[key] = normalized;
+  }
+  return output;
+}
+
+export interface ConnectPayload {
+  accountName: string;
+  accountUsername?: string;
+  accountId?: string;
+  accessToken?: string;
+  credentials?: Record<string, unknown>;
+  platformCredentialPayload?: Record<string, string>;
+}
 
 interface ConnectModalProps {
   platform: PlatformInfo | null;
   isOpen: boolean;
   onClose: () => void;
-  onConnect: (platform: PlatformInfo, username: string) => void;
+  onConnect: (platform: PlatformInfo, payload: ConnectPayload) => Promise<void> | void;
 }
-
-type Step = "info" | "connecting" | "auth" | "success";
 
 export function ConnectModal({
   platform,
@@ -18,62 +138,266 @@ export function ConnectModal({
   onClose,
   onConnect,
 }: ConnectModalProps) {
-  const [step, setStep] = useState<Step>("info");
-  const [progress, setProgress] = useState(0);
-  const [username, setUsername] = useState("");
+  const [form, setForm] = useState<ConnectFormState>(EMPTY_FORM);
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [telegramAuthId, setTelegramAuthId] = useState("");
+  const [telegramNeedsPassword, setTelegramNeedsPassword] = useState(false);
+  const [telegramPasswordHint, setTelegramPasswordHint] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingCredentials, setIsLoadingCredentials] = useState(false);
+  const [errorText, setErrorText] = useState("");
+  const [noticeText, setNoticeText] = useState("");
+
+  const currentApiFields = useMemo(() => (platform ? getApiFields(platform.id) : []), [platform]);
+
+  const telegramFullPhoneNumber = useMemo(() => {
+    const countryCode = trimValue(form.phoneCountryCode).replace(/\s+/g, "");
+    const localDigits = form.phoneNumber.replace(/\D/g, "");
+    if (!countryCode || !localDigits) return "";
+    const normalizedCountry = countryCode.startsWith("+") ? countryCode : `+${countryCode}`;
+    return `${normalizedCountry}${localDigits}`;
+  }, [form.phoneCountryCode, form.phoneNumber]);
+
+  useEffect(() => {
+    if (!isOpen || !platform) return;
+    setForm(EMPTY_FORM);
+    setShowAdvancedFields(false);
+    setShowSecrets(false);
+    setTelegramAuthId("");
+    setTelegramNeedsPassword(false);
+    setTelegramPasswordHint("");
+    setErrorText("");
+    setNoticeText("");
+
+    let cancelled = false;
+    setIsLoadingCredentials(true);
+    void apiRequest<any>(`/api/platform-credentials?platformId=${platform.id}`)
+      .then((payload) => {
+        if (cancelled) return;
+        const credentials = payload?.credentials || {};
+        setForm((prev) => ({
+          ...prev,
+          clientId: trimValue(credentials.clientId),
+          clientSecret: trimValue(credentials.clientSecret),
+          apiKey: trimValue(credentials.apiKey),
+          apiSecret: trimValue(credentials.apiSecret),
+          accessToken: trimValue(credentials.accessToken),
+          accessTokenSecret: trimValue(credentials.accessTokenSecret),
+          bearerToken: trimValue(credentials.bearerToken),
+          webhookSecret: trimValue(credentials.webhookSecret),
+          botToken: trimValue(credentials.botToken),
+        }));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNoticeText("لم يتم العثور على مفاتيح محفوظة لهذه المنصة.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingCredentials(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, platform]);
 
   useEffect(() => {
     if (!isOpen) {
-      setStep("info");
-      setProgress(0);
-      setUsername("");
+      setIsSubmitting(false);
     }
   }, [isOpen]);
-
-  const handleConnect = () => {
-    setStep("connecting");
-    setProgress(0);
-
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 2;
-      });
-    }, 30);
-
-    setTimeout(() => {
-      setStep("auth");
-    }, 1600);
-
-    setTimeout(() => {
-      setStep("success");
-    }, 3200);
-
-    setTimeout(() => {
-      if (platform) {
-        onConnect(platform, username.trim());
-      }
-    }, 4500);
-  };
 
   if (!platform) return null;
 
   const getPermissions = () => {
-    const base = [
-      "قراءة معلومات الحساب",
-      "نشر المحتوى نيابة عنك",
-    ];
+    const base = ["قراءة معلومات الحساب", "تنفيذ النشر التلقائي"];
     if (platform.id === "telegram") {
-      return [...base, "إدارة القنوات والمجموعات", "إرسال الرسائل عبر البوت"];
+      return [...base, "تسجيل دخول تيليجرام عبر رقم الهاتف", "التحقق بخطوتين عند الحاجة"];
     }
-    if (platform.id === "whatsapp") {
-      return [...base, "إرسال رسائل عبر Business API", "إدارة جهات الاتصال"];
-    }
-    return [...base, "إدارة التعليقات والرسائل", "الوصول إلى التحليلات"];
+    return [...base, "استخدام مفاتيح API/Token الخاصة بك", "الوصول إلى إحصائيات النشر"];
   };
+
+  const updateField = <T extends keyof ConnectFormState>(key: T, value: ConnectFormState[T]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const buildPlatformCredentialPayload = () =>
+    compactCredentials({
+      clientId: form.clientId,
+      clientSecret: form.clientSecret,
+      apiKey: form.apiKey,
+      apiSecret: form.apiSecret,
+      accessToken: form.accessToken,
+      accessTokenSecret: form.accessTokenSecret,
+      bearerToken: form.bearerToken,
+      webhookSecret: form.webhookSecret,
+      botToken: form.botToken,
+    });
+
+  const buildAccountCredentials = () => ({
+    ...buildPlatformCredentialPayload(),
+    ...(trimValue(form.pageId) ? { pageId: trimValue(form.pageId) } : {}),
+    ...(trimValue(form.channelId) ? { channelId: trimValue(form.channelId) } : {}),
+  });
+
+  const handleStartTelegramAuth = async () => {
+    if (!telegramFullPhoneNumber) {
+      setErrorText("يرجى إدخال رقم الهاتف مع رمز الدولة.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorText("");
+    setNoticeText("");
+    try {
+      const payload = await apiRequest<any>("/api/telegram/auth", {
+        method: "POST",
+        body: {
+          action: "start",
+          phoneNumber: telegramFullPhoneNumber,
+        },
+      });
+      const authId = trimValue(payload?.authId);
+      if (!authId) {
+        throw new Error("تعذر بدء جلسة التحقق.");
+      }
+      setTelegramAuthId(authId);
+      setTelegramNeedsPassword(false);
+      setTelegramPasswordHint("");
+      setNoticeText("تم إرسال كود التحقق. أدخل الكود لإكمال الربط.");
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : "فشل إرسال كود تيليجرام.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleVerifyTelegramAuth = async () => {
+    if (!telegramAuthId) {
+      setErrorText("ابدأ أولاً بإرسال كود التحقق.");
+      return;
+    }
+    if (!trimValue(form.phoneCode)) {
+      setErrorText("يرجى إدخال كود التحقق.");
+      return;
+    }
+    if (telegramNeedsPassword && !trimValue(form.twoFactorPassword)) {
+      setErrorText("يرجى إدخال كلمة مرور التحقق بخطوتين.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorText("");
+    setNoticeText("");
+    try {
+      const verifyPayload = await apiRequest<any>("/api/telegram/auth", {
+        method: "POST",
+        body: {
+          action: "verify",
+          authId: telegramAuthId,
+          phoneCode: trimValue(form.phoneCode),
+          password: telegramNeedsPassword ? trimValue(form.twoFactorPassword) : undefined,
+        },
+      });
+
+      if (verifyPayload?.requiresPassword || verifyPayload?.step === "password_required") {
+        setTelegramNeedsPassword(true);
+        setTelegramPasswordHint(trimValue(verifyPayload?.hint));
+        setNoticeText("الحساب يتطلب كلمة مرور 2FA. أدخل كلمة مرور تيليجرام السحابية.");
+        return;
+      }
+
+      const profile = verifyPayload?.profile;
+      const sessionString = trimValue(profile?.sessionString);
+      if (!sessionString) {
+        throw new Error("لم يتم إنشاء جلسة تيليجرام صالحة.");
+      }
+
+      await onConnect(platform, {
+        accountName: trimValue(profile?.accountName) || "Telegram User",
+        accountUsername: trimValue(profile?.accountUsername) || "telegram_user",
+        accountId: trimValue(profile?.accountId),
+        accessToken: sessionString,
+        credentials: {
+          authType: "user_session",
+          sessionString,
+          phoneNumber: trimValue(profile?.phoneNumber) || telegramFullPhoneNumber,
+          accountInfo: {
+            id: trimValue(profile?.accountId),
+            username: trimValue(profile?.accountUsername),
+            name: trimValue(profile?.accountName),
+            isBot: false,
+            phoneNumber: trimValue(profile?.phoneNumber) || telegramFullPhoneNumber,
+          },
+        },
+      });
+
+      setNoticeText("تم ربط حساب تيليجرام بنجاح.");
+      onClose();
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : "فشل التحقق من تيليجرام.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleManualConnect = async () => {
+    const accountName = trimValue(form.accountName);
+    const accessToken = trimValue(form.accessToken);
+
+    if (!accountName) {
+      setErrorText("يرجى إدخال اسم الحساب.");
+      return;
+    }
+    if (!accessToken) {
+      setErrorText("يرجى إدخال Access Token.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorText("");
+    setNoticeText("");
+    try {
+      await onConnect(platform, {
+        accountName,
+        accountUsername: trimValue(form.accountUsername) || accountName,
+        accessToken,
+        credentials: buildAccountCredentials(),
+        platformCredentialPayload: buildPlatformCredentialPayload(),
+      });
+      setNoticeText("تم ربط الحساب بنجاح.");
+      onClose();
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : "تعذر ربط الحساب.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (platform.id === "telegram") {
+      if (!telegramAuthId) {
+        await handleStartTelegramAuth();
+        return;
+      }
+      await handleVerifyTelegramAuth();
+      return;
+    }
+    await handleManualConnect();
+  };
+
+  const actionLabel =
+    platform.id === "telegram"
+      ? !telegramAuthId
+        ? "إرسال الكود"
+        : telegramNeedsPassword
+        ? "تأكيد كلمة المرور"
+        : "تأكيد الكود"
+      : "ربط الحساب";
 
   return (
     <AnimatePresence>
@@ -85,7 +409,6 @@ export function ConnectModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          {/* Backdrop */}
           <motion.div
             className="absolute inset-0 bg-slate-900/30 backdrop-blur-md"
             onClick={onClose}
@@ -94,7 +417,6 @@ export function ConnectModal({
             exit={{ opacity: 0 }}
           />
 
-          {/* Modal */}
           <motion.div
             className="relative w-full max-w-md rounded-3xl overflow-hidden bg-white max-h-[90vh] overflow-y-auto"
             style={{
@@ -104,8 +426,8 @@ export function ConnectModal({
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.8, y: 30, opacity: 0 }}
             transition={{ type: "spring", duration: 0.5 }}
+            dir="rtl"
           >
-            {/* Top Gradient Bar */}
             <motion.div
               className={`h-1.5 bg-gradient-to-r ${platform.gradient}`}
               initial={{ scaleX: 0 }}
@@ -114,7 +436,6 @@ export function ConnectModal({
               style={{ transformOrigin: "left" }}
             />
 
-            {/* Close Button */}
             <button
               onClick={onClose}
               className="absolute top-4 left-4 p-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-200 z-10"
@@ -123,255 +444,280 @@ export function ConnectModal({
             </button>
 
             <div className="p-6 sm:p-8 pt-12">
-              <AnimatePresence mode="wait">
-                {step === "info" && (
-                  <motion.div
-                    key="info"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="text-center"
+              <div className="text-center">
+                <motion.div
+                  className="w-20 h-20 mx-auto mb-5 rounded-2xl flex items-center justify-center"
+                  style={{
+                    background: `linear-gradient(135deg, ${platform.bgGlow}, rgba(248,250,252,0.8))`,
+                    border: `1px solid ${platform.bgGlow}`,
+                  }}
+                  animate={{
+                    boxShadow: [
+                      `0 4px 15px ${platform.bgGlow}`,
+                      `0 8px 30px ${platform.bgGlow}`,
+                      `0 4px 15px ${platform.bgGlow}`,
+                    ],
+                  }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  {getPlatformIcon(platform.id, 40)}
+                </motion.div>
+
+                <h2 className="text-slate-800 mb-1.5" style={{ fontFamily: "Space Grotesk, sans-serif" }}>
+                  ربط حساب {platform.name}
+                </h2>
+                <p className="text-slate-500 mb-5" style={{ fontSize: "0.875rem" }}>
+                  {platform.id === "telegram"
+                    ? "تسجيل دخول تيليجرام عبر رقم الهاتف بنفس منطق النسخة السابقة."
+                    : "اربط الحساب فعلياً عبر Access Token ومفاتيح API الخاصة بك."}
+                </p>
+              </div>
+
+              <div className="space-y-3 mb-5">
+                {getPermissions().map((permission) => (
+                  <div
+                    key={permission}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/70"
                   >
-                    {/* Platform Icon */}
-                    <motion.div
-                      className="w-20 h-20 mx-auto mb-6 rounded-2xl flex items-center justify-center"
-                      style={{
-                        background: `linear-gradient(135deg, ${platform.bgGlow}, rgba(248,250,252,0.8))`,
-                        border: `1px solid ${platform.bgGlow}`,
-                      }}
-                      animate={{
-                        boxShadow: [
-                          `0 4px 15px ${platform.bgGlow}`,
-                          `0 8px 30px ${platform.bgGlow}`,
-                          `0 4px 15px ${platform.bgGlow}`,
-                        ],
-                      }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                    >
-                      {getPlatformIcon(platform.id, 40)}
-                    </motion.div>
+                    <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span className="text-slate-600" style={{ fontSize: "0.75rem" }}>
+                      {permission}
+                    </span>
+                  </div>
+                ))}
+              </div>
 
-                    <h2 className="text-slate-800 mb-2" style={{ fontFamily: "Space Grotesk, sans-serif" }}>
-                      ربط حساب {platform.name}
-                    </h2>
-                    <p className="text-slate-500 mb-6" style={{ fontSize: "0.875rem" }}>
-                      {platform.id === "telegram"
-                        ? "سيتم ربط البوت مع قناتك أو مجموعتك"
-                        : platform.id === "whatsapp"
-                        ? "سيتم الربط عبر WhatsApp Business API"
-                        : `سيتم توجيهك إلى ${platform.name} للمصادقة عبر OAuth 2.0`}
-                    </p>
+              {isLoadingCredentials && (
+                <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500 text-xs flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  جاري تحميل مفاتيح API المحفوظة...
+                </div>
+              )}
 
-                    <div className="mb-5 text-right" dir="rtl">
+              {errorText && (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-600 text-xs">
+                  {errorText}
+                </div>
+              )}
+
+              {noticeText && (
+                <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 text-xs flex items-center gap-2">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {noticeText}
+                </div>
+              )}
+
+              {platform.id === "telegram" ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                      رقم الهاتف
+                    </label>
+                    <div className="grid grid-cols-[140px_1fr] gap-2">
+                      <select
+                        value={form.phoneCountryCode}
+                        onChange={(event) => updateField("phoneCountryCode", event.target.value)}
+                        className="py-2.5 px-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                        style={{ fontSize: "0.8125rem" }}
+                      >
+                        {COUNTRY_DIAL_CODES.map((country) => (
+                          <option key={country.value} value={country.value}>
+                            {country.flag} {country.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="relative">
+                        <Smartphone className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="tel"
+                          value={form.phoneNumber}
+                          onChange={(event) => updateField("phoneNumber", event.target.value)}
+                          placeholder="7xxxxxxxx"
+                          className="w-full py-2.5 px-3 pr-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                          style={{ fontSize: "0.875rem" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {telegramAuthId && (
+                    <div>
                       <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                        اسم الحساب
+                        كود التحقق
                       </label>
                       <input
                         type="text"
-                        value={username}
-                        onChange={(event) => setUsername(event.target.value)}
-                        placeholder="أدخل اسم الحساب"
+                        value={form.phoneCode}
+                        onChange={(event) => updateField("phoneCode", event.target.value)}
+                        placeholder="12345"
                         className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
                         style={{ fontSize: "0.875rem" }}
                       />
                     </div>
+                  )}
 
-                    {/* Permissions */}
-                    <div className="space-y-2.5 mb-6 text-right" dir="rtl">
-                      {getPermissions().map((perm, i) => (
-                        <motion.div
-                          key={i}
-                          className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-50"
-                          style={{ border: "1px solid rgba(0,0,0,0.05)" }}
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 * i }}
-                        >
-                          <Shield className="w-4 h-4 text-emerald-500 shrink-0" />
-                          <span className="text-slate-600" style={{ fontSize: "0.8125rem" }}>{perm}</span>
-                        </motion.div>
-                      ))}
-                    </div>
-
-                    {/* Connect Button */}
-                    <motion.button
-                      onClick={handleConnect}
-                      disabled={!username.trim()}
-                      className="w-full py-3.5 rounded-2xl text-white relative overflow-hidden group"
-                      style={{
-                        background: platform.color === "#FFFC00" || platform.color === "#14171A"
-                          ? "#1e293b"
-                          : platform.color,
-                        boxShadow: `0 4px 20px ${platform.bgGlow}`,
-                        opacity: username.trim() ? 1 : 0.55,
-                      }}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <span className="relative z-10 flex items-center justify-center gap-2">
-                        <ExternalLink className="w-5 h-5" />
-                        {platform.id === "telegram" ? "ربط البوت" : platform.id === "whatsapp" ? "ربط عبر API" : "ربط عبر OAuth"}
-                      </span>
-                      <motion.div
-                        className="absolute inset-0 bg-white/10"
-                        initial={{ x: "-100%" }}
-                        whileHover={{ x: "100%" }}
-                        transition={{ duration: 0.6 }}
-                      />
-                    </motion.button>
-
-                    <p className="mt-4 text-slate-400 flex items-center justify-center gap-1" style={{ fontSize: "0.75rem" }}>
-                      <Shield className="w-3 h-3" />
-                      اتصال آمن ومشفر
-                    </p>
-                  </motion.div>
-                )}
-
-                {step === "connecting" && (
-                  <motion.div
-                    key="connecting"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="text-center py-8"
-                  >
-                    <motion.div
-                      className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center bg-slate-50"
-                      style={{ border: "2px solid rgba(0,0,0,0.08)" }}
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                    >
-                      <Loader2 className="w-8 h-8 text-slate-600" />
-                    </motion.div>
-
-                    <h3 className="text-slate-800 mb-2">جاري الاتصال...</h3>
-                    <p className="text-slate-500 mb-6" style={{ fontSize: "0.875rem" }}>
-                      يتم إنشاء اتصال آمن مع {platform.name}
-                    </p>
-
-                    {/* Progress Bar */}
-                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full bg-gradient-to-r ${platform.gradient}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 0.1 }}
+                  {telegramNeedsPassword && (
+                    <div>
+                      <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                        كلمة مرور 2FA
+                      </label>
+                      <input
+                        type="password"
+                        value={form.twoFactorPassword}
+                        onChange={(event) => updateField("twoFactorPassword", event.target.value)}
+                        placeholder={telegramPasswordHint ? `Hint: ${telegramPasswordHint}` : "Telegram cloud password"}
+                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                        style={{ fontSize: "0.875rem" }}
+                        dir="ltr"
                       />
                     </div>
-                    <p className="mt-2 text-slate-400" style={{ fontSize: "0.75rem" }}>
-                      {Math.min(progress, 100)}%
-                    </p>
-                  </motion.div>
-                )}
-
-                {step === "auth" && (
-                  <motion.div
-                    key="auth"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="text-center py-8"
-                  >
-                    <motion.div
-                      className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center bg-amber-50 border-2 border-amber-200"
-                      animate={{
-                        scale: [1, 1.05, 1],
-                        borderColor: [
-                          "rgba(245,158,11,0.3)",
-                          "rgba(245,158,11,0.6)",
-                          "rgba(245,158,11,0.3)",
-                        ],
-                      }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                    >
-                      <Zap className="w-8 h-8 text-amber-600" />
-                    </motion.div>
-
-                    <h3 className="text-slate-800 mb-2">المصادقة</h3>
-                    <p className="text-slate-500" style={{ fontSize: "0.875rem" }}>
-                      يتم التحقق من صلاحيات الوصول...
-                    </p>
-
-                    <div className="mt-6 flex justify-center gap-1.5">
-                      {[0, 1, 2].map((i) => (
-                        <motion.div
-                          key={i}
-                          className="w-2 h-2 rounded-full bg-amber-500"
-                          animate={{ opacity: [0.3, 1, 0.3] }}
-                          transition={{
-                            duration: 1,
-                            repeat: Infinity,
-                            delay: i * 0.2,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-
-                {step === "success" && (
-                  <motion.div
-                    key="success"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="text-center py-8"
-                  >
-                    <motion.div
-                      className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center bg-emerald-50 border-2 border-emerald-200"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", delay: 0.2 }}
-                    >
-                      <motion.div
-                        initial={{ scale: 0, rotate: -180 }}
-                        animate={{ scale: 1, rotate: 0 }}
-                        transition={{ type: "spring", delay: 0.4 }}
-                      >
-                        <CheckCircle className="w-10 h-10 text-emerald-500" />
-                      </motion.div>
-                    </motion.div>
-
-                    <motion.h3
-                      className="text-slate-800 mb-2"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.5 }}
-                    >
-                      تم الربط بنجاح!
-                    </motion.h3>
-                    <motion.p
-                      className="text-slate-500"
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                      اسم الحساب
+                    </label>
+                    <input
+                      type="text"
+                      value={form.accountName}
+                      onChange={(event) => updateField("accountName", event.target.value)}
+                      placeholder="My Business Account"
+                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
                       style={{ fontSize: "0.875rem" }}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.6 }}
-                    >
-                      تم ربط حساب {platform.name} بنجاح
-                    </motion.p>
+                      dir="ltr"
+                    />
+                  </div>
 
-                    {/* Success particles */}
-                    {[...Array(8)].map((_, i) => (
-                      <motion.div
-                        key={i}
-                        className="absolute w-1.5 h-1.5 rounded-full bg-emerald-400"
-                        style={{
-                          left: "50%",
-                          top: "40%",
-                        }}
-                        initial={{ x: 0, y: 0, opacity: 1 }}
-                        animate={{
-                          x: Math.cos((i / 8) * Math.PI * 2) * 80,
-                          y: Math.sin((i / 8) * Math.PI * 2) * 80,
-                          opacity: 0,
-                          scale: 0,
-                        }}
-                        transition={{ duration: 0.8, delay: 0.3 }}
+                  <div>
+                    <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      value={form.accountUsername}
+                      onChange={(event) => updateField("accountUsername", event.target.value)}
+                      placeholder="@username"
+                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                      style={{ fontSize: "0.875rem" }}
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                      Access Token
+                    </label>
+                    <input
+                      type={showSecrets ? "text" : "password"}
+                      value={form.accessToken}
+                      onChange={(event) => updateField("accessToken", event.target.value)}
+                      placeholder="Access token"
+                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                      style={{ fontSize: "0.875rem", fontFamily: "monospace" }}
+                      dir="ltr"
+                    />
+                  </div>
+
+                  {platform.id === "facebook" && (
+                    <div>
+                      <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                        Page ID
+                      </label>
+                      <input
+                        type="text"
+                        value={form.pageId}
+                        onChange={(event) => updateField("pageId", event.target.value)}
+                        placeholder="Facebook page id"
+                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                        style={{ fontSize: "0.875rem" }}
+                        dir="ltr"
                       />
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    </div>
+                  )}
+
+                  {platform.id === "youtube" && (
+                    <div>
+                      <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                        Channel ID
+                      </label>
+                      <input
+                        type="text"
+                        value={form.channelId}
+                        onChange={(event) => updateField("channelId", event.target.value)}
+                        placeholder="YouTube channel id"
+                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                        style={{ fontSize: "0.875rem" }}
+                        dir="ltr"
+                      />
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedFields((prev) => !prev)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                    style={{ fontSize: "0.8125rem" }}
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    {showAdvancedFields ? "إخفاء مفاتيح API الإضافية" : "إظهار مفاتيح API الإضافية"}
+                  </button>
+
+                  {showAdvancedFields && (
+                    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowSecrets((prev) => !prev)}
+                        className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-700 transition-colors"
+                        style={{ fontSize: "0.75rem" }}
+                      >
+                        {showSecrets ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showSecrets ? "إخفاء القيم الحساسة" : "إظهار القيم الحساسة"}
+                      </button>
+
+                      {currentApiFields.map((field) => (
+                        <div key={field.key}>
+                          <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.75rem" }}>
+                            {field.label}
+                          </label>
+                          <input
+                            type={field.secret && !showSecrets ? "password" : "text"}
+                            value={form[field.key]}
+                            onChange={(event) => updateField(field.key, event.target.value)}
+                            placeholder={field.placeholder}
+                            className="w-full py-2 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                            style={{ fontSize: "0.8125rem", fontFamily: "monospace" }}
+                            dir="ltr"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <motion.button
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="w-full mt-6 py-3.5 rounded-2xl text-white relative overflow-hidden disabled:opacity-65"
+                style={{
+                  background: platform.color === "#FFFC00" || platform.color === "#14171A" ? "#1e293b" : platform.color,
+                  boxShadow: `0 4px 20px ${platform.bgGlow}`,
+                }}
+                whileHover={{ scale: isSubmitting ? 1 : 1.02 }}
+                whileTap={{ scale: isSubmitting ? 1 : 0.98 }}
+              >
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
+                  {actionLabel}
+                </span>
+              </motion.button>
+
+              <p className="mt-3 text-slate-400 flex items-center justify-center gap-1" style={{ fontSize: "0.75rem" }}>
+                <Shield className="w-3 h-3" />
+                اتصال آمن ومشفر
+              </p>
             </div>
           </motion.div>
         </motion.div>

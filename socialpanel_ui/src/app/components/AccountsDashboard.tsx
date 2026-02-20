@@ -19,7 +19,7 @@ import { toast, Toaster } from "sonner";
 import { AnimatedBackground } from "./AnimatedBackground";
 import { AccountCard, type ConnectedAccount } from "./AccountCard";
 import { PlatformSelector } from "./PlatformSelector";
-import { ConnectModal } from "./ConnectModal";
+import { ConnectModal, type ConnectPayload } from "./ConnectModal";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import {
   platforms,
@@ -28,6 +28,10 @@ import {
 import { apiRequest } from "../services/api";
 
 type SortMode = "newest" | "name" | "followers";
+
+function trimInput(value: unknown): string {
+  return String(value || "").trim();
+}
 
 function mapApiAccount(account: any): ConnectedAccount {
   const platform = platforms.find((p) => p.id === account.platformId) || platforms[0];
@@ -129,40 +133,62 @@ export function AccountsDashboard() {
     setTimeout(() => setShowConnectModal(true), 200);
   };
 
-  const handleConnect = (platform: PlatformInfo, username: string) => {
-    const normalizedName = String(username || "").trim();
+  const handleConnect = async (platform: PlatformInfo, payload: ConnectPayload) => {
+    const normalizedName = trimInput(payload.accountName);
     if (!normalizedName) {
       toast.error("يرجى إدخال اسم الحساب");
-      return;
+      throw new Error("يرجى إدخال اسم الحساب");
     }
-    void apiRequest<any>("/api/accounts", {
-      method: "POST",
-      body: {
-        platformId: platform.id,
-        accountName: normalizedName,
-        accountUsername: normalizedName,
-        isActive: true,
-      },
-    })
-      .then((payload) => {
-        const account = mapApiAccount(payload.account || {});
-        setAccounts((prev) => {
-          const next = prev.filter((item) => item.id !== account.id);
-          return [account, ...next];
-        });
-        setShowConnectModal(false);
-        toast.success(`تم ربط حساب ${platform.name} بنجاح`, {
-          style: {
-            background: "#fff",
-            border: "1px solid rgba(16,185,129,0.3)",
-            color: "#1e293b",
-            boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+
+    const accessToken = trimInput(payload.accessToken);
+    const accountUsername = trimInput(payload.accountUsername) || normalizedName;
+    const accountId = trimInput(payload.accountId);
+    const credentials =
+      payload.credentials && typeof payload.credentials === "object" ? payload.credentials : {};
+
+    try {
+      if (payload.platformCredentialPayload && Object.keys(payload.platformCredentialPayload).length > 0) {
+        await apiRequest("/api/platform-credentials", {
+          method: "PUT",
+          body: {
+            platformId: platform.id,
+            credentials: payload.platformCredentialPayload,
           },
         });
-      })
-      .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "تعذر ربط الحساب");
+      }
+
+      const response = await apiRequest<any>("/api/accounts", {
+        method: "POST",
+        body: {
+          platformId: platform.id,
+          accountName: normalizedName,
+          accountUsername,
+          accountId: accountId || undefined,
+          accessToken: accessToken || undefined,
+          credentials,
+          isActive: true,
+        },
       });
+
+      const account = mapApiAccount(response.account || {});
+      setAccounts((prev) => {
+        const next = prev.filter((item) => item.id !== account.id);
+        return [account, ...next];
+      });
+      setShowConnectModal(false);
+      toast.success(`تم ربط حساب ${platform.name} بنجاح`, {
+        style: {
+          background: "#fff",
+          border: "1px solid rgba(16,185,129,0.3)",
+          color: "#1e293b",
+          boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "تعذر ربط الحساب";
+      toast.error(message);
+      throw new Error(message);
+    }
   };
 
   const handleDelete = (id: string) => {
