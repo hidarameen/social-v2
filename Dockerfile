@@ -90,7 +90,6 @@ RUN test -f next-env.d.ts || printf '%s\n' \
   '// It is created here for container builds.' \
   > next-env.d.ts
 COPY app ./app
-COPY components ./components
 COPY lib ./lib
 COPY styles ./styles
 COPY public ./public
