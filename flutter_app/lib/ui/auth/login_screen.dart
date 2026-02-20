@@ -109,6 +109,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        StorageKeys.authSessionPersistence,
+        enabled ? '1' : '0',
+      );
       if (enabled) {
         await prefs.setString(StorageKeys.authRememberEnabled, '1');
         if (email.isNotEmpty) {
@@ -453,7 +457,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: Text(
-                        'Or continue with',
+                        i18n.isArabic ? 'أو أكمل بواسطة' : 'Or continue with',
                         style: TextStyle(
                           fontSize: 12,
                           color: scheme.onSurfaceVariant,
@@ -475,20 +479,18 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     SocialAuthButton(
                       provider: SocialProvider.google,
-                      label: 'Continue with Google',
+                      label: i18n.isArabic
+                          ? 'المتابعة عبر Google'
+                          : 'Continue with Google',
                       onPressed: () => _showSocialMessage('Google'),
                     ),
                     const SizedBox(height: 10),
                     SocialAuthButton(
                       provider: SocialProvider.apple,
-                      label: 'Continue with Apple',
+                      label: i18n.isArabic
+                          ? 'المتابعة عبر Apple'
+                          : 'Continue with Apple',
                       onPressed: () => _showSocialMessage('Apple'),
-                    ),
-                    const SizedBox(height: 10),
-                    SocialAuthButton(
-                      provider: SocialProvider.x,
-                      label: 'Continue with X',
-                      onPressed: () => _showSocialMessage('X'),
                     ),
                   ],
                 ),

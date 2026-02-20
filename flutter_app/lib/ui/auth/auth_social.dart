@@ -66,7 +66,7 @@ class _SocialAuthButtonState extends State<SocialAuthButton> {
   }
 }
 
-enum SocialProvider { google, apple, x }
+enum SocialProvider { google, apple }
 
 class _ProviderMark extends StatelessWidget {
   const _ProviderMark({required this.provider, required this.size});
@@ -76,7 +76,6 @@ class _ProviderMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     switch (provider) {
       case SocialProvider.google:
         return SizedBox.square(
@@ -88,18 +87,6 @@ class _ProviderMark extends StatelessWidget {
             ? Colors.white
             : Colors.black;
         return Icon(Icons.apple_rounded, size: size + 1, color: color);
-      case SocialProvider.x:
-        return SizedBox.square(
-          dimension: size,
-          child: CustomPaint(
-            painter: _XMarkPainter(
-              color: Color.alphaBlend(
-                scheme.onSurface.withValues(alpha: 0.14),
-                scheme.onSurface,
-              ),
-            ),
-          ),
-        );
     }
   }
 }
@@ -150,35 +137,4 @@ class _GoogleMarkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _GoogleMarkPainter oldDelegate) => false;
-}
-
-class _XMarkPainter extends CustomPainter {
-  const _XMarkPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = size.width * 0.16
-      ..color = color;
-
-    canvas.drawLine(
-      Offset(size.width * 0.16, size.height * 0.14),
-      Offset(size.width * 0.86, size.height * 0.88),
-      p,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.84, size.height * 0.14),
-      Offset(size.width * 0.14, size.height * 0.88),
-      p,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _XMarkPainter oldDelegate) {
-    return oldDelegate.color != color;
-  }
 }

@@ -137,6 +137,22 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   Future<void> _restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
+    final persistPreference =
+        (prefs.getString(StorageKeys.authSessionPersistence) ?? '').trim();
+    if (persistPreference == '0') {
+      await prefs.remove(StorageKeys.mobileAccessToken);
+      await prefs.remove(StorageKeys.mobileUserName);
+      await prefs.remove(StorageKeys.mobileUserEmail);
+      if (!mounted) return;
+      setState(() {
+        _token = null;
+        _name = '';
+        _email = '';
+        _loading = false;
+      });
+      return;
+    }
+
     final savedToken =
         (prefs.getString(StorageKeys.mobileAccessToken) ?? '').trim();
     final savedName = prefs.getString(StorageKeys.mobileUserName) ?? '';
@@ -175,9 +191,20 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   Future<void> _handleSignedIn(AuthSession session) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(StorageKeys.mobileAccessToken, session.accessToken);
-    await prefs.setString(StorageKeys.mobileUserName, session.name);
-    await prefs.setString(StorageKeys.mobileUserEmail, session.email);
+    final persistPreference =
+        (prefs.getString(StorageKeys.authSessionPersistence) ?? '').trim();
+    final shouldPersistSession =
+        persistPreference.isEmpty ? true : persistPreference == '1';
+
+    if (shouldPersistSession) {
+      await prefs.setString(StorageKeys.mobileAccessToken, session.accessToken);
+      await prefs.setString(StorageKeys.mobileUserName, session.name);
+      await prefs.setString(StorageKeys.mobileUserEmail, session.email);
+    } else {
+      await prefs.remove(StorageKeys.mobileAccessToken);
+      await prefs.remove(StorageKeys.mobileUserName);
+      await prefs.remove(StorageKeys.mobileUserEmail);
+    }
 
     if (!mounted) return;
     setState(() {

@@ -6,6 +6,9 @@ class StorageKeys {
   // Match web keys where possible so behavior is consistent across platforms.
   static const String authRememberEmail = 'socialflow_auth_remember_email';
   static const String authRememberEnabled = 'socialflow_auth_remember_enabled';
+  // '1' => keep login token across app restarts, '0' => runtime only.
+  static const String authSessionPersistence =
+      'socialflow_auth_session_persist';
   static const String authIntroSeen = 'socialflow_auth_intro_seen_v1';
   static const String locale = 'socialflow_locale_v1';
   static const String themeMode = 'theme'; // 'light' | 'dark'
