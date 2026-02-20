@@ -237,7 +237,7 @@ class _TopControls extends StatelessWidget {
             ),
           ),
           style: IconButton.styleFrom(
-            foregroundColor: isDark ? const Color(0xFFFFD36B) : scheme.primary,
+            foregroundColor: isDark ? scheme.secondary : scheme.primary,
             backgroundColor: Colors.transparent,
           ),
           constraints: const BoxConstraints.tightFor(width: 38, height: 38),

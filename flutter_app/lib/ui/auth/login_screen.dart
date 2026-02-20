@@ -113,6 +113,8 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setString(StorageKeys.authRememberEnabled, '1');
         if (email.isNotEmpty) {
           await prefs.setString(StorageKeys.authRememberEmail, email);
+        } else {
+          await prefs.remove(StorageKeys.authRememberEmail);
         }
       } else {
         await prefs.setString(StorageKeys.authRememberEnabled, '0');
