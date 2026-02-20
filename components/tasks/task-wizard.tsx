@@ -1054,13 +1054,13 @@ export function TaskWizard(props: { mode: WizardMode; taskId?: string }) {
   );
 
   return (
-    <div className="min-h-screen bg-background control-app">
+    <div className="min-h-screen bg-background control-app dashboard-shell-bg">
       <Sidebar />
       <Header />
 
-      <main className="control-main relative z-0 overflow-hidden">
+      <main className="control-main premium-main relative z-0 overflow-hidden">
         <div aria-hidden className="task-wizard-backdrop pointer-events-none absolute inset-0 -z-10" />
-        <div className="page-header animate-fade-up">
+        <div className="page-header premium-page-header animate-fade-up">
           <div>
             <p className="kpi-pill mb-3">{mode === 'edit' ? 'Edit Task' : 'New Task'}</p>
             <h1 className="page-title">{mode === 'edit' ? 'Edit Automation Task' : 'Create Automation Task'}</h1>
