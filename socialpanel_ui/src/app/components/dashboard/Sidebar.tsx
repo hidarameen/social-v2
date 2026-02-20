@@ -12,6 +12,7 @@ import {
   HelpCircle,
   Zap,
   Activity,
+  Send,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -34,6 +35,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
     { id: "dashboard", path: "/dashboard", icon: LayoutDashboard, label: t("الرئيسية", "Home") },
     { id: "accounts", path: "/dashboard/accounts", icon: Users, label: t("الحسابات", "Accounts") },
     { id: "tasks", path: "/dashboard/tasks", icon: Zap, label: t("المهام", "Tasks") },
+    { id: "manual-publish", path: "/dashboard/manual-publish", icon: Send, label: t("نشر يدوي", "Manual Publish") },
     { id: "executions", path: "/dashboard/executions", icon: Activity, label: t("التنفيذات", "Executions") },
     { id: "analytics", path: "/dashboard/analytics", icon: BarChart3, label: t("التحليلات", "Analytics") },
   ];

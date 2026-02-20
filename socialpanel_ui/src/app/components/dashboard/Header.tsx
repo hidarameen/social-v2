@@ -38,6 +38,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     "/dashboard": { title: t("الرئيسية", "Home"), subtitle: t("نظرة عامة على حساباتك وأدائك", "Overview of your accounts and performance") },
     "/dashboard/accounts": { title: t("إدارة الحسابات", "Accounts"), subtitle: t("ربط وإدارة حسابات التواصل الاجتماعي", "Connect & manage social accounts") },
     "/dashboard/tasks": { title: t("مهام الأتمتة", "Automation Tasks"), subtitle: t("إنشاء وإدارة مهام الربط التلقائي بين المنصات", "Create and manage automation tasks") },
+    "/dashboard/manual-publish": { title: t("النشر اليدوي", "Manual Publish"), subtitle: t("إنشاء منشورات يدوية ونشرها أو جدولتها", "Compose and publish or schedule posts manually") },
     "/dashboard/executions": { title: t("سجل التنفيذات", "Execution Log"), subtitle: t("تتبع جميع عمليات الأتمتة والتوجيهات", "Track all automation operations") },
     "/dashboard/analytics": { title: t("التحليلات", "Analytics"), subtitle: t("تتبع الأداء والإحصائيات التفصيلية", "Track performance and detailed statistics") },
     "/dashboard/settings": { title: t("الإعدادات", "Settings"), subtitle: t("تخصيص حسابك وتفضيلاتك", "Customize your account and preferences") },

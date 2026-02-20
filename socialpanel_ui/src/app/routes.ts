@@ -12,6 +12,7 @@ import { TasksPage } from "./components/dashboard/TasksPage";
 import { ExecutionLog } from "./components/dashboard/ExecutionLog";
 import { AnalyticsPageNew } from "./components/dashboard/AnalyticsPageNew";
 import { SettingsPageFull } from "./components/dashboard/SettingsPage";
+import { ManualPublishPage } from "./components/dashboard/ManualPublishPage";
 import { HelpPage } from "./components/dashboard/PlaceholderPages";
 import { NotFound } from "./components/NotFound";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
@@ -34,6 +35,7 @@ export const router = createHashRouter([
           { index: true, Component: DashboardHome },
           { path: "accounts", Component: AccountsDashboard },
           { path: "tasks", Component: TasksPage },
+          { path: "manual-publish", Component: ManualPublishPage },
           { path: "executions", Component: ExecutionLog },
           { path: "analytics", Component: AnalyticsPageNew },
           { path: "settings", Component: SettingsPageFull },
