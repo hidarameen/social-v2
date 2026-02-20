@@ -2,7 +2,7 @@ const MOBILE_TOKEN_KEY = "socialflow_mobile_access_token";
 const PENDING_VERIFY_EMAIL_KEY = "socialflow_pending_verify_email";
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   auth?: boolean;
 };
@@ -63,6 +63,7 @@ export async function apiRequest<T = any>(path: string, options: RequestOptions 
 
   const response = await fetch(path, {
     method,
+    credentials: "include",
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
@@ -75,4 +76,3 @@ export async function apiRequest<T = any>(path: string, options: RequestOptions 
   }
   return payload as T;
 }
-

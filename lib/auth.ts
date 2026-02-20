@@ -130,6 +130,14 @@ export const authOptions: NextAuthOptions = {
 };
 
 export async function getAuthUser() {
+  // In browser-originated requests both cookie session and bearer token might exist.
+  // Prefer NextAuth session first so stale localStorage bearer tokens do not resolve to a different user.
+  const { getServerSession } = await import('next-auth');
+  const session = await getServerSession(authOptions);
+  if (session?.user?.id) {
+    return session.user;
+  }
+
   try {
     const headerStore = await headers();
     const rawAuthorization = headerStore.get('authorization') || '';
@@ -149,8 +157,5 @@ export async function getAuthUser() {
   } catch {
     // Non-fatal: continue to normal NextAuth session resolution.
   }
-
-  const { getServerSession } = await import('next-auth');
-  const session = await getServerSession(authOptions);
-  return session?.user ?? null;
+  return null;
 }

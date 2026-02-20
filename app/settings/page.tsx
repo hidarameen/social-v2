@@ -258,6 +258,32 @@ function sanitizeForSave(form: PlatformCredentialForm): Record<string, string> {
   return output;
 }
 
+async function requestPlatformCredentials<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers || {});
+  if (!headers.has('Content-Type') && init?.body !== undefined) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (typeof window !== 'undefined') {
+    const token = (window.localStorage.getItem('socialflow_mobile_access_token') || '').trim();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
+
+  const res = await fetch(path, {
+    ...init,
+    headers,
+    credentials: 'include',
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Platform credential request failed');
+  }
+  return data as T;
+}
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const { resolvedTheme, setTheme } = useTheme();
@@ -308,11 +334,7 @@ export default function SettingsPage() {
     let cancelled = false;
     async function loadCredentials() {
       try {
-        const res = await fetch('/api/platform-credentials', { cache: 'no-store' });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Failed to load platform credentials');
-        }
+        const data = await requestPlatformCredentials<any>('/api/platform-credentials');
         if (cancelled) return;
 
         const next = buildEmptyCredentialMap();
@@ -400,18 +422,16 @@ export default function SettingsPage() {
     try {
       setCredentialsSaving(true);
       const payload = sanitizeForSave(activeCredentials);
-      const res = await fetch('/api/platform-credentials', {
+      await requestPlatformCredentials<any>('/api/platform-credentials', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           platformId: selectedPlatform,
           credentials: payload,
         }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to save credentials');
-      }
+      const data = await requestPlatformCredentials<any>(
+        `/api/platform-credentials?platformId=${selectedPlatform}`
+      );
       setCredentialMap(prev => ({
         ...prev,
         [selectedPlatform]: normalizeCredentialForm(data.credentials ?? {}),

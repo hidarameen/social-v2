@@ -263,13 +263,16 @@ export function SettingsPageFull() {
 
     try {
       setApiKeysSavingPlatform(platformId);
-      const payload = await apiRequest<any>("/api/platform-credentials", {
+      await apiRequest<any>("/api/platform-credentials", {
         method: "PUT",
         body: {
           platformId,
           credentials: sanitizeForSave(current),
         },
       });
+      const payload = await apiRequest<any>(
+        `/api/platform-credentials?platformId=${platformId}`
+      );
       const nextEntry = normalizeCredentialEntry(
         platformId,
         payload?.credentials as Record<string, unknown>
@@ -304,10 +307,19 @@ export function SettingsPageFull() {
           credentials: {},
         },
       });
+      const payload = await apiRequest<any>(
+        `/api/platform-credentials?platformId=${platformId}`
+      );
       setApiKeys((prev) =>
         prev.map((entry) =>
           entry.platform === platformId
-            ? { ...normalizeCredentialEntry(platformId), isVisible: entry.isVisible }
+            ? {
+                ...normalizeCredentialEntry(
+                  platformId,
+                  payload?.credentials as Record<string, unknown>
+                ),
+                isVisible: entry.isVisible,
+              }
             : entry
         )
       );
