@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Shield, Loader2, CheckCircle, Smartphone } from "lucide-react";
-import { getPlatformIcon, type PlatformInfo } from "./PlatformIcons";
+import { getPlatformIcon, platforms, type PlatformInfo, type PlatformType } from "./PlatformIcons";
 import { apiRequest } from "../services/api";
 import { useTheme } from "../context/ThemeContext";
 
@@ -130,6 +130,8 @@ interface ConnectModalProps {
   platform: PlatformInfo | null;
   isOpen: boolean;
   onClose: () => void;
+  connectedPlatforms?: PlatformType[];
+  onSelectPlatform?: (platform: PlatformInfo | null) => void;
   onConnect: (platform: PlatformInfo, payload: ConnectPayload) => Promise<void> | void;
 }
 
@@ -137,6 +139,8 @@ export function ConnectModal({
   platform,
   isOpen,
   onClose,
+  connectedPlatforms = [],
+  onSelectPlatform,
   onConnect,
 }: ConnectModalProps) {
   const { language, t } = useTheme();
@@ -145,6 +149,7 @@ export function ConnectModal({
   const [telegramNeedsPassword, setTelegramNeedsPassword] = useState(false);
   const [telegramPasswordHint, setTelegramPasswordHint] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [connectionStep, setConnectionStep] = useState<"idle" | "preparing" | "authorizing" | "redirecting">("idle");
   const [isLoadingCredentials, setIsLoadingCredentials] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [noticeText, setNoticeText] = useState("");
@@ -206,14 +211,17 @@ export function ConnectModal({
   useEffect(() => {
     if (!isOpen) {
       setIsSubmitting(false);
+      setConnectionStep("idle");
     }
   }, [isOpen]);
 
-  if (!platform) return null;
+  useEffect(() => {
+    setConnectionStep("idle");
+  }, [platform?.id]);
 
-  const getPermissions = () => {
+  const getPermissions = (targetPlatform: PlatformInfo) => {
     const base = ["قراءة معلومات الحساب", "تنفيذ النشر التلقائي"];
-    if (platform.id === "telegram") {
+    if (targetPlatform.id === "telegram") {
       return [...base, "تسجيل دخول تيليجرام عبر رقم الهاتف", "التحقق بخطوتين عند الحاجة"];
     }
     return [...base, "استخدام مفاتيح API/Token الخاصة بك", "الوصول إلى إحصائيات النشر"];
@@ -235,6 +243,8 @@ export function ConnectModal({
       webhookSecret: form.webhookSecret,
       botToken: form.botToken,
     });
+
+  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
   const handleStartTelegramAuth = async () => {
     if (!telegramFullPhoneNumber) {
@@ -339,15 +349,21 @@ export function ConnectModal({
 
   const handleOAuthConnect = async () => {
     setIsSubmitting(true);
+    setConnectionStep("preparing");
     setErrorText("");
     setNoticeText("");
     try {
+      await wait(180);
+      setConnectionStep("authorizing");
+      await wait(220);
       await onConnect(platform, {
         platformCredentialPayload: buildPlatformCredentialPayload(),
       });
+      setConnectionStep("redirecting");
       setNoticeText(t("جاري تحويلك لإكمال الربط...", "Redirecting to complete the connection..."));
       onClose();
     } catch (error) {
+      setConnectionStep("idle");
       setErrorText(error instanceof Error ? error.message : "تعذر بدء عملية الربط.");
     } finally {
       setIsSubmitting(false);
@@ -355,6 +371,10 @@ export function ConnectModal({
   };
 
   const handleSubmit = async () => {
+    if (!platform) {
+      setErrorText(t("اختر منصة أولاً.", "Select a platform first."));
+      return;
+    }
     if (platform.id === "telegram") {
       if (!telegramAuthId) {
         await handleStartTelegramAuth();
@@ -366,19 +386,32 @@ export function ConnectModal({
     await handleOAuthConnect();
   };
 
-  const actionLabel =
-    platform.id === "telegram"
+  const actionLabel = !platform
+    ? t("اختر منصة", "Select Platform")
+    : platform.id === "telegram"
       ? !telegramAuthId
         ? t("إرسال الكود", "Send Code")
         : telegramNeedsPassword
-        ? t("تأكيد كلمة المرور", "Confirm Password")
-        : t("تأكيد الكود", "Confirm Code")
+          ? t("تأكيد كلمة المرور", "Confirm Password")
+          : t("تأكيد الكود", "Confirm Code")
       : t("ربط الحساب", "Connect Account");
 
   const nonTelegramSavedKeyCount = currentApiFields.reduce(
     (count, field) => (trimValue(form[field.key]) ? count + 1 : count),
     0
   );
+  const oauthStepOrder: Array<"preparing" | "authorizing" | "redirecting"> = [
+    "preparing",
+    "authorizing",
+    "redirecting",
+  ];
+  const oauthStepLabels = {
+    preparing: t("تهيئة الطلب", "Preparing request"),
+    authorizing: t("بدء المصادقة", "Starting authorization"),
+    redirecting: t("التحويل للمنصة", "Redirecting to platform"),
+  } as const;
+  const currentOauthStepIndex =
+    connectionStep === "idle" ? -1 : oauthStepOrder.indexOf(connectionStep as (typeof oauthStepOrder)[number]);
 
   return (
     <AnimatePresence>
@@ -399,9 +432,9 @@ export function ConnectModal({
           />
 
           <motion.div
-            className="relative w-full max-w-md rounded-3xl overflow-hidden bg-white dark:bg-slate-800 max-h-[90vh] overflow-y-auto"
+            className={`relative w-full ${platform ? "max-w-md" : "max-w-2xl"} rounded-3xl overflow-hidden bg-white dark:bg-slate-800 max-h-[90vh] overflow-y-auto`}
             style={{
-              boxShadow: `0 25px 60px rgba(0,0,0,0.15), 0 0 40px ${platform.bgGlow}`,
+              boxShadow: `0 25px 60px rgba(0,0,0,0.15), 0 0 40px ${platform ? platform.bgGlow : "rgba(139,92,246,0.14)"}`,
             }}
             initial={{ scale: 0.8, y: 30, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
@@ -410,7 +443,7 @@ export function ConnectModal({
             dir={language === "ar" ? "rtl" : "ltr"}
           >
             <motion.div
-              className={`h-1.5 bg-gradient-to-r ${platform.gradient}`}
+              className={`h-1.5 bg-gradient-to-r ${platform ? platform.gradient : "from-violet-500 via-purple-500 to-pink-500"}`}
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
               transition={{ duration: 0.6, delay: 0.2 }}
@@ -424,176 +457,265 @@ export function ConnectModal({
               <X className="w-4 h-4 text-slate-500 dark:text-slate-300" />
             </button>
 
-            <div className="p-6 sm:p-8 pt-12">
-              <div className="text-center">
-                <motion.div
-                  className="w-20 h-20 mx-auto mb-5 rounded-2xl flex items-center justify-center"
-                  style={{
-                    background: `linear-gradient(135deg, ${platform.bgGlow}, rgba(248,250,252,0.8))`,
-                    border: `1px solid ${platform.bgGlow}`,
-                  }}
-                  animate={{
-                    boxShadow: [
-                      `0 4px 15px ${platform.bgGlow}`,
-                      `0 8px 30px ${platform.bgGlow}`,
-                      `0 4px 15px ${platform.bgGlow}`,
-                    ],
-                  }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  {getPlatformIcon(platform.id, 40)}
-                </motion.div>
-
-                <h2 className="text-slate-800 dark:text-slate-100 mb-1.5" style={{ fontFamily: "Space Grotesk, sans-serif" }}>
-                  {t(`ربط حساب ${platform.name}`, `Connect ${platform.name}`)}
-                </h2>
-                <p className="text-slate-500 dark:text-slate-400 mb-5" style={{ fontSize: "0.875rem" }}>
-                  {platform.id === "telegram"
-                    ? t("تسجيل دخول تيليجرام عبر رقم الهاتف بنفس منطق النسخة السابقة.", "Telegram login via phone number using the same previous logic.")
-                    : t("الربط يتم تلقائياً باستخدام مفاتيح API المحفوظة وطريقة API المحددة من الإعدادات.", "Connection runs automatically using saved API credentials and configured API method.")}
-                </p>
-              </div>
-
-              <div className="space-y-3 mb-5">
-                {getPermissions().map((permission) => (
-                  <div
-                    key={permission}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200/70 dark:border-slate-600"
-                  >
-                    <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span className="text-slate-600 dark:text-slate-300" style={{ fontSize: "0.75rem" }}>
-                      {permission}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {isLoadingCredentials && (
-                <div className="mb-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 px-3 py-2 text-slate-500 dark:text-slate-300 text-xs flex items-center gap-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  {t("جاري تحميل مفاتيح API المحفوظة...", "Loading saved API credentials...")}
+            {!platform ? (
+              <div className="p-6 sm:p-8 pt-12">
+                <div className="text-center mb-5">
+                  <h2 className="text-slate-800 dark:text-slate-100 mb-1.5" style={{ fontFamily: "Space Grotesk, sans-serif" }}>
+                    {t("اختر المنصة", "Choose Platform")}
+                  </h2>
+                  <p className="text-slate-500 dark:text-slate-400" style={{ fontSize: "0.875rem" }}>
+                    {t("اختر منصة لفتح لوحة الربط مباشرة بدون نوافذ متكررة.", "Select a platform to open one persistent connect panel.")}
+                  </p>
                 </div>
-              )}
 
-              {errorText && (
-                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-600 text-xs">
-                  {errorText}
-                </div>
-              )}
-
-              {noticeText && (
-                <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 text-xs flex items-center gap-2">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  {noticeText}
-                </div>
-              )}
-
-              {platform.id === "telegram" ? (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                      {t("رقم الهاتف", "Phone Number")}
-                    </label>
-                    <div className="grid grid-cols-[140px_1fr] gap-2">
-                      <select
-                        value={form.phoneCountryCode}
-                        onChange={(event) => updateField("phoneCountryCode", event.target.value)}
-                        className="py-2.5 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                        style={{ fontSize: "0.8125rem" }}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {platforms.map((item, i) => {
+                    const isConnected = connectedPlatforms.includes(item.id);
+                    return (
+                      <motion.button
+                        key={item.id}
+                        type="button"
+                        className="text-left rounded-2xl p-3.5 bg-white border border-slate-200 hover:border-violet-300 hover:bg-slate-50 transition-colors"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        whileHover={{ y: -1 }}
+                        whileTap={{ scale: 0.99 }}
+                        onClick={() => {
+                          setErrorText("");
+                          setNoticeText("");
+                          onSelectPlatform?.(item);
+                        }}
                       >
-                        {COUNTRY_DIAL_CODES.map((country) => (
-                          <option key={country.value} value={country.value}>
-                            {country.flag} {country.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="relative">
-                        <Smartphone className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${item.bgGlow}, rgba(248,250,252,0.8))`, border: `1px solid ${item.bgGlow}` }}>
+                            {getPlatformIcon(item.id, 20)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="inline-flex items-center gap-1.5">
+                              <p className="text-slate-700 truncate" style={{ fontSize: "0.84rem" }}>
+                                {item.name}
+                              </p>
+                              {isConnected ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> : null}
+                            </div>
+                            <p className="text-slate-400 truncate" style={{ fontSize: "0.72rem" }}>
+                              {item.description}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 sm:p-8 pt-12">
+                <div className="text-center">
+                  <motion.div
+                    className="w-20 h-20 mx-auto mb-5 rounded-2xl flex items-center justify-center"
+                    style={{
+                      background: `linear-gradient(135deg, ${platform.bgGlow}, rgba(248,250,252,0.8))`,
+                      border: `1px solid ${platform.bgGlow}`,
+                    }}
+                    animate={{
+                      boxShadow: [
+                        `0 4px 15px ${platform.bgGlow}`,
+                        `0 8px 30px ${platform.bgGlow}`,
+                        `0 4px 15px ${platform.bgGlow}`,
+                      ],
+                    }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    {getPlatformIcon(platform.id, 40)}
+                  </motion.div>
+
+                  <h2 className="text-slate-800 dark:text-slate-100 mb-1.5" style={{ fontFamily: "Space Grotesk, sans-serif" }}>
+                    {t(`ربط حساب ${platform.name}`, `Connect ${platform.name}`)}
+                  </h2>
+                  <p className="text-slate-500 dark:text-slate-400 mb-5" style={{ fontSize: "0.875rem" }}>
+                    {platform.id === "telegram"
+                      ? t("تسجيل دخول تيليجرام عبر رقم الهاتف بنفس منطق النسخة السابقة.", "Telegram login via phone number using the same previous logic.")
+                      : t("الربط يتم تلقائياً باستخدام مفاتيح API المحفوظة وطريقة API المحددة من الإعدادات.", "Connection runs automatically using saved API credentials and configured API method.")}
+                  </p>
+                  {onSelectPlatform ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectPlatform(null)}
+                      className="mb-4 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      style={{ fontSize: "0.72rem" }}
+                    >
+                      {t("تغيير المنصة", "Change platform")}
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="space-y-3 mb-5">
+                  {getPermissions(platform).map((permission) => (
+                    <div
+                      key={permission}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200/70 dark:border-slate-600"
+                    >
+                      <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span className="text-slate-600 dark:text-slate-300" style={{ fontSize: "0.75rem" }}>
+                        {permission}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {isLoadingCredentials && (
+                  <div className="mb-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 px-3 py-2 text-slate-500 dark:text-slate-300 text-xs flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    {t("جاري تحميل مفاتيح API المحفوظة...", "Loading saved API credentials...")}
+                  </div>
+                )}
+
+                {errorText && (
+                  <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-600 text-xs">
+                    {errorText}
+                  </div>
+                )}
+
+                {noticeText && (
+                  <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 text-xs flex items-center gap-2">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {noticeText}
+                  </div>
+                )}
+
+                {platform.id !== "telegram" ? (
+                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
+                    {oauthStepOrder.map((step, index) => {
+                      const done = currentOauthStepIndex > index;
+                      const active = currentOauthStepIndex === index;
+                      return (
+                        <div
+                          key={step}
+                          className={`flex items-center gap-2 text-xs ${
+                            done ? "text-emerald-700" : active ? "text-blue-700" : "text-slate-400"
+                          }`}
+                        >
+                          {done ? (
+                            <CheckCircle className="w-3.5 h-3.5" />
+                          ) : active ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <span className="w-3.5 h-3.5 rounded-full border border-slate-300 inline-block" />
+                          )}
+                          <span>{oauthStepLabels[step]}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {platform.id === "telegram" ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                        {t("رقم الهاتف", "Phone Number")}
+                      </label>
+                      <div className="grid grid-cols-[140px_1fr] gap-2">
+                        <select
+                          value={form.phoneCountryCode}
+                          onChange={(event) => updateField("phoneCountryCode", event.target.value)}
+                          className="py-2.5 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                          style={{ fontSize: "0.8125rem" }}
+                        >
+                          {COUNTRY_DIAL_CODES.map((country) => (
+                            <option key={country.value} value={country.value}>
+                              {country.flag} {country.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="relative">
+                          <Smartphone className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="tel"
+                            value={form.phoneNumber}
+                            onChange={(event) => updateField("phoneNumber", event.target.value)}
+                            placeholder="7xxxxxxxx"
+                            className="w-full py-2.5 px-3 pr-9 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                            style={{ fontSize: "0.875rem" }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {telegramAuthId && (
+                      <div>
+                        <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                          {t("كود التحقق", "Verification Code")}
+                        </label>
                         <input
-                          type="tel"
-                          value={form.phoneNumber}
-                          onChange={(event) => updateField("phoneNumber", event.target.value)}
-                          placeholder="7xxxxxxxx"
-                          className="w-full py-2.5 px-3 pr-9 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                          type="text"
+                          value={form.phoneCode}
+                          onChange={(event) => updateField("phoneCode", event.target.value)}
+                          placeholder="12345"
+                          className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
                           style={{ fontSize: "0.875rem" }}
                         />
                       </div>
-                    </div>
+                    )}
+
+                    {telegramNeedsPassword && (
+                      <div>
+                        <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                          {t("كلمة مرور 2FA", "2FA Password")}
+                        </label>
+                        <input
+                          type="password"
+                          value={form.twoFactorPassword}
+                          onChange={(event) => updateField("twoFactorPassword", event.target.value)}
+                          placeholder={telegramPasswordHint ? `Hint: ${telegramPasswordHint}` : "Telegram cloud password"}
+                          className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                          style={{ fontSize: "0.875rem" }}
+                          dir="ltr"
+                        />
+                      </div>
+                    )}
                   </div>
-
-                  {telegramAuthId && (
-                    <div>
-                      <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                        {t("كود التحقق", "Verification Code")}
-                      </label>
-                      <input
-                        type="text"
-                        value={form.phoneCode}
-                        onChange={(event) => updateField("phoneCode", event.target.value)}
-                        placeholder="12345"
-                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                        style={{ fontSize: "0.875rem" }}
-                      />
-                    </div>
-                  )}
-
-                  {telegramNeedsPassword && (
-                    <div>
-                      <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                        {t("كلمة مرور 2FA", "2FA Password")}
-                      </label>
-                      <input
-                        type="password"
-                        value={form.twoFactorPassword}
-                        onChange={(event) => updateField("twoFactorPassword", event.target.value)}
-                        placeholder={telegramPasswordHint ? `Hint: ${telegramPasswordHint}` : "Telegram cloud password"}
-                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
-                        style={{ fontSize: "0.875rem" }}
-                        dir="ltr"
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-700/40 p-3">
-                    <p className="text-slate-700 dark:text-slate-200" style={{ fontSize: "0.8125rem" }}>
-                      {t("سيتم استخدام المفاتيح المحفوظة تلقائياً لهذه المنصة ثم استخراج بيانات الحساب بدون إدخال يدوي.", "Saved credentials will be used automatically for this platform and account data will be fetched without manual input.")}
-                    </p>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1" style={{ fontSize: "0.75rem" }}>
-                      {t(`المفاتيح المكتشفة: ${nonTelegramSavedKeyCount}`, `Detected keys: ${nonTelegramSavedKeyCount}`)}
-                    </p>
-                    {nonTelegramSavedKeyCount === 0 ? (
-                      <p className="text-amber-600 mt-1" style={{ fontSize: "0.75rem" }}>
-                        {t("لم يتم العثور على مفاتيح منصة محفوظة. تأكد من إعدادها من صفحة Settings.", "No saved platform keys found. Make sure they are configured in Settings.")}
+                ) : (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-700/40 p-3">
+                      <p className="text-slate-700 dark:text-slate-200" style={{ fontSize: "0.8125rem" }}>
+                        {t("سيتم استخدام المفاتيح المحفوظة تلقائياً لهذه المنصة ثم استخراج بيانات الحساب بدون إدخال يدوي.", "Saved credentials will be used automatically for this platform and account data will be fetched without manual input.")}
                       </p>
-                    ) : null}
+                      <p className="text-slate-500 dark:text-slate-400 mt-1" style={{ fontSize: "0.75rem" }}>
+                        {t(`المفاتيح المكتشفة: ${nonTelegramSavedKeyCount}`, `Detected keys: ${nonTelegramSavedKeyCount}`)}
+                      </p>
+                      {nonTelegramSavedKeyCount === 0 ? (
+                        <p className="text-amber-600 mt-1" style={{ fontSize: "0.75rem" }}>
+                          {t("لم يتم العثور على مفاتيح منصة محفوظة. تأكد من إعدادها من صفحة Settings.", "No saved platform keys found. Make sure they are configured in Settings.")}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <motion.button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="w-full mt-6 py-3.5 rounded-2xl text-white relative overflow-hidden disabled:opacity-65"
-                style={{
-                  background: platform.color === "#FFFC00" || platform.color === "#14171A" ? "#1e293b" : platform.color,
-                  boxShadow: `0 4px 20px ${platform.bgGlow}`,
-                }}
-                whileHover={{ scale: isSubmitting ? 1 : 1.02 }}
-                whileTap={{ scale: isSubmitting ? 1 : 0.98 }}
-              >
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
-                  {actionLabel}
-                </span>
-              </motion.button>
+                <motion.button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="w-full mt-6 py-3.5 rounded-2xl text-white relative overflow-hidden disabled:opacity-65"
+                  style={{
+                    background: platform.color === "#FFFC00" || platform.color === "#14171A" ? "#1e293b" : platform.color,
+                    boxShadow: `0 4px 20px ${platform.bgGlow}`,
+                  }}
+                  whileHover={{ scale: isSubmitting ? 1 : 1.02 }}
+                  whileTap={{ scale: isSubmitting ? 1 : 0.98 }}
+                >
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
+                    {actionLabel}
+                  </span>
+                </motion.button>
 
-              <p className="mt-3 text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1" style={{ fontSize: "0.75rem" }}>
-                <Shield className="w-3 h-3" />
-                {t("اتصال آمن ومشفر", "Secure encrypted connection")}
-              </p>
-            </div>
+                <p className="mt-3 text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1" style={{ fontSize: "0.75rem" }}>
+                  <Shield className="w-3 h-3" />
+                  {t("اتصال آمن ومشفر", "Secure encrypted connection")}
+                </p>
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}

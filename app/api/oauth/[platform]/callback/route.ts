@@ -379,10 +379,6 @@ export async function GET(
 ) {
   try {
     const { platform: platformParam } = await params;
-    const user = await getAuthUser();
-    if (!user?.id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
 
     const platform = getOAuthPlatform(platformParam);
     if (!platform) {
@@ -395,9 +391,15 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Missing OAuth state cookie' }, { status: 400 });
     }
     const parsed = safeJsonParse<OAuthStateCookie>(raw);
-    if (!parsed || parsed.userId !== user.id) {
+    if (!parsed?.userId) {
       return NextResponse.json({ success: false, error: 'Invalid OAuth state' }, { status: 400 });
     }
+
+    const authUser = await getAuthUser();
+    if (authUser?.id && authUser.id !== parsed.userId) {
+      return NextResponse.json({ success: false, error: 'Invalid OAuth state' }, { status: 400 });
+    }
+    const userId = authUser?.id || parsed.userId;
 
     const search = request.nextUrl.searchParams;
     const state = search.get('state');
@@ -416,7 +418,7 @@ export async function GET(
         return NextResponse.json({ success: false, error: 'Unsupported Buffer platform' }, { status: 400 });
       }
 
-      const bufferSettings = await getBufferUserSettings(user.id);
+      const bufferSettings = await getBufferUserSettings(userId);
       if (!bufferSettings.accessToken) {
         return NextResponse.json(
           { success: false, error: 'Missing Buffer access token. Add it in Settings before connecting accounts.' },
@@ -436,7 +438,7 @@ export async function GET(
         throw new Error(`No ${platform.name} accounts found in Buffer. Complete authorization and try again.`);
       }
 
-      const userAccounts = await db.getUserAccounts(user.id);
+      const userAccounts = await db.getUserAccounts(userId);
       let linkedCount = 0;
       for (const bufferAccount of bufferAccounts) {
         const mapped = mapBufferAccountInfo(bufferAccount);
@@ -472,7 +474,7 @@ export async function GET(
         } else {
           await db.createAccount({
             id: randomUUID(),
-            userId: user.id,
+            userId,
             platformId: platform.id,
             accountName: mapped.accountName,
             accountUsername: mapped.accountUsername,
@@ -512,12 +514,12 @@ export async function GET(
     }
 
     const redirectUri = `${appBaseUrl}/api/oauth/${platform.id}/callback`;
-    const tokenResponse = await exchangeToken(user.id, platform.id, code, redirectUri, parsed.codeVerifier);
+    const tokenResponse = await exchangeToken(userId, platform.id, code, redirectUri, parsed.codeVerifier);
     const accessToken = tokenResponse.access_token;
     const refreshToken = tokenResponse.refresh_token;
 
     const accountInfo = await fetchAccountInfo(platform.id, accessToken, tokenResponse);
-    const userAccounts = await db.getUserAccounts(user.id);
+    const userAccounts = await db.getUserAccounts(userId);
 
     if (platform.id === 'facebook') {
       const pages = Array.isArray((accountInfo as any)?.pages)
@@ -584,7 +586,7 @@ export async function GET(
 
         await db.createAccount({
           id: randomUUID(),
-          userId: user.id,
+          userId,
           platformId: 'facebook',
           accountName: pageName,
           accountUsername: pageName,
@@ -645,7 +647,7 @@ export async function GET(
             : undefined;
         await db.createAccount({
           id: randomUUID(),
-          userId: user.id,
+          userId,
           platformId: platform.id,
           accountName,
           accountUsername,

@@ -19,7 +19,6 @@ import {
 import { toast, Toaster } from "sonner";
 import { AnimatedBackground } from "./AnimatedBackground";
 import { AccountCard, type ConnectedAccount } from "./AccountCard";
-import { PlatformSelector } from "./PlatformSelector";
 import { ConnectModal, type ConnectPayload } from "./ConnectModal";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import {
@@ -65,7 +64,6 @@ export function AccountsDashboard() {
     }
   });
   const [accountsLoading, setAccountsLoading] = useState<boolean>(accounts.length === 0);
-  const [showPlatformSelector, setShowPlatformSelector] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformInfo | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ConnectedAccount | null>(null);
@@ -159,10 +157,9 @@ export function AccountsDashboard() {
     [accounts]
   );
 
-  const handlePlatformSelect = (platform: PlatformInfo) => {
-    setSelectedPlatform(platform);
-    setShowPlatformSelector(false);
-    setTimeout(() => setShowConnectModal(true), 200);
+  const openConnectModal = () => {
+    setSelectedPlatform(null);
+    setShowConnectModal(true);
   };
 
   const handleConnect = async (platform: PlatformInfo, payload: ConnectPayload) => {
@@ -380,7 +377,7 @@ export function AccountsDashboard() {
           </div>
 
           <motion.button
-            onClick={() => setShowPlatformSelector(true)}
+            onClick={openConnectModal}
             className="px-5 sm:px-6 py-3 rounded-2xl bg-slate-800 text-white flex items-center gap-2 relative overflow-hidden group shrink-0"
             style={{ boxShadow: "0 4px 20px rgba(15,23,42,0.25)" }}
             whileHover={{ scale: 1.03, boxShadow: "0 8px 30px rgba(15,23,42,0.35)" }}
@@ -640,7 +637,7 @@ export function AccountsDashboard() {
             {/* Add More Card - only in grid mode */}
             {viewMode === "grid" && (
               <motion.button
-                onClick={() => setShowPlatformSelector(true)}
+                onClick={openConnectModal}
                 className="relative rounded-2xl min-h-[200px] group bg-white/50 backdrop-blur-sm transition-all"
                 style={{
                   border: "2px dashed rgba(0,0,0,0.1)",
@@ -716,7 +713,7 @@ export function AccountsDashboard() {
               </motion.button>
             ) : (
               <motion.button
-                onClick={() => setShowPlatformSelector(true)}
+                onClick={openConnectModal}
                 className="px-6 py-3 rounded-2xl bg-slate-800 text-white inline-flex items-center gap-2"
                 style={{ boxShadow: "0 4px 20px rgba(15,23,42,0.25)" }}
                 whileHover={{ scale: 1.05 }}
@@ -733,7 +730,7 @@ export function AccountsDashboard() {
       {/* Add button for list mode */}
       {viewMode === "list" && filteredAccounts.length > 0 && (
         <motion.button
-          onClick={() => setShowPlatformSelector(true)}
+          onClick={openConnectModal}
           className="w-full mt-4 py-3 rounded-2xl bg-white/60 border-2 border-dashed border-slate-200 text-slate-500 hover:bg-white hover:border-violet-300 hover:text-violet-600 transition-all flex items-center justify-center gap-2"
           whileHover={{ boxShadow: "0 4px 16px rgba(139,92,246,0.08)" }}
           whileTap={{ scale: 0.99 }}
@@ -766,17 +763,15 @@ export function AccountsDashboard() {
       </motion.div>
 
       {/* Modals */}
-      <PlatformSelector
-        isOpen={showPlatformSelector}
-        onClose={() => setShowPlatformSelector(false)}
-        onSelect={handlePlatformSelect}
-        connectedPlatforms={connectedPlatformIds}
-      />
-
       <ConnectModal
         platform={selectedPlatform}
         isOpen={showConnectModal}
-        onClose={() => setShowConnectModal(false)}
+        connectedPlatforms={connectedPlatformIds}
+        onSelectPlatform={setSelectedPlatform}
+        onClose={() => {
+          setShowConnectModal(false);
+          setSelectedPlatform(null);
+        }}
         onConnect={handleConnect}
       />
 
