@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 
 import 'app_state.dart';
 import 'firebase_options.dart';
-import 'ui/auth/premium_loading_screen.dart';
 import 'ui/sf_theme.dart';
+import 'ui/unified/premium_loading_screen.dart';
 import 'ui/unified/unified_panel_screen.dart';
 
 Future<void> main() async {

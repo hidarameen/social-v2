@@ -88,14 +88,14 @@ class _PremiumLoadingScreenState extends State<PremiumLoadingScreen>
                               end: Alignment.bottomRight,
                               colors: [
                                 Color.alphaBlend(
-                                  scheme.primary.withValues(alpha: 
-                                    isDark ? 0.70 : 0.94,
+                                  scheme.primary.withValues(
+                                    alpha: isDark ? 0.70 : 0.94,
                                   ),
                                   scheme.secondary,
                                 ),
                                 Color.alphaBlend(
-                                  scheme.tertiary.withValues(alpha: 
-                                    isDark ? 0.26 : 0.14,
+                                  scheme.tertiary.withValues(
+                                    alpha: isDark ? 0.26 : 0.14,
                                   ),
                                   scheme.primary,
                                 ),
@@ -103,8 +103,8 @@ class _PremiumLoadingScreenState extends State<PremiumLoadingScreen>
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: scheme.primary.withValues(alpha: 
-                                  isDark ? 0.42 : 0.24,
+                                color: scheme.primary.withValues(
+                                  alpha: isDark ? 0.42 : 0.24,
                                 ),
                                 blurRadius: 26,
                                 offset: const Offset(0, 10),
@@ -148,7 +148,8 @@ class _PremiumLoadingScreenState extends State<PremiumLoadingScreen>
                       child: LinearProgressIndicator(
                         minHeight: 7,
                         color: scheme.primary,
-                        backgroundColor: scheme.onSurface.withValues(alpha: 0.12),
+                        backgroundColor:
+                            scheme.onSurface.withValues(alpha: 0.12),
                       ),
                     ),
                   ),
