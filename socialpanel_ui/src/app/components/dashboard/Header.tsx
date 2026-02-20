@@ -41,8 +41,8 @@ export function Header({ onMenuClick }: HeaderProps) {
     "/dashboard/manual-publish": {
       title: t("النشر اليدوي", "Manual Publish"),
       subtitle: t(
-        "تم نقل النشر اليدوي إلى مسار المهام داخل اللوحة الموحدة",
-        "Manual publishing now lives in the unified tasks flow"
+        "لوحة النشر اليدوي الكاملة لإدارة النشر المباشر والمجدول",
+        "Full manual publishing workspace for instant and scheduled publishing"
       ),
     },
     "/dashboard/executions": { title: t("سجل التنفيذات", "Execution Log"), subtitle: t("تتبع جميع عمليات الأتمتة والتوجيهات", "Track all automation operations") },

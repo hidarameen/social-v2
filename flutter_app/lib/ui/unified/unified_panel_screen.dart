@@ -25,7 +25,7 @@ class _UnifiedPanelScreenState extends State<UnifiedPanelScreen> {
   void initState() {
     super.initState();
     final route = '/';
-    final uri = AppConfig.resolvePath('/social-v2/index.html').replace(
+    final uri = AppConfig.resolvePath('/index.html').replace(
       fragment: route,
     );
     _targetUrl = uri.toString();

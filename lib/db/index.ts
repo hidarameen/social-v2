@@ -74,6 +74,37 @@ export interface Task {
     template?: string;
     includeMedia?: boolean;
     enableYtDlp?: boolean;
+    manualPublish?: {
+      enabled?: boolean;
+      sourceAccountId?: string;
+      sourceLabel?: string;
+      sourcePlatformId?: string;
+      mode?: 'now' | 'schedule';
+      message?: string;
+      mediaUrl?: string;
+      mediaType?: 'image' | 'video' | 'link';
+      platformOverrides?: Record<
+        string,
+        {
+          message?: string;
+          mediaUrl?: string;
+          mediaType?: 'image' | 'video' | 'link';
+        }
+      >;
+      createdAt?: string;
+    };
+    automationSources?: Array<{
+      accountId?: string;
+      platformId?: string;
+      accountLabel?: string;
+      triggerId?: string;
+    }>;
+    automationTargets?: Array<{
+      accountId?: string;
+      platformId?: string;
+      accountLabel?: string;
+      actionId?: string;
+    }>;
     twitterActions?: {
       post?: boolean;
       reply?: boolean;
@@ -1255,11 +1286,24 @@ class Database {
         ...mapExecution(row),
         taskName: row.task_name,
         sourceAccountName:
-          row.source_account_name || row.source_account_username || undefined,
-        sourcePlatformId: row.source_platform_id || undefined,
+          row.source_account_name ||
+          row.source_account_username ||
+          row.response_data?.manualSourceLabel ||
+          undefined,
+        sourcePlatformId:
+          row.source_platform_id ||
+          row.response_data?.manualSourcePlatformId ||
+          row.response_data?.sourcePlatformId ||
+          undefined,
         targetAccountName:
-          row.target_account_name || row.target_account_username || undefined,
-        targetPlatformId: row.target_platform_id || undefined,
+          row.target_account_name ||
+          row.target_account_username ||
+          row.response_data?.targetAccountName ||
+          undefined,
+        targetPlatformId:
+          row.target_platform_id ||
+          row.response_data?.targetPlatformId ||
+          undefined,
       })),
     };
   }

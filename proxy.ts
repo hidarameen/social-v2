@@ -5,6 +5,7 @@ function isBypassPath(pathname: string): boolean {
   if (pathname.startsWith('/api/')) return true;
   if (pathname.startsWith('/_next/')) return true;
   if (pathname.startsWith('/_vercel/')) return true;
+  if (pathname === '/index.html') return true;
   if (pathname.startsWith('/social-v2')) return true;
   if (pathname === '/social-v2-app.html') return true;
   if (pathname.startsWith('/public/')) return true;
@@ -60,7 +61,7 @@ export function proxy(request: NextRequest) {
   }
 
   const nextUrl = request.nextUrl.clone();
-  nextUrl.pathname = '/social-v2-app.html';
+  nextUrl.pathname = '/index.html';
   nextUrl.search = '';
 
   const mappedRoute = normalizeV2Route(pathname);

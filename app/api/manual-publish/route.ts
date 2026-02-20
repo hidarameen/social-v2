@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 import { getAuthUser } from '@/lib/auth';
-import { db, type PlatformAccount } from '@/lib/db';
-import type { PlatformId, PostRequest } from '@/lib/platforms/types';
+import { db, type PlatformAccount, type TaskExecution } from '@/lib/db';
+import type { PlatformId } from '@/lib/platforms/types';
 import { getPlatformHandlerForUser } from '@/lib/platforms/handlers';
 import {
   getPlatformApiProviderForUser,
@@ -18,6 +19,8 @@ import type {
   ManualPublishExecutionResult,
   ManualPublishMediaType,
 } from '@/lib/manual-publish/types';
+import { taskProcessor } from '@/lib/services/task-processor';
+import { executionQueue } from '@/lib/services/execution-queue';
 
 export const runtime = 'nodejs';
 
@@ -36,7 +39,7 @@ const MANAGED_PLATFORM_IDS = new Set<PlatformId>([
   'whatsapp',
 ]);
 
-const MANUAL_PUBLISH_REQUIRED_PROVIDER: PlatformApiProvider = 'buffer';
+const MANUAL_SOURCE_ACCOUNT_PREFIX = 'manual-source:';
 
 const publishSchema = z.object({
   message: z.string().max(10000).default(''),
@@ -62,6 +65,11 @@ function asMediaType(value: unknown): ManualPublishMediaType | undefined {
   return value === 'image' || value === 'video' || value === 'link' ? value : undefined;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
 function extractPlatformOverride(
   rawOverrides: Record<string, unknown>,
   platformId: PlatformId
@@ -78,11 +86,57 @@ function extractPlatformOverride(
   };
 }
 
-function getProviderRequirementIssue(provider: PlatformApiProvider, platformId: PlatformId): string | null {
-  if (provider === MANUAL_PUBLISH_REQUIRED_PROVIDER) {
-    return null;
+function normalizePlatformOverrides(
+  rawOverrides: Record<string, unknown>
+): Record<string, { message?: string; mediaUrl?: string; mediaType?: ManualPublishMediaType }> {
+  const normalized: Record<
+    string,
+    { message?: string; mediaUrl?: string; mediaType?: ManualPublishMediaType }
+  > = {};
+  for (const platformId of MANAGED_PLATFORM_IDS) {
+    const override = extractPlatformOverride(rawOverrides, platformId);
+    if (!override.message && !override.mediaUrl && !override.mediaType) continue;
+    normalized[platformId] = override;
   }
-  return `Manual publish for ${platformId} requires Buffer provider. Enable Buffer for this platform in Settings.`;
+  return normalized;
+}
+
+function inferTaskContentType(mediaUrl?: string, mediaType?: ManualPublishMediaType): 'text' | 'image' | 'video' | 'link' {
+  const normalizedUrl = trimString(mediaUrl).toLowerCase();
+  if (!normalizedUrl) return 'text';
+  if (mediaType) return mediaType;
+  if (/\.(mp4|mov|webm|m4v|avi)($|\?)/.test(normalizedUrl)) return 'video';
+  if (/\.(png|jpe?g|gif|webp)($|\?)/.test(normalizedUrl)) return 'image';
+  return 'link';
+}
+
+function mapExecutionToManualResult(
+  execution: TaskExecution,
+  accountById: Map<string, PlatformAccount>,
+  fallbackPlatformId: PlatformId
+): ManualPublishExecutionResult {
+  const responseData = asRecord(execution.responseData);
+  const targetAccount = accountById.get(execution.targetAccount);
+  const platformId =
+    asManagedPlatformId(targetAccount?.platformId || trimString(responseData.targetPlatformId)) ||
+    fallbackPlatformId;
+
+  return {
+    accountId: execution.targetAccount,
+    platformId,
+    accountName:
+      trimString(targetAccount?.accountName) ||
+      trimString(responseData.targetAccountName) ||
+      execution.targetAccount,
+    success: execution.status === 'success',
+    postId: trimString(responseData.postId) || undefined,
+    url: trimString(responseData.url) || undefined,
+    scheduledFor: trimString(responseData.scheduledFor) || undefined,
+    error:
+      execution.status === 'failed'
+        ? trimString(execution.error || responseData.failureReason) || 'Failed to publish.'
+        : undefined,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -125,6 +179,7 @@ export async function POST(request: NextRequest) {
       parsed.data.platformOverrides && typeof parsed.data.platformOverrides === 'object'
         ? (parsed.data.platformOverrides as Record<string, unknown>)
         : {};
+    const normalizedOverrides = normalizePlatformOverrides(overrideMap);
 
     let bufferSettingsPromise: Promise<Awaited<ReturnType<typeof getBufferUserSettings>>> | null = null;
     async function getBufferSettingsCached() {
@@ -190,14 +245,9 @@ export async function POST(request: NextRequest) {
           scheduledAt,
         });
 
-        const provider = await getPlatformApiProviderForUser(userId, platformId);
-        const providerIssue = getProviderRequirementIssue(provider, platformId);
-        if (providerIssue) {
-          issues.push({ level: 'error', message: providerIssue });
-        }
-
         if (parsed.data.dryRun && parsed.data.checkConnectivity && issues.every((issue) => issue.level !== 'error')) {
           try {
+            const provider = await getPlatformApiProviderForUser(userId, platformId);
             const handler = await getPlatformHandlerForUser(userId, platformId);
             const token = await resolvePublishTokenForAccount(account, provider);
             if (!token) {
@@ -254,89 +304,99 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const results: ManualPublishExecutionResult[] = [];
+    const sourcePlatformId = asManagedPlatformId(selectedAccounts[0]?.platformId || '') || 'facebook';
+    const manualSourceAccountId = `${MANUAL_SOURCE_ACCOUNT_PREFIX}${randomUUID()}`;
+    const manualSourceLabel = 'Manual Source';
 
-    for (const account of selectedAccounts) {
-      const platformId = asManagedPlatformId(account.platformId);
-      if (!platformId) {
-        continue;
-      }
-
-      const override = extractPlatformOverride(overrideMap, platformId);
-      const content = override.message ?? parsed.data.message;
-      const mediaUrl = override.mediaUrl ?? parsed.data.mediaUrl;
-      const mediaType = override.mediaType ?? parsed.data.mediaType ?? 'link';
-
-      const post: PostRequest = {
-        content,
-        media: mediaUrl
-          ? {
-              type: mediaType,
-              url: mediaUrl,
-            }
-          : undefined,
-        scheduleTime: parsed.data.mode === 'schedule' ? scheduledAt : undefined,
-      };
-
-      try {
-        const provider = await getPlatformApiProviderForUser(userId, platformId);
-        const providerIssue = getProviderRequirementIssue(provider, platformId);
-        if (providerIssue) {
-          results.push({
-            accountId: account.id,
-            platformId,
-            accountName: account.accountName,
-            success: false,
-            error: providerIssue,
-          });
-          continue;
-        }
-
-        const handler = await getPlatformHandlerForUser(userId, platformId);
-        const token = await resolvePublishTokenForAccount(account, provider);
-        if (!token) {
-          results.push({
-            accountId: account.id,
-            platformId,
-            accountName: account.accountName,
-            success: false,
-            error: 'Missing publish token for selected account.',
-          });
-          continue;
-        }
-
-        const response =
-          parsed.data.mode === 'schedule'
-            ? await handler.schedulePost(post, token)
-            : await handler.publishPost(post, token);
-
-        results.push({
+    const manualTask = await db.createTask({
+      id: randomUUID(),
+      userId,
+      name:
+        parsed.data.mode === 'schedule'
+          ? `Manual Scheduled Publish ${new Date().toISOString()}`
+          : `Manual Publish ${new Date().toISOString()}`,
+      description: parsed.data.message,
+      sourceAccounts: [manualSourceAccountId],
+      targetAccounts: uniqueAccountIds,
+      contentType: inferTaskContentType(parsed.data.mediaUrl, parsed.data.mediaType),
+      status: 'active',
+      executionType: parsed.data.mode === 'schedule' ? 'scheduled' : 'immediate',
+      scheduleTime: parsed.data.mode === 'schedule' ? scheduledAt : undefined,
+      recurringPattern: undefined,
+      recurringDays: undefined,
+      filters: undefined,
+      transformations: {
+        manualPublish: {
+          enabled: true,
+          sourceAccountId: manualSourceAccountId,
+          sourceLabel: manualSourceLabel,
+          sourcePlatformId,
+          mode: parsed.data.mode,
+          message: parsed.data.message,
+          mediaUrl: parsed.data.mediaUrl,
+          mediaType: parsed.data.mediaType,
+          platformOverrides: normalizedOverrides,
+          createdAt: new Date().toISOString(),
+        },
+        automationSources: [
+          {
+            accountId: manualSourceAccountId,
+            platformId: sourcePlatformId,
+            accountLabel: manualSourceLabel,
+            triggerId: 'manual_compose',
+          },
+        ],
+        automationTargets: selectedAccounts.map((account) => ({
           accountId: account.id,
-          platformId,
-          accountName: account.accountName,
-          success: Boolean(response.success),
-          postId: response.postId,
-          url: response.url,
-          scheduledFor: response.scheduledFor ? response.scheduledFor.toISOString() : undefined,
-          error: response.error,
-        });
-      } catch (error) {
-        results.push({
-          accountId: account.id,
-          platformId,
-          accountName: account.accountName,
-          success: false,
-          error: error instanceof Error ? error.message : 'Failed to publish.',
-        });
-      }
+          platformId: account.platformId,
+          accountLabel: account.accountName,
+          actionId: 'manual_publish',
+        })),
+      },
+      executionCount: 0,
+      failureCount: 0,
+      lastError: undefined,
+    });
+
+    if (parsed.data.mode === 'schedule') {
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        taskId: manualTask.id,
+        partialSuccess: false,
+        succeededCount: 0,
+        failedCount: 0,
+        mode: parsed.data.mode,
+        scheduledAt: scheduledAt?.toISOString(),
+        results: [],
+        validation: validationReport,
+      });
     }
+
+    const executionResults = await executionQueue.enqueue({
+      label: 'api:manual-publish',
+      userId,
+      taskId: manualTask.id,
+      dedupeKey: `api:manual-publish:${userId}:${manualTask.id}`,
+      run: async () => taskProcessor.processTask(manualTask.id),
+    });
+
+    const results = executionResults.map((execution) =>
+      mapExecutionToManualResult(execution, accountById, sourcePlatformId)
+    );
 
     const succeededCount = results.filter((item) => item.success).length;
     const failedCount = results.length - succeededCount;
     const partialSuccess = succeededCount > 0 && failedCount > 0;
 
+    await db.updateTask(manualTask.id, {
+      status: failedCount > 0 ? 'error' : 'completed',
+      lastError: failedCount > 0 ? 'One or more manual publish targets failed.' : undefined,
+    });
+
     return NextResponse.json({
       success: succeededCount > 0 && failedCount === 0,
+      taskId: manualTask.id,
       partialSuccess,
       succeededCount,
       failedCount,
