@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
 import {
@@ -14,14 +14,58 @@ import { useAuth } from "../../context/AuthContext";
 import { SocialLoginButtons } from "./SocialLoginButtons";
 import { AnimatedBackground } from "../AnimatedBackground";
 
+const REMEMBER_EMAIL_KEY = "socialflow_auth_remember_email";
+const REMEMBER_ENABLED_KEY = "socialflow_auth_remember_enabled";
+
+function readRememberPreferences() {
+  if (typeof window === "undefined") {
+    return { rememberEnabled: false, rememberedEmail: "" };
+  }
+  try {
+    return {
+      rememberEnabled: window.localStorage.getItem(REMEMBER_ENABLED_KEY) === "1",
+      rememberedEmail: window.localStorage.getItem(REMEMBER_EMAIL_KEY) || "",
+    };
+  } catch {
+    return { rememberEnabled: false, rememberedEmail: "" };
+  }
+}
+
+function writeRememberPreferences(rememberEnabled: boolean, email: string) {
+  if (typeof window === "undefined") return;
+  try {
+    if (rememberEnabled) {
+      const normalized = String(email || "").trim().toLowerCase();
+      window.localStorage.setItem(REMEMBER_ENABLED_KEY, "1");
+      if (normalized) {
+        window.localStorage.setItem(REMEMBER_EMAIL_KEY, normalized);
+      } else {
+        window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      }
+      return;
+    }
+    window.localStorage.removeItem(REMEMBER_ENABLED_KEY);
+    window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
+  } catch {
+    // Ignore storage write failures.
+  }
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const { login, socialLogin, isLoading, authError, clearAuthError } = useAuth();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => {
+    const { rememberEnabled, rememberedEmail } = readRememberPreferences();
+    return rememberEnabled ? rememberedEmail : "";
+  });
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => readRememberPreferences().rememberEnabled);
+
+  useEffect(() => {
+    writeRememberPreferences(rememberMe, email);
+  }, [email, rememberMe]);
 
   const validate = () => {
     const errs: typeof errors = {};
@@ -37,7 +81,9 @@ export function LoginPage() {
     e.preventDefault();
     if (!validate()) return;
     clearAuthError();
-    const success = await login(email, password);
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    writeRememberPreferences(rememberMe, normalizedEmail);
+    const success = await login(normalizedEmail, password);
     if (success) navigate("/dashboard");
   };
 
