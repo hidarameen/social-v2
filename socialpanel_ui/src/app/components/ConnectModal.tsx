@@ -20,11 +20,13 @@ export function ConnectModal({
 }: ConnectModalProps) {
   const [step, setStep] = useState<Step>("info");
   const [progress, setProgress] = useState(0);
+  const [username, setUsername] = useState("");
 
   useEffect(() => {
     if (!isOpen) {
       setStep("info");
       setProgress(0);
+      setUsername("");
     }
   }, [isOpen]);
 
@@ -52,21 +54,7 @@ export function ConnectModal({
 
     setTimeout(() => {
       if (platform) {
-        const usernames: Record<string, string> = {
-          facebook: "BusinessPage",
-          instagram: "@creative_studio",
-          twitter: "@tech_brand",
-          linkedin: "Company Profile",
-          tiktok: "@viral_content",
-          youtube: "Channel Pro",
-          pinterest: "@design_pins",
-          google_business: "My Business",
-          threads: "@thread_master",
-          snapchat: "@snap_brand",
-          telegram: "@channel_bot",
-          whatsapp: "+966 50 XXX XXXX",
-        };
-        onConnect(platform, usernames[platform.id] || "@user");
+        onConnect(platform, username.trim());
       }
     }, 4500);
   };
@@ -174,6 +162,20 @@ export function ConnectModal({
                         : `سيتم توجيهك إلى ${platform.name} للمصادقة عبر OAuth 2.0`}
                     </p>
 
+                    <div className="mb-5 text-right" dir="rtl">
+                      <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                        اسم الحساب
+                      </label>
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                        placeholder="أدخل اسم الحساب"
+                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                        style={{ fontSize: "0.875rem" }}
+                      />
+                    </div>
+
                     {/* Permissions */}
                     <div className="space-y-2.5 mb-6 text-right" dir="rtl">
                       {getPermissions().map((perm, i) => (
@@ -194,12 +196,14 @@ export function ConnectModal({
                     {/* Connect Button */}
                     <motion.button
                       onClick={handleConnect}
+                      disabled={!username.trim()}
                       className="w-full py-3.5 rounded-2xl text-white relative overflow-hidden group"
                       style={{
                         background: platform.color === "#FFFC00" || platform.color === "#14171A"
                           ? "#1e293b"
                           : platform.color,
                         boxShadow: `0 4px 20px ${platform.bgGlow}`,
+                        opacity: username.trim() ? 1 : 0.55,
                       }}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}

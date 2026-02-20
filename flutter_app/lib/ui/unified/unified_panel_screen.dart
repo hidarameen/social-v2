@@ -24,8 +24,10 @@ class _UnifiedPanelScreenState extends State<UnifiedPanelScreen> {
   @override
   void initState() {
     super.initState();
-    final route = '/login';
-    final uri = AppConfig.resolvePath('/social-v2-app.html#$route');
+    final route = '/';
+    final uri = AppConfig.resolvePath('/social-v2-app.html').replace(
+      fragment: route,
+    );
     _targetUrl = uri.toString();
 
     if (kIsWeb) {
@@ -85,28 +87,18 @@ class _UnifiedPanelScreenState extends State<UnifiedPanelScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('SocialFlow v2'),
-        actions: [
-          IconButton(
-            tooltip: i18n.isArabic ? 'إعادة تحميل' : 'Refresh',
-            onPressed: () {
-              setState(() => _loading = true);
-              controller.reload();
-            },
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: controller),
-          if (_loading)
-            const Align(
-              alignment: Alignment.topCenter,
-              child: LinearProgressIndicator(minHeight: 2),
-            ),
-        ],
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            WebViewWidget(controller: controller),
+            if (_loading)
+              const Align(
+                alignment: Alignment.topCenter,
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+          ],
+        ),
       ),
     );
   }

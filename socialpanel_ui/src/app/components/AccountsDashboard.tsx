@@ -27,43 +27,24 @@ import {
 } from "./PlatformIcons";
 import { apiRequest } from "../services/api";
 
-const initialAccounts: ConnectedAccount[] = [
-  {
-    id: "1",
-    platform: platforms[0], // Facebook
-    username: "Creative Studio",
-    avatar: "https://images.unsplash.com/photo-1655249493799-9cee4fe983bb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjB3b21hbiUyMGhlYWRzaG90JTIwcG9ydHJhaXR8ZW58MXx8fHwxNzcxNTIyNTc3fDA&ixlib=rb-4.1.0&q=80&w=1080",
-    connectedAt: "2025/12",
-    status: "active",
-    postsCount: 156,
-    followers: "12.5K",
-  },
-  {
-    id: "2",
-    platform: platforms[1], // Instagram
-    username: "@design_pro",
-    avatar: "https://images.unsplash.com/photo-1672685667592-0392f458f46f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBtYW4lMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDF8fHx8MTc3MTQ5NTk3N3ww&ixlib=rb-4.1.0&q=80&w=1080",
-    connectedAt: "2025/11",
-    status: "active",
-    postsCount: 89,
-    followers: "45.2K",
-  },
-  {
-    id: "3",
-    platform: platforms[2], // X
-    username: "@tech_news",
-    avatar: "https://images.unsplash.com/photo-1753164597539-af93605a9178?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjcmVhdGl2ZSUyMGRlc2lnbmVyJTIwcG9ydHJhaXQlMjBzdHVkaW98ZW58MXx8fHwxNzcxNTQyODU4fDA&ixlib=rb-4.1.0&q=80&w=1080",
-    connectedAt: "2025/10",
-    status: "expired",
-    postsCount: 234,
-    followers: "8.1K",
-  },
-];
-
 type SortMode = "newest" | "name" | "followers";
 
+function mapApiAccount(account: any): ConnectedAccount {
+  const platform = platforms.find((p) => p.id === account.platformId) || platforms[0];
+  const username = String(account.accountUsername || account.accountName || account.accountId || "Account");
+  return {
+    id: String(account.id),
+    platform,
+    username,
+    connectedAt: account.createdAt ? new Date(account.createdAt).toLocaleDateString("ar") : "",
+    status: account.isActive ? "active" : "expired",
+    postsCount: 0,
+    followers: "0",
+  };
+}
+
 export function AccountsDashboard() {
-  const [accounts, setAccounts] = useState<ConnectedAccount[]>(initialAccounts);
+  const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [showPlatformSelector, setShowPlatformSelector] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformInfo | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -80,24 +61,10 @@ export function AccountsDashboard() {
       try {
         const payload = await apiRequest<any>("/api/accounts?limit=200&offset=0&sortBy=createdAt&sortDir=desc");
         if (!active) return;
-        const mapped = ((payload.accounts || []) as any[]).map((account) => {
-          const platform = platforms.find((p) => p.id === account.platformId) || platforms[0];
-          const username = String(account.accountUsername || account.accountName || account.accountId || "Account");
-          return {
-            id: String(account.id),
-            platform,
-            username,
-            connectedAt: account.createdAt
-              ? new Date(account.createdAt).toLocaleDateString("ar")
-              : "2026/01",
-            status: account.isActive ? "active" : "expired",
-            postsCount: 0,
-            followers: "0",
-          } as ConnectedAccount;
-        });
+        const mapped = ((payload.accounts || []) as any[]).map((account) => mapApiAccount(account));
         setAccounts(mapped);
       } catch {
-        // Keep initial demo data when API is unavailable.
+        if (active) setAccounts([]);
       }
     }
     void loadAccounts();
@@ -163,25 +130,39 @@ export function AccountsDashboard() {
   };
 
   const handleConnect = (platform: PlatformInfo, username: string) => {
-    const newAccount: ConnectedAccount = {
-      id: Date.now().toString(),
-      platform,
-      username,
-      connectedAt: "2026/02",
-      status: "active",
-      postsCount: 0,
-      followers: "0",
-    };
-    setAccounts((prev) => [...prev, newAccount]);
-    setShowConnectModal(false);
-    toast.success(`تم ربط حساب ${platform.name} بنجاح`, {
-      style: {
-        background: "#fff",
-        border: "1px solid rgba(16,185,129,0.3)",
-        color: "#1e293b",
-        boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+    const normalizedName = String(username || "").trim();
+    if (!normalizedName) {
+      toast.error("يرجى إدخال اسم الحساب");
+      return;
+    }
+    void apiRequest<any>("/api/accounts", {
+      method: "POST",
+      body: {
+        platformId: platform.id,
+        accountName: normalizedName,
+        accountUsername: normalizedName,
+        isActive: true,
       },
-    });
+    })
+      .then((payload) => {
+        const account = mapApiAccount(payload.account || {});
+        setAccounts((prev) => {
+          const next = prev.filter((item) => item.id !== account.id);
+          return [account, ...next];
+        });
+        setShowConnectModal(false);
+        toast.success(`تم ربط حساب ${platform.name} بنجاح`, {
+          style: {
+            background: "#fff",
+            border: "1px solid rgba(16,185,129,0.3)",
+            color: "#1e293b",
+            boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+          },
+        });
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "تعذر ربط الحساب");
+      });
   };
 
   const handleDelete = (id: string) => {

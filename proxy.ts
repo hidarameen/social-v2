@@ -18,7 +18,7 @@ function isBypassPath(pathname: string): boolean {
 }
 
 function normalizeV2Route(pathname: string): string {
-  if (pathname === '/' || pathname === '') return '/login';
+  if (pathname === '/' || pathname === '') return '/';
 
   if (pathname === '/login') return '/login';
   if (pathname === '/register') return '/signup';

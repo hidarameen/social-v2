@@ -16,24 +16,22 @@ export function DashboardHome() {
   const [dashboardPayload, setDashboardPayload] = useState<any>(null);
 
   const stats = [
-    { icon: Globe, label: "إجمالي الحسابات", value: "3", change: "+1", up: true, color: "text-violet-600", bg: "bg-violet-50" },
-    { icon: Zap, label: "مهام نشطة", value: "2", change: "+1", up: true, color: "text-amber-600", bg: "bg-amber-50" },
-    { icon: Activity, label: "تنفيذات اليوم", value: "47", change: "+12", up: true, color: "text-blue-600", bg: "bg-blue-50" },
-    { icon: Users, label: "إجمالي المتابعين", value: "65.8K", change: "+2.3K", up: true, color: "text-rose-600", bg: "bg-rose-50" },
+    { icon: Globe, label: "إجمالي الحسابات", value: "0", change: "", up: true, color: "text-violet-600", bg: "bg-violet-50" },
+    { icon: Zap, label: "مهام نشطة", value: "0", change: "", up: true, color: "text-amber-600", bg: "bg-amber-50" },
+    { icon: Activity, label: "إجمالي التنفيذات", value: "0", change: "", up: true, color: "text-blue-600", bg: "bg-blue-50" },
+    { icon: Users, label: "نسبة النجاح", value: "0%", change: "", up: true, color: "text-rose-600", bg: "bg-rose-50" },
   ];
 
-  const recentExecutions = [
-    { source: "instagram" as PlatformType, target: "facebook" as PlatformType, task: "نشر تلقائي", status: "success", time: "منذ 5 دقائق", content: "تصميم هوية بصرية جديدة..." },
-    { source: "telegram" as PlatformType, target: "whatsapp" as PlatformType, task: "تحويل رسائل", status: "success", time: "منذ 12 دقيقة", content: "تم استلام طلب جديد #4521" },
-    { source: "youtube" as PlatformType, target: "twitter" as PlatformType, task: "إعلان فيديو", status: "partial", time: "منذ ساعة", content: "فيديو جديد: دليل التسويق الرقمي" },
-    { source: "instagram" as PlatformType, target: "linkedin" as PlatformType, task: "نشر تلقائي", status: "success", time: "منذ ساعتين", content: "نصائح لبناء العلامة التجارية" },
-  ];
+  const recentExecutions: {
+    source: PlatformType;
+    target: PlatformType;
+    task: string;
+    status: "success" | "partial";
+    time: string;
+    content: string;
+  }[] = [];
 
-  const activeTasks = [
-    { name: "نشر تلقائي Instagram → Facebook + X", runs: 47, status: "active" },
-    { name: "تحويل رسائل Telegram → WhatsApp", runs: 123, status: "active" },
-    { name: "إشعار YouTube → جميع المنصات", runs: 12, status: "paused" },
-  ];
+  const activeTasks: { name: string; runs: number; status: string }[] = [];
 
   const quickActions = [
     { icon: Zap, label: "إنشاء مهمة", desc: "أتمتة جديدة", color: "text-amber-600", bg: "bg-amber-50", path: "/dashboard/tasks" },

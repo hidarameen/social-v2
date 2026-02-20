@@ -81,7 +81,7 @@ export function WelcomeScreen() {
 
   return (
     <div
-      className="min-h-screen w-full relative flex items-center justify-center p-4"
+      className="min-h-screen w-full relative overflow-x-hidden"
       style={{
         background: "linear-gradient(145deg, #eef0f5 0%, #e8eaf2 30%, #f0f1f6 50%, #e6e9f0 70%, #eef0f5 100%)",
         fontFamily: "Inter, sans-serif",
@@ -101,7 +101,7 @@ export function WelcomeScreen() {
 
       {/* Navigation */}
       <motion.nav
-        className="relative z-20 px-4 sm:px-8 py-4"
+        className="relative z-20 w-full px-4 sm:px-8 py-4"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -158,7 +158,7 @@ export function WelcomeScreen() {
       </motion.nav>
 
       {/* Hero Section */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 pt-8 sm:pt-16 pb-12">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 pt-4 sm:pt-10 pb-12">
         <div className="text-center max-w-3xl mx-auto">
           <motion.div
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm mb-6"
@@ -180,7 +180,7 @@ export function WelcomeScreen() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            أدر جميع حسااتك من{" "}
+            أدر جميع حساباتك من{" "}
             <span
               className="bg-clip-text text-transparent"
               style={{ backgroundImage: "linear-gradient(135deg, #7c3aed, #3b82f6, #06b6d4)" }}

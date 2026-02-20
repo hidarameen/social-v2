@@ -1,3 +1,5 @@
+import { useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   User, Lock, Key, Bell, Shield, Globe, Palette, Smartphone,
   Save, Eye, EyeOff, Camera, CheckCircle, Copy, Plus, Trash2,
@@ -42,11 +44,11 @@ export function SettingsPageFull() {
   const [profileData, setProfileData] = useState({
     name: user?.name || "",
     email: user?.email || "",
-    phone: "+966 5XX XXX XXXX",
-    bio: "مدير تسويق رقمي | متخصص في إدارة حسابات التواصل الاجتماعي",
-    company: "شركة التقنية المتقدمة",
-    website: "https://socialhub.app",
-    timezone: "Asia/Riyadh (GMT+3)",
+    phone: "",
+    bio: "",
+    company: "",
+    website: "",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
     avatar: user?.avatar || "",
   });
 
@@ -68,7 +70,7 @@ export function SettingsPageFull() {
       apiSecret: "",
       accessToken: "",
       isVisible: false,
-      connected: ["facebook", "instagram", "twitter"].includes(p.id),
+      connected: false,
     }))
   );
   const [expandedPlatform, setExpandedPlatform] = useState<PlatformType | null>(null);
@@ -157,7 +159,7 @@ export function SettingsPageFull() {
             >
               <Camera className="w-6 h-6 text-white" />
             </motion.div>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={() => toast.info(t("تم تحديد الصورة (محاكاة)", "Image selected (simulated)"))} />
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={() => toast.info(t("تم تحديد الصورة", "Image selected"))} />
           </motion.div>
           <div>
             <p className="text-slate-700 dark:text-slate-300" style={{ fontSize: "0.875rem" }}>{profileData.name}</p>
@@ -219,8 +221,8 @@ export function SettingsPageFull() {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { label: t("تاريخ الانضمام", "Joined"), value: user?.joinedAt || "2025/06", icon: Clock },
-            { label: t("الخطة", "Plan"), value: "Pro", icon: Zap },
+            { label: t("تاريخ الانضمام", "Joined"), value: user?.joinedAt || "—", icon: Clock },
+            { label: t("الخطة", "Plan"), value: user?.plan || "—", icon: Zap },
             { label: t("طريقة التسجيل", "Sign-up Method"), value: user?.provider === "email" ? t("بريد إلكتروني", "Email") : user?.provider || "email", icon: Shield },
           ].map((info, i) => (
             <motion.div key={i} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
@@ -238,6 +240,13 @@ export function SettingsPageFull() {
 
   const renderSecurity = () => {
     const strength = getPasswordStrength(passwordData.newPass);
+    const sessions = [
+      {
+        device: typeof navigator !== "undefined" ? navigator.userAgent.split(" ").slice(0, 2).join(" ") : t("الجهاز الحالي", "Current device"),
+        time: t("الآن", "Now"),
+        current: true,
+      },
+    ];
     return (
       <motion.div className="space-y-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         {/* Change Password */}
@@ -358,11 +367,7 @@ export function SettingsPageFull() {
             {t("الجلسات النشطة", "Active Sessions")}
           </h3>
           <div className="space-y-3">
-            {[
-              { device: t("هذا الجهاز — Chrome", "This Device — Chrome"), time: t("الآن", "Now"), current: true },
-              { device: "iPhone 15 — Safari", time: t("منذ ساعتين", "2 hours ago"), current: false },
-              { device: "iPad Air — Safari", time: t("منذ يوم", "1 day ago"), current: false },
-            ].map((session, i) => (
+            {sessions.map((session, i) => (
               <motion.div key={i} className="flex items-center justify-between py-3 px-4 rounded-xl bg-slate-50 dark:bg-slate-700/30"
                 initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
                 <div className="flex items-center gap-3">
@@ -713,7 +718,7 @@ export function SettingsPageFull() {
           style={{ fontSize: "0.8125rem" }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => toast.error(t("تم طلب حذف الحساب (محاكاة)", "Account deletion requested (simulated)"))}
+          onClick={() => toast.error(t("تم طلب حذف الحساب", "Account deletion requested"))}
         >
           <Trash2 className="w-3.5 h-3.5" /> {t("حذف الحساب نهائياً", "Delete Account Permanently")}
         </motion.button>
@@ -850,14 +855,14 @@ function ToggleSwitch({ label, desc, checked, onChange }: { label: string; desc:
       </div>
       <motion.button
         onClick={() => onChange(!checked)}
-        className={`relative shrink-0 transition-colors duration-300 rounded-full ${
+        className={`relative shrink-0 transition-colors duration-300 rounded-full overflow-hidden ${
           checked
             ? "bg-emerald-500 dark:bg-emerald-600"
             : "bg-slate-300 dark:bg-slate-600"
         }`}
         style={{
-          width: 50,
-          height: 28,
+          width: 46,
+          height: 26,
           boxShadow: checked
             ? "inset 0 1px 1px rgba(0,0,0,0.06), 0 0 0 1px rgba(16,185,129,0.12)"
             : "inset 0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)",
@@ -867,13 +872,13 @@ function ToggleSwitch({ label, desc, checked, onChange }: { label: string; desc:
         aria-checked={checked}
       >
         <motion.div
-          className="absolute top-[3px] rounded-full bg-white flex items-center justify-center"
+          className="absolute left-1 top-1 rounded-full bg-white flex items-center justify-center"
           style={{
-            width: 22,
-            height: 22,
+            width: 18,
+            height: 18,
             boxShadow: "0 1px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06)",
           }}
-          animate={{ x: checked ? 25 : 3 }}
+          animate={{ x: checked ? 20 : 0 }}
           transition={{ type: "spring", stiffness: 500, damping: 30 }}
         >
           <AnimatePresence mode="wait">

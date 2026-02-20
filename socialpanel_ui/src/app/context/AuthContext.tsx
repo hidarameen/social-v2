@@ -50,8 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       avatar: typeof raw?.image === "string" ? raw.image : undefined,
       provider: "email",
-      joinedAt: "2026/01",
-      plan: "pro",
+      joinedAt: raw?.createdAt ? new Date(raw.createdAt).toLocaleDateString("ar") : "",
+      plan: (raw?.plan as "free" | "pro" | "enterprise") || "free",
     };
   }, []);
 

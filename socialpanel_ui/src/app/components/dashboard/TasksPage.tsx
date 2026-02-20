@@ -10,58 +10,10 @@ import { platformAutomation } from "./PlatformAutomation";
 import { TaskCreator, type AutomationTask } from "./TaskCreator";
 import { apiRequest } from "../../services/api";
 
-const mockTasks: AutomationTask[] = [
-  {
-    id: "task_1",
-    name: "نشر تلقائي من Instagram إلى Facebook و X",
-    description: "عند نشر منشور جديد على Instagram يتم نشره تلقائياً على Facebook وX",
-    enabled: true,
-    sources: [{ platformId: "instagram", accountLabel: "@design_pro", triggerId: "ig_new_post" }],
-    targets: [
-      { platformId: "facebook", accountLabel: "Creative Studio", actionId: "fb_create_post" },
-      { platformId: "twitter", accountLabel: "@tech_news", actionId: "tw_create_tweet" },
-    ],
-    createdAt: "2026-02-15",
-    lastRun: "2026-02-20 14:30",
-    runCount: 47,
-    status: "active",
-  },
-  {
-    id: "task_2",
-    name: "تحويل رسائل Telegram إلى WhatsApp",
-    description: "تحويل الرسائل الجديدة من بوت Telegram إلى WhatsApp Business",
-    enabled: true,
-    sources: [{ platformId: "telegram", accountLabel: "@channel_bot", triggerId: "tg_new_message" }],
-    targets: [{ platformId: "whatsapp", accountLabel: "+966 50 XXX", actionId: "wa_send_message" }],
-    createdAt: "2026-02-10",
-    lastRun: "2026-02-20 15:12",
-    runCount: 123,
-    status: "active",
-  },
-  {
-    id: "task_3",
-    name: "إشعار YouTube على جميع المنصات",
-    description: "عند رفع فيديو جديد على YouTube يتم الإعلان عنه على جميع المنصات",
-    enabled: false,
-    sources: [{ platformId: "youtube", accountLabel: "Channel Pro", triggerId: "yt_new_video" }],
-    targets: [
-      { platformId: "facebook", accountLabel: "Creative Studio", actionId: "fb_create_post" },
-      { platformId: "instagram", accountLabel: "@design_pro", actionId: "ig_create_post" },
-      { platformId: "twitter", accountLabel: "@tech_news", actionId: "tw_create_tweet" },
-      { platformId: "linkedin", accountLabel: "Company Profile", actionId: "li_create_post" },
-      { platformId: "telegram", accountLabel: "@channel_bot", actionId: "tg_send_message" },
-    ],
-    createdAt: "2026-01-20",
-    lastRun: "2026-02-18 09:45",
-    runCount: 12,
-    status: "paused",
-  },
-];
-
 type FilterType = "all" | "active" | "paused" | "error";
 
 export function TasksPage() {
-  const [tasks, setTasks] = useState<AutomationTask[]>(mockTasks);
+  const [tasks, setTasks] = useState<AutomationTask[]>([]);
   const [showCreator, setShowCreator] = useState(false);
   const [editingTask, setEditingTask] = useState<AutomationTask | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -105,17 +57,15 @@ export function TasksPage() {
             targets,
             createdAt: task.createdAt
               ? new Date(task.createdAt).toISOString().slice(0, 10)
-              : "2026-01-01",
+              : "",
             lastRun: task.lastExecuted ? new Date(task.lastExecuted).toLocaleString("ar") : undefined,
             runCount: Number(task.executionCount || 0),
             status: (String(task.status || "paused") as "active" | "paused" | "error"),
           } satisfies AutomationTask;
         });
-        if (mapped.length > 0) {
-          setTasks(mapped);
-        }
+        setTasks(mapped);
       } catch {
-        // Keep demo fallback when API request fails.
+        if (active) setTasks([]);
       }
     }
     void loadTasks();
