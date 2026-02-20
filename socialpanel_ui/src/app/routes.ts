@@ -14,11 +14,13 @@ import { AnalyticsPageNew } from "./components/dashboard/AnalyticsPageNew";
 import { SettingsPageFull } from "./components/dashboard/SettingsPage";
 import { HelpPage } from "./components/dashboard/PlaceholderPages";
 import { NotFound } from "./components/NotFound";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 
 export const router = createHashRouter([
   {
     path: "/",
     Component: RootLayout,
+    ErrorBoundary: RouteErrorBoundary,
     children: [
       { index: true, Component: WelcomeScreen },
       { path: "login", Component: LoginPage },
