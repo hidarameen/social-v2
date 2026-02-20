@@ -16,7 +16,6 @@
             var theme = storedTheme === "dark" ? "dark" : "light";
             var lang = storedLang === "en" ? "en" : "ar";
 
-            root.classList.add("preload");
             root.classList.toggle("dark", theme === "dark");
             root.lang = lang;
             root.dir = lang === "ar" ? "rtl" : "ltr";
