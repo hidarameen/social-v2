@@ -1,303 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  AlertCircle,
-  CalendarClock,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Clock3,
   Loader2,
-  PencilLine,
-  Play,
   Plus,
-  Save,
   Search,
   Send,
   ShieldCheck,
-  Sparkles,
-  Star,
-  Trash2,
   Upload,
   Wand2,
   X,
-  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getPlatformIcon, platforms, type PlatformType } from "../PlatformIcons";
 import { apiRequest, getMobileAccessToken } from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
-
-type ManualPublishMode = "now" | "schedule";
-type ManualMediaType = "image" | "video" | "link";
-
-type AccountOption = {
-  id: string;
-  platformId: PlatformType;
-  accountName: string;
-  accountUsername?: string;
-  isActive: boolean;
-};
-
-type ManualValidationIssue = {
-  level: "error" | "warning";
-  message: string;
-};
-
-type ManualValidationEntry = {
-  accountId: string;
-  platformId: PlatformType;
-  accountName: string;
-  issues: ManualValidationIssue[];
-};
-
-type ManualResultEntry = {
-  accountId: string;
-  platformId: PlatformType;
-  accountName: string;
-  success: boolean;
-  postId?: string;
-  url?: string;
-  scheduledFor?: string;
-  error?: string;
-};
-
-type ManualPublishResponse = {
-  success: boolean;
-  partialSuccess?: boolean;
-  dryRun?: boolean;
-  error?: string;
-  mode?: ManualPublishMode;
-  scheduledAt?: string;
-  succeededCount?: number;
-  failedCount?: number;
-  validation?: ManualValidationEntry[];
-  results?: ManualResultEntry[];
-};
-
-type ManualPlatformOverride = {
-  message?: string;
-  mediaUrl?: string;
-  mediaType?: ManualMediaType;
-};
-
-type ManualPlatformTemplateSettings = {
-  enabled?: boolean;
-  defaultHashtags?: string[];
-  notes?: string;
-};
-
-type ManualTemplate = {
-  id: string;
-  name: string;
-  description?: string;
-  isDefault?: boolean;
-  message: string;
-  mediaUrl?: string;
-  mediaType?: ManualMediaType;
-  defaultAccountIds: string[];
-  platformOverrides: Partial<Record<PlatformType, ManualPlatformOverride>>;
-  platformSettings?: Partial<Record<PlatformType, ManualPlatformTemplateSettings>>;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type UploadResponse = {
-  success: boolean;
-  url?: string;
-  mimeType?: string;
-  fileName?: string;
-  size?: number;
-  error?: string;
-};
-
-type UploadedMedia = {
-  url: string;
-  kind: "image" | "video";
-  mimeType?: string;
-  fileName?: string;
-  size?: number;
-  localPreviewUrl?: string;
-};
-
-type PlatformRule = {
-  maxChars: number;
-  supportsScheduling: boolean;
-  requiresMedia: boolean;
-  allowedMedia: ManualMediaType[];
-  maxHashtags?: number;
-};
-
-type AdaptationIssue = {
-  level: "error" | "warning";
-  message: string;
-};
-
-type AdaptationEntry = {
-  platformId: PlatformType;
-  platformName: string;
-  textLength: number;
-  maxChars: number;
-  issues: AdaptationIssue[];
-};
-
-const DRAFT_STORAGE_KEY = "manual_publish_workspace_v3";
-
-const PLATFORM_RULES: Record<PlatformType, PlatformRule> = {
-  facebook: { maxChars: 63206, supportsScheduling: true, requiresMedia: false, allowedMedia: ["image", "video", "link"], maxHashtags: 10 },
-  instagram: { maxChars: 2200, supportsScheduling: true, requiresMedia: true, allowedMedia: ["image", "video"], maxHashtags: 30 },
-  twitter: { maxChars: 280, supportsScheduling: true, requiresMedia: false, allowedMedia: ["image", "video", "link"], maxHashtags: 5 },
-  tiktok: { maxChars: 2200, supportsScheduling: true, requiresMedia: true, allowedMedia: ["video"], maxHashtags: 8 },
-  youtube: { maxChars: 5000, supportsScheduling: true, requiresMedia: true, allowedMedia: ["video"], maxHashtags: 15 },
-  telegram: { maxChars: 4096, supportsScheduling: false, requiresMedia: false, allowedMedia: ["image", "video", "link"], maxHashtags: 30 },
-  linkedin: { maxChars: 3000, supportsScheduling: true, requiresMedia: false, allowedMedia: ["image", "video", "link"], maxHashtags: 8 },
-  pinterest: { maxChars: 500, supportsScheduling: true, requiresMedia: true, allowedMedia: ["image", "video", "link"], maxHashtags: 10 },
-  google_business: { maxChars: 1500, supportsScheduling: true, requiresMedia: false, allowedMedia: ["image", "video", "link"], maxHashtags: 10 },
-  threads: { maxChars: 500, supportsScheduling: true, requiresMedia: false, allowedMedia: ["image", "video", "link"], maxHashtags: 10 },
-  snapchat: { maxChars: 80, supportsScheduling: true, requiresMedia: true, allowedMedia: ["image", "video"], maxHashtags: 2 },
-  whatsapp: { maxChars: 1024, supportsScheduling: true, requiresMedia: false, allowedMedia: ["image", "video", "link"], maxHashtags: 5 },
-};
-
-const PLATFORM_IDS = platforms.map((platform) => platform.id);
-
-function isPlatformType(value: string): value is PlatformType {
-  return (PLATFORM_IDS as string[]).includes(value);
-}
-
-function trim(value: unknown): string {
-  return String(value || "").trim();
-}
-
-function formatDateTime(value?: string, locale = "en"): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(locale === "ar" ? "ar" : "en-US");
-}
-
-function formatFileSize(bytes?: number): string {
-  if (!bytes || bytes <= 0) return "";
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  const kb = bytes / 1024;
-  return `${Math.max(1, Math.round(kb))} KB`;
-}
+import { AdaptationEngineSection } from "./manual-publish/AdaptationEngineSection";
+import { ExecutionResultsSection } from "./manual-publish/ExecutionResultsSection";
+import {
+  buildAdaptationEntries,
+  formatFileSize,
+  hashtagsFromInput,
+  inferMediaKind,
+  isPlatformType,
+  manualPublishRequest,
+  toDateTimeLocal,
+  trim,
+} from "./manual-publish/helpers";
+import { TemplateLibrarySection } from "./manual-publish/TemplateLibrarySection";
+import {
+  DRAFT_STORAGE_KEY,
+  type AccountOption,
+  type ManualPlatformOverride,
+  type ManualPlatformTemplateSettings,
+  type ManualPublishMode,
+  type ManualPublishResponse,
+  type ManualTemplate,
+  type ManualValidationEntry,
+  type UploadResponse,
+  type UploadedMedia,
+} from "./manual-publish/types";
 
 function getAccountDisplayName(account: AccountOption): string {
   return trim(account.accountName) || trim(account.accountUsername) || account.id;
-}
-
-function inferMediaKind(url: string, provided?: ManualMediaType): "image" | "video" | null {
-  if (provided === "image" || provided === "video") return provided;
-  const normalized = trim(url).toLowerCase();
-  if (!normalized) return null;
-  if (/\.(png|jpe?g|gif|webp|bmp|svg)($|\?)/.test(normalized)) return "image";
-  if (/\.(mp4|mov|webm|m4v|avi|mkv)($|\?)/.test(normalized)) return "video";
-  return null;
-}
-
-function hashtagsFromInput(value: string): string[] {
-  return value
-    .split(/[,\s]+/g)
-    .map((item) => trim(item).replace(/^#+/, ""))
-    .filter(Boolean)
-    .slice(0, 20);
-}
-
-function toDateTimeLocal(date: Date): string {
-  const value = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return value.toISOString().slice(0, 16);
-}
-
-async function manualPublishRequest(body: Record<string, unknown>): Promise<ManualPublishResponse> {
-  const token = getMobileAccessToken();
-  const response = await fetch("/api/manual-publish", {
-    method: "POST",
-    credentials: "include",
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-
-  const payload = (await response.json().catch(() => ({}))) as ManualPublishResponse;
-  if (!response.ok) {
-    throw new Error(trim(payload.error) || `Request failed: ${response.status}`);
-  }
-  return payload;
-}
-
-function buildAdaptationEntries(params: {
-  selectedPlatforms: PlatformType[];
-  baseMessage: string;
-  mode: ManualPublishMode;
-  scheduledAt: string;
-  media: UploadedMedia | null;
-  platformOverrides: Partial<Record<PlatformType, ManualPlatformOverride>>;
-  platformSettings: Partial<Record<PlatformType, ManualPlatformTemplateSettings>>;
-}): AdaptationEntry[] {
-  const entries: AdaptationEntry[] = [];
-
-  for (const platformId of params.selectedPlatforms) {
-    const rule = PLATFORM_RULES[platformId];
-    const override = params.platformOverrides[platformId] || {};
-    const settings = params.platformSettings[platformId] || {};
-    const base = trim(override.message) || trim(params.baseMessage);
-    const hashtags = settings.defaultHashtags || [];
-    const hashtagSuffix = hashtags.length > 0 ? `\n\n${hashtags.map((tag) => `#${tag}`).join(" ")}` : "";
-    const finalMessage = `${base}${hashtagSuffix}`.trim();
-    const textLength = finalMessage.length;
-    const mediaType = params.media?.kind;
-
-    const issues: AdaptationIssue[] = [];
-    if (!finalMessage && !mediaType) {
-      issues.push({ level: "error", message: "Add text or media before publishing." });
-    }
-    if (textLength > rule.maxChars) {
-      issues.push({
-        level: "error",
-        message: `Text exceeds limit by ${textLength - rule.maxChars} characters (${textLength}/${rule.maxChars}).`,
-      });
-    } else if (textLength > Math.floor(rule.maxChars * 0.9)) {
-      issues.push({ level: "warning", message: `Text is near platform limit (${textLength}/${rule.maxChars}).` });
-    }
-
-    if (rule.requiresMedia && !mediaType) {
-      issues.push({ level: "error", message: "This platform requires image or video media." });
-    }
-
-    if (mediaType && !rule.allowedMedia.includes(mediaType)) {
-      issues.push({ level: "error", message: `Selected media type "${mediaType}" is not allowed on this platform.` });
-    }
-
-    if (params.mode === "schedule") {
-      if (!rule.supportsScheduling) {
-        issues.push({ level: "error", message: "Scheduling is not supported for this platform." });
-      } else {
-        const target = new Date(params.scheduledAt);
-        if (Number.isNaN(target.getTime()) || target.getTime() <= Date.now() + 30_000) {
-          issues.push({ level: "error", message: "Schedule time must be a valid future date." });
-        }
-      }
-    }
-
-    const hashtagCount = (finalMessage.match(/#[\w\p{L}\p{N}_-]+/gu) || []).length;
-    if ((rule.maxHashtags || 0) > 0 && hashtagCount > (rule.maxHashtags || 0)) {
-      issues.push({ level: "warning", message: `Hashtag count (${hashtagCount}) exceeds recommended ${rule.maxHashtags}.` });
-    }
-
-    entries.push({
-      platformId,
-      platformName: platforms.find((item) => item.id === platformId)?.name || platformId,
-      textLength,
-      maxChars: rule.maxChars,
-      issues,
-    });
-  }
-
-  return entries;
 }
 
 export function ManualPublishPage() {
@@ -1446,330 +1193,54 @@ export function ManualPublishPage() {
         </div>
 
         <div className="xl:col-span-4 space-y-5">
-          <motion.section
-            className="rounded-2xl bg-white p-5"
-            style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 6px 20px rgba(0,0,0,0.04)" }}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-slate-800" style={{ fontSize: "0.9rem" }}>
-                {t("Template Library", "Template Library")}
-              </h3>
-              <span className="text-slate-400" style={{ fontSize: "0.68rem" }}>
-                {templates.length}
-              </span>
-            </div>
+          <TemplateLibrarySection
+            t={t}
+            templates={templates}
+            templatesLoading={templatesLoading}
+            selectedTemplateId={selectedTemplateId}
+            templateName={templateName}
+            templateDescription={templateDescription}
+            templateIsDefault={templateIsDefault}
+            templateSaving={templateSaving}
+            editingTemplateId={editingTemplateId}
+            templateBusyId={templateBusyId}
+            onTemplateSelect={(value) => {
+              const id = trim(value);
+              setSelectedTemplateId(id);
+              const target = templates.find((item) => item.id === id);
+              if (target) applyTemplate(target);
+            }}
+            onTemplateNameChange={setTemplateName}
+            onTemplateDescriptionChange={setTemplateDescription}
+            onTemplateDefaultChange={setTemplateIsDefault}
+            onSaveTemplate={() => void saveTemplate()}
+            onCancelEdit={() => hydrateTemplateEditor()}
+            onEditTemplate={(template) => {
+              hydrateTemplateEditor(template);
+              applyTemplate(template);
+            }}
+            onSetTemplateDefault={(templateId) => void setTemplateAsDefault(templateId)}
+            onDeleteTemplate={(templateId) => void deleteTemplate(templateId)}
+            onApplyTemplate={(template) => applyTemplate(template)}
+          />
 
-            <select
-              value={selectedTemplateId}
-              onChange={(event) => {
-                const id = trim(event.target.value);
-                setSelectedTemplateId(id);
-                const target = templates.find((item) => item.id === id);
-                if (target) applyTemplate(target);
-              }}
-              className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700"
-              style={{ fontSize: "0.75rem" }}
-            >
-              <option value="">{t("Choose a template...", "Choose a template...")}</option>
-              {templates.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.isDefault ? "★ " : ""}
-                  {item.name}
-                </option>
-              ))}
-            </select>
-
-            <div className="mt-3 grid grid-cols-1 gap-2">
-              <input
-                value={templateName}
-                onChange={(event) => setTemplateName(event.target.value)}
-                placeholder={t("Template name", "Template name")}
-                className="py-2.5 px-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-700"
-                style={{ fontSize: "0.74rem" }}
-              />
-              <input
-                value={templateDescription}
-                onChange={(event) => setTemplateDescription(event.target.value)}
-                placeholder={t("Description (optional)", "Description (optional)")}
-                className="py-2.5 px-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-700"
-                style={{ fontSize: "0.74rem" }}
-              />
-
-              <label className="inline-flex items-center gap-2 text-slate-600" style={{ fontSize: "0.72rem" }}>
-                <input
-                  type="checkbox"
-                  checked={templateIsDefault}
-                  onChange={(event) => setTemplateIsDefault(event.target.checked)}
-                />
-                <span>{t("Set as default template", "Set as default template")}</span>
-              </label>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={saveTemplate}
-                  disabled={templateSaving}
-                  className="flex-1 px-3 py-2.5 rounded-lg bg-slate-900 text-white inline-flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ fontSize: "0.73rem" }}
-                >
-                  {templateSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  <span>{editingTemplateId ? t("Update", "Update") : t("Save", "Save")}</span>
-                </button>
-                {editingTemplateId ? (
-                  <button
-                    type="button"
-                    onClick={() => hydrateTemplateEditor()}
-                    className="px-3 py-2.5 rounded-lg bg-slate-100 text-slate-700"
-                    style={{ fontSize: "0.73rem" }}
-                  >
-                    {t("Cancel", "Cancel")}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-200 space-y-2 max-h-[300px] overflow-y-auto">
-              {templatesLoading ? (
-                <div className="py-6 flex items-center justify-center text-slate-400">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                </div>
-              ) : templates.length === 0 ? (
-                <p className="text-slate-400" style={{ fontSize: "0.74rem" }}>
-                  {t("No templates yet.", "No templates yet.")}
-                </p>
-              ) : (
-                templates.map((template) => (
-                  <div key={template.id} className="rounded-xl bg-slate-50/80 p-3" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-slate-700 truncate" style={{ fontSize: "0.74rem" }}>
-                          {template.isDefault ? "★ " : ""}
-                          {template.name}
-                        </p>
-                        {template.description ? (
-                          <p className="text-slate-400 truncate" style={{ fontSize: "0.67rem" }}>
-                            {template.description}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            hydrateTemplateEditor(template);
-                            applyTemplate(template);
-                          }}
-                          className="text-slate-400 hover:text-blue-600"
-                          title="Edit"
-                        >
-                          <PencilLine className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void setTemplateAsDefault(template.id)}
-                          disabled={templateBusyId === template.id}
-                          className="text-slate-400 hover:text-amber-500 disabled:opacity-50"
-                          title="Set default"
-                        >
-                          <Star className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void deleteTemplate(template.id)}
-                          disabled={templateBusyId === template.id}
-                          className="text-slate-400 hover:text-red-500 disabled:opacity-50"
-                          title="Delete"
-                        >
-                          {templateBusyId === template.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => applyTemplate(template)}
-                      className="mt-2 w-full px-2.5 py-1.5 rounded-lg bg-white text-slate-700"
-                      style={{ border: "1px solid rgba(0,0,0,0.08)", fontSize: "0.68rem" }}
-                    >
-                      {t("Apply Template", "Apply Template")}
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </motion.section>
-
-          <motion.section
-            className="rounded-2xl bg-white p-5"
-            style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 6px 20px rgba(0,0,0,0.04)" }}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-slate-800 inline-flex items-center gap-1.5" style={{ fontSize: "0.9rem" }}>
-                <Sparkles className="w-4 h-4 text-indigo-500" />
-                {t("Cross-Platform Adaptation Engine", "Cross-Platform Adaptation Engine")}
-              </h3>
-            </div>
-
-            {!localValidationTouched ? (
-              <p className="text-slate-400" style={{ fontSize: "0.74rem" }}>
-                {t("Start composing to see adaptation diagnostics.", "Start composing to see adaptation diagnostics.")}
-              </p>
-            ) : (
-              <>
-                <div className="mb-3 flex items-center gap-2">
-                  <span
-                    className={`px-2.5 py-1 rounded-full ${localAdaptationSummary.errorCount > 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
-                    style={{ fontSize: "0.68rem" }}
-                  >
-                    {localAdaptationSummary.errorCount} {t("errors", "errors")}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700" style={{ fontSize: "0.68rem" }}>
-                    {localAdaptationSummary.warningCount} {t("warnings", "warnings")}
-                  </span>
-                </div>
-
-                <div className="space-y-2 max-h-[320px] overflow-y-auto">
-                  {localAdaptationEntries.map((entry) => (
-                    <div key={entry.platformId} className="rounded-xl bg-slate-50/80 p-3" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <div className="inline-flex items-center gap-2" style={{ fontSize: "0.74rem" }}>
-                          {getPlatformIcon(entry.platformId, 15)}
-                          <span className="text-slate-700">{entry.platformName}</span>
-                        </div>
-                        <span className="text-slate-400" style={{ fontSize: "0.67rem" }}>
-                          {entry.textLength}/{entry.maxChars}
-                        </span>
-                      </div>
-
-                      {entry.issues.length === 0 ? (
-                        <div className="inline-flex items-center gap-1 text-emerald-600" style={{ fontSize: "0.68rem" }}>
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{t("Ready", "Ready")}</span>
-                        </div>
-                      ) : (
-                        <div className="space-y-1">
-                          {entry.issues.map((issue, index) => (
-                            <div
-                              key={`${entry.platformId}-${index}`}
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg ${issue.level === "error" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}
-                              style={{ fontSize: "0.66rem" }}
-                            >
-                              {issue.level === "error" ? <XCircle className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                              <span>{issue.message}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {lastValidation.length > 0 ? (
-              <div className="mt-4 pt-3 border-t border-slate-200">
-                <div className="inline-flex items-center gap-1.5 text-blue-600 mb-2" style={{ fontSize: "0.72rem" }}>
-                  <Play className="w-3.5 h-3.5" />
-                  <span>{t("Server validation snapshot", "Server validation snapshot")}</span>
-                </div>
-                <div className="space-y-1 max-h-[180px] overflow-y-auto">
-                  {lastValidation.map((entry) => (
-                    <div key={`${entry.accountId}-${entry.platformId}`} className="rounded-lg bg-slate-50 p-2" style={{ fontSize: "0.66rem" }}>
-                      <div className="inline-flex items-center gap-1.5 text-slate-700">
-                        {getPlatformIcon(entry.platformId, 14)}
-                        <span>{entry.accountName}</span>
-                      </div>
-                      {entry.issues.length > 0 ? (
-                        <div className="mt-1 text-slate-500">{entry.issues[0]?.message}</div>
-                      ) : (
-                        <div className="mt-1 text-emerald-600">{t("No issues", "No issues")}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={resetComposer}
-                className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700"
-                style={{ fontSize: "0.72rem" }}
-              >
-                {t("Reset", "Reset")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setComposerOpen(true);
-                  setLocalValidationTouched(true);
-                  toast.message(t("Composer focused.", "Composer focused."));
-                }}
-                className="px-3 py-2 rounded-lg bg-white text-slate-700"
-                style={{ border: "1px solid rgba(0,0,0,0.08)", fontSize: "0.72rem" }}
-              >
-                {t("Open Composer", "Open Composer")}
-              </button>
-            </div>
-          </motion.section>
+          <AdaptationEngineSection
+            t={t}
+            localValidationTouched={localValidationTouched}
+            localAdaptationEntries={localAdaptationEntries}
+            localAdaptationSummary={localAdaptationSummary}
+            lastValidation={lastValidation}
+            onReset={resetComposer}
+            onOpenComposer={() => {
+              setComposerOpen(true);
+              setLocalValidationTouched(true);
+              toast.message(t("Composer focused.", "Composer focused."));
+            }}
+          />
         </div>
       </div>
 
-      {lastResponse?.results && lastResponse.results.length > 0 ? (
-        <motion.section
-          className="rounded-2xl bg-white p-5 sm:p-6"
-          style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 6px 20px rgba(0,0,0,0.04)" }}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <h3 className="text-slate-800 mb-3" style={{ fontSize: "0.95rem" }}>
-            {t("Execution Results", "Execution Results")}
-          </h3>
-          <div className="mb-3 text-slate-500" style={{ fontSize: "0.74rem" }}>
-            {t(
-              `${lastResponse.succeededCount || 0} succeeded • ${lastResponse.failedCount || 0} failed`,
-              `${lastResponse.succeededCount || 0} succeeded • ${lastResponse.failedCount || 0} failed`
-            )}
-          </div>
-          <div className="space-y-2">
-            {lastResponse.results.map((result) => (
-              <div key={`${result.accountId}-${result.platformId}`} className="rounded-xl bg-slate-50 p-3" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="inline-flex items-center gap-2 min-w-0">
-                    {getPlatformIcon(result.platformId, 16)}
-                    <span className="text-slate-700 truncate" style={{ fontSize: "0.75rem" }}>
-                      {result.accountName}
-                    </span>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded-full ${result.success ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
-                    style={{ fontSize: "0.65rem" }}
-                  >
-                    {result.success ? t("Success", "Success") : t("Failed", "Failed")}
-                  </span>
-                </div>
-                {result.error ? (
-                  <p className="text-red-600 mt-1.5" style={{ fontSize: "0.69rem" }}>
-                    {result.error}
-                  </p>
-                ) : null}
-                {result.scheduledFor ? (
-                  <p className="text-slate-400 mt-1" style={{ fontSize: "0.67rem" }}>
-                    <CalendarClock className="w-3 h-3 inline-block mr-1" />
-                    {formatDateTime(result.scheduledFor, language)}
-                  </p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </motion.section>
-      ) : null}
+      {lastResponse ? <ExecutionResultsSection t={t} language={language} lastResponse={lastResponse} /> : null}
     </div>
   );
 }
