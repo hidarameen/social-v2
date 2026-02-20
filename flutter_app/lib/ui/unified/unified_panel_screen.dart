@@ -3,14 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../app_config.dart';
-import '../../app_state.dart';
-import '../../i18n.dart';
 import 'web_redirect_stub.dart' if (dart.library.html) 'web_redirect_web.dart';
 
 class UnifiedPanelScreen extends StatefulWidget {
-  const UnifiedPanelScreen({super.key, required this.state});
-
-  final AppState state;
+  const UnifiedPanelScreen({super.key});
 
   @override
   State<UnifiedPanelScreen> createState() => _UnifiedPanelScreenState();
@@ -24,10 +20,7 @@ class _UnifiedPanelScreenState extends State<UnifiedPanelScreen> {
   @override
   void initState() {
     super.initState();
-    final route = '/';
-    final uri = AppConfig.resolvePath('/index.html').replace(
-      fragment: route,
-    );
+    final uri = AppConfig.resolvePath('/dashboard');
     _targetUrl = uri.toString();
 
     if (kIsWeb) {
@@ -54,8 +47,6 @@ class _UnifiedPanelScreenState extends State<UnifiedPanelScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final i18n = I18n(widget.state.locale);
-
     if (kIsWeb) {
       return Scaffold(
         body: Center(
@@ -66,10 +57,8 @@ class _UnifiedPanelScreenState extends State<UnifiedPanelScreen> {
               children: [
                 const CircularProgressIndicator(),
                 const SizedBox(height: 16),
-                Text(
-                  i18n.isArabic
-                      ? 'جاري تحويلك إلى الواجهة الموحدة...'
-                      : 'Redirecting you to the unified panel...',
+                const Text(
+                  'Opening SocialPanel...',
                   textAlign: TextAlign.center,
                 ),
               ],

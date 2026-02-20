@@ -125,8 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const callbackUrl =
         typeof window !== "undefined"
-          ? `${window.location.origin}/index.html#/dashboard`
-          : "/index.html#/dashboard";
+          ? `${window.location.origin}/dashboard`
+          : "/dashboard";
       const signInUrl = `/api/auth/signin/${encodeURIComponent(
         providerConfig.id
       )}?callbackUrl=${encodeURIComponent(callbackUrl)}`;

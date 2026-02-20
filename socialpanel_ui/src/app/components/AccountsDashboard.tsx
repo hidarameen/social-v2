@@ -178,7 +178,7 @@ export function AccountsDashboard() {
           });
         }
 
-        const returnTo = "/index.html#/dashboard/accounts";
+        const returnTo = "/dashboard/accounts";
         const startPayload = await apiRequest<{ success: boolean; url?: string; authUrl?: string }>(
           `/api/oauth/${platform.id}/start?returnTo=${encodeURIComponent(returnTo)}&mode=json`
         );

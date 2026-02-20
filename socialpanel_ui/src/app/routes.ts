@@ -1,4 +1,5 @@
-import { createHashRouter } from "react-router";
+import { createElement } from "react";
+import { createBrowserRouter, Navigate } from "react-router";
 import { RootLayout } from "./components/RootLayout";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { LoginPage } from "./components/auth/LoginPage";
@@ -17,7 +18,7 @@ import { HelpPage } from "./components/dashboard/PlaceholderPages";
 import { NotFound } from "./components/NotFound";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 
-export const router = createHashRouter([
+export const router = createBrowserRouter([
   {
     path: "/",
     Component: RootLayout,
@@ -28,6 +29,15 @@ export const router = createHashRouter([
       { path: "signup", Component: SignUpPage },
       { path: "forgot-password", Component: ForgotPassword },
       { path: "verify-email", Component: EmailVerification },
+      { path: "register", element: createElement(Navigate, { to: "/signup", replace: true }) },
+      { path: "reset-password", element: createElement(Navigate, { to: "/forgot-password", replace: true }) },
+      { path: "accounts", element: createElement(Navigate, { to: "/dashboard/accounts", replace: true }) },
+      { path: "tasks", element: createElement(Navigate, { to: "/dashboard/tasks", replace: true }) },
+      { path: "manual-publish", element: createElement(Navigate, { to: "/dashboard/manual-publish", replace: true }) },
+      { path: "executions", element: createElement(Navigate, { to: "/dashboard/executions", replace: true }) },
+      { path: "analytics", element: createElement(Navigate, { to: "/dashboard/analytics", replace: true }) },
+      { path: "settings", element: createElement(Navigate, { to: "/dashboard/settings", replace: true }) },
+      { path: "help", element: createElement(Navigate, { to: "/dashboard/help", replace: true }) },
       {
         path: "dashboard",
         Component: DashboardLayout,
