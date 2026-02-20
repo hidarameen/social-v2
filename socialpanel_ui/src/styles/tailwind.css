@@ -30,7 +30,7 @@
 
   /* Touch targets for mobile */
   @media (pointer: coarse) {
-    button, a, [role="button"] {
+    button:not([role="switch"]), a, [role="button"] {
       min-height: 44px;
       min-width: 44px;
     }
