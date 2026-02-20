@@ -1,5 +1,5 @@
 name: socialflow_flutter
-description: Native Flutter app for SocialFlow (no WebView).
+description: Unified Flutter shell for SocialFlow v2 panel.
 publish_to: "none"
 
 version: 1.0.0+1
@@ -15,6 +15,7 @@ dependencies:
   http: ^0.13.6
   shared_preferences: ^2.0.18
   url_launcher: ^6.1.14
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:

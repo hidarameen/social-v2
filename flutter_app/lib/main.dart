@@ -22,6 +22,7 @@ import 'ui/auth/welcome_intro_screen.dart';
 import 'ui/platform_brand.dart';
 import 'ui/sf_theme.dart';
 import 'ui/tasks/task_composer_sheet.dart';
+import 'ui/unified/unified_panel_screen.dart';
 import 'ui/widgets/sf_ui.dart';
 import 'storage_keys.dart';
 
@@ -105,7 +106,7 @@ class _StateLoaderState extends State<_StateLoader> {
               child: child ?? const SizedBox.shrink(),
             );
           },
-          home: AppBootstrap(state: state),
+          home: UnifiedPanelScreen(state: state),
         );
       },
     );
