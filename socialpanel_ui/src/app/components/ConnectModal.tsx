@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { X, Shield, Loader2, CheckCircle, Smartphone } from "lucide-react";
 import { getPlatformIcon, type PlatformInfo } from "./PlatformIcons";
 import { apiRequest } from "../services/api";
+import { useTheme } from "../context/ThemeContext";
 
 const COUNTRY_DIAL_CODES = [
   { value: "+1", label: "US +1", flag: "🇺🇸" },
@@ -138,6 +139,7 @@ export function ConnectModal({
   onClose,
   onConnect,
 }: ConnectModalProps) {
+  const { language, t } = useTheme();
   const [form, setForm] = useState<ConnectFormState>(EMPTY_FORM);
   const [telegramAuthId, setTelegramAuthId] = useState("");
   const [telegramNeedsPassword, setTelegramNeedsPassword] = useState(false);
@@ -187,7 +189,7 @@ export function ConnectModal({
       })
       .catch(() => {
         if (!cancelled) {
-          setNoticeText("لم يتم العثور على مفاتيح محفوظة لهذه المنصة.");
+          setNoticeText(t("لم يتم العثور على مفاتيح محفوظة لهذه المنصة.", "No saved credentials were found for this platform."));
         }
       })
       .finally(() => {
@@ -258,7 +260,7 @@ export function ConnectModal({
       setTelegramAuthId(authId);
       setTelegramNeedsPassword(false);
       setTelegramPasswordHint("");
-      setNoticeText("تم إرسال كود التحقق. أدخل الكود لإكمال الربط.");
+      setNoticeText(t("تم إرسال كود التحقق. أدخل الكود لإكمال الربط.", "Verification code sent. Enter it to complete connection."));
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : "فشل إرسال كود تيليجرام.");
     } finally {
@@ -297,7 +299,7 @@ export function ConnectModal({
       if (verifyPayload?.requiresPassword || verifyPayload?.step === "password_required") {
         setTelegramNeedsPassword(true);
         setTelegramPasswordHint(trimValue(verifyPayload?.hint));
-        setNoticeText("الحساب يتطلب كلمة مرور 2FA. أدخل كلمة مرور تيليجرام السحابية.");
+        setNoticeText(t("الحساب يتطلب كلمة مرور 2FA. أدخل كلمة مرور تيليجرام السحابية.", "This account requires 2FA password. Enter Telegram cloud password."));
         return;
       }
 
@@ -326,7 +328,7 @@ export function ConnectModal({
         },
       });
 
-      setNoticeText("تم ربط حساب تيليجرام بنجاح.");
+      setNoticeText(t("تم ربط حساب تيليجرام بنجاح.", "Telegram account connected successfully."));
       onClose();
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : "فشل التحقق من تيليجرام.");
@@ -343,7 +345,7 @@ export function ConnectModal({
       await onConnect(platform, {
         platformCredentialPayload: buildPlatformCredentialPayload(),
       });
-      setNoticeText("جاري تحويلك لإكمال الربط...");
+      setNoticeText(t("جاري تحويلك لإكمال الربط...", "Redirecting to complete the connection..."));
       onClose();
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : "تعذر بدء عملية الربط.");
@@ -367,11 +369,11 @@ export function ConnectModal({
   const actionLabel =
     platform.id === "telegram"
       ? !telegramAuthId
-        ? "إرسال الكود"
+        ? t("إرسال الكود", "Send Code")
         : telegramNeedsPassword
-        ? "تأكيد كلمة المرور"
-        : "تأكيد الكود"
-      : "ربط الحساب";
+        ? t("تأكيد كلمة المرور", "Confirm Password")
+        : t("تأكيد الكود", "Confirm Code")
+      : t("ربط الحساب", "Connect Account");
 
   const nonTelegramSavedKeyCount = currentApiFields.reduce(
     (count, field) => (trimValue(form[field.key]) ? count + 1 : count),
@@ -397,7 +399,7 @@ export function ConnectModal({
           />
 
           <motion.div
-            className="relative w-full max-w-md rounded-3xl overflow-hidden bg-white max-h-[90vh] overflow-y-auto"
+            className="relative w-full max-w-md rounded-3xl overflow-hidden bg-white dark:bg-slate-800 max-h-[90vh] overflow-y-auto"
             style={{
               boxShadow: `0 25px 60px rgba(0,0,0,0.15), 0 0 40px ${platform.bgGlow}`,
             }}
@@ -405,21 +407,21 @@ export function ConnectModal({
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.8, y: 30, opacity: 0 }}
             transition={{ type: "spring", duration: 0.5 }}
-            dir="rtl"
+            dir={language === "ar" ? "rtl" : "ltr"}
           >
             <motion.div
               className={`h-1.5 bg-gradient-to-r ${platform.gradient}`}
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              style={{ transformOrigin: "left" }}
+              style={{ transformOrigin: language === "ar" ? "right" : "left" }}
             />
 
             <button
               onClick={onClose}
-              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-200 z-10"
+              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors border border-slate-200 dark:border-slate-600 z-10"
             >
-              <X className="w-4 h-4 text-slate-500" />
+              <X className="w-4 h-4 text-slate-500 dark:text-slate-300" />
             </button>
 
             <div className="p-6 sm:p-8 pt-12">
@@ -442,13 +444,13 @@ export function ConnectModal({
                   {getPlatformIcon(platform.id, 40)}
                 </motion.div>
 
-                <h2 className="text-slate-800 mb-1.5" style={{ fontFamily: "Space Grotesk, sans-serif" }}>
-                  ربط حساب {platform.name}
+                <h2 className="text-slate-800 dark:text-slate-100 mb-1.5" style={{ fontFamily: "Space Grotesk, sans-serif" }}>
+                  {t(`ربط حساب ${platform.name}`, `Connect ${platform.name}`)}
                 </h2>
-                <p className="text-slate-500 mb-5" style={{ fontSize: "0.875rem" }}>
+                <p className="text-slate-500 dark:text-slate-400 mb-5" style={{ fontSize: "0.875rem" }}>
                   {platform.id === "telegram"
-                    ? "تسجيل دخول تيليجرام عبر رقم الهاتف بنفس منطق النسخة السابقة."
-                    : "الربط يتم تلقائياً باستخدام مفاتيح API المحفوظة وطريقة API المحددة من الإعدادات."}
+                    ? t("تسجيل دخول تيليجرام عبر رقم الهاتف بنفس منطق النسخة السابقة.", "Telegram login via phone number using the same previous logic.")
+                    : t("الربط يتم تلقائياً باستخدام مفاتيح API المحفوظة وطريقة API المحددة من الإعدادات.", "Connection runs automatically using saved API credentials and configured API method.")}
                 </p>
               </div>
 
@@ -456,10 +458,10 @@ export function ConnectModal({
                 {getPermissions().map((permission) => (
                   <div
                     key={permission}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/70"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200/70 dark:border-slate-600"
                   >
                     <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span className="text-slate-600" style={{ fontSize: "0.75rem" }}>
+                    <span className="text-slate-600 dark:text-slate-300" style={{ fontSize: "0.75rem" }}>
                       {permission}
                     </span>
                   </div>
@@ -467,9 +469,9 @@ export function ConnectModal({
               </div>
 
               {isLoadingCredentials && (
-                <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500 text-xs flex items-center gap-2">
+                <div className="mb-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 px-3 py-2 text-slate-500 dark:text-slate-300 text-xs flex items-center gap-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  جاري تحميل مفاتيح API المحفوظة...
+                  {t("جاري تحميل مفاتيح API المحفوظة...", "Loading saved API credentials...")}
                 </div>
               )}
 
@@ -489,14 +491,14 @@ export function ConnectModal({
               {platform.id === "telegram" ? (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                      رقم الهاتف
+                    <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                      {t("رقم الهاتف", "Phone Number")}
                     </label>
                     <div className="grid grid-cols-[140px_1fr] gap-2">
                       <select
                         value={form.phoneCountryCode}
                         onChange={(event) => updateField("phoneCountryCode", event.target.value)}
-                        className="py-2.5 px-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                        className="py-2.5 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
                         style={{ fontSize: "0.8125rem" }}
                       >
                         {COUNTRY_DIAL_CODES.map((country) => (
@@ -506,13 +508,13 @@ export function ConnectModal({
                         ))}
                       </select>
                       <div className="relative">
-                        <Smartphone className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                        <Smartphone className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
                         <input
                           type="tel"
                           value={form.phoneNumber}
                           onChange={(event) => updateField("phoneNumber", event.target.value)}
                           placeholder="7xxxxxxxx"
-                          className="w-full py-2.5 px-3 pr-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                          className="w-full py-2.5 px-3 pr-9 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
                           style={{ fontSize: "0.875rem" }}
                         />
                       </div>
@@ -521,15 +523,15 @@ export function ConnectModal({
 
                   {telegramAuthId && (
                     <div>
-                      <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                        كود التحقق
+                      <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                        {t("كود التحقق", "Verification Code")}
                       </label>
                       <input
                         type="text"
                         value={form.phoneCode}
                         onChange={(event) => updateField("phoneCode", event.target.value)}
                         placeholder="12345"
-                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
                         style={{ fontSize: "0.875rem" }}
                       />
                     </div>
@@ -537,15 +539,15 @@ export function ConnectModal({
 
                   {telegramNeedsPassword && (
                     <div>
-                      <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.8125rem" }}>
-                        كلمة مرور 2FA
+                      <label className="block text-slate-600 dark:text-slate-300 mb-1.5" style={{ fontSize: "0.8125rem" }}>
+                        {t("كلمة مرور 2FA", "2FA Password")}
                       </label>
                       <input
                         type="password"
                         value={form.twoFactorPassword}
                         onChange={(event) => updateField("twoFactorPassword", event.target.value)}
                         placeholder={telegramPasswordHint ? `Hint: ${telegramPasswordHint}` : "Telegram cloud password"}
-                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
+                        className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-400"
                         style={{ fontSize: "0.875rem" }}
                         dir="ltr"
                       />
@@ -554,16 +556,16 @@ export function ConnectModal({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                    <p className="text-slate-700" style={{ fontSize: "0.8125rem" }}>
-                      سيتم استخدام المفاتيح المحفوظة تلقائياً لهذه المنصة ثم استخراج بيانات الحساب بدون إدخال يدوي.
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-700/40 p-3">
+                    <p className="text-slate-700 dark:text-slate-200" style={{ fontSize: "0.8125rem" }}>
+                      {t("سيتم استخدام المفاتيح المحفوظة تلقائياً لهذه المنصة ثم استخراج بيانات الحساب بدون إدخال يدوي.", "Saved credentials will be used automatically for this platform and account data will be fetched without manual input.")}
                     </p>
-                    <p className="text-slate-500 mt-1" style={{ fontSize: "0.75rem" }}>
-                      المفاتيح المكتشفة: {nonTelegramSavedKeyCount}
+                    <p className="text-slate-500 dark:text-slate-400 mt-1" style={{ fontSize: "0.75rem" }}>
+                      {t(`المفاتيح المكتشفة: ${nonTelegramSavedKeyCount}`, `Detected keys: ${nonTelegramSavedKeyCount}`)}
                     </p>
                     {nonTelegramSavedKeyCount === 0 ? (
                       <p className="text-amber-600 mt-1" style={{ fontSize: "0.75rem" }}>
-                        لم يتم العثور على مفاتيح منصة محفوظة. تأكد من إعدادها من صفحة Settings.
+                        {t("لم يتم العثور على مفاتيح منصة محفوظة. تأكد من إعدادها من صفحة Settings.", "No saved platform keys found. Make sure they are configured in Settings.")}
                       </p>
                     ) : null}
                   </div>
@@ -587,9 +589,9 @@ export function ConnectModal({
                 </span>
               </motion.button>
 
-              <p className="mt-3 text-slate-400 flex items-center justify-center gap-1" style={{ fontSize: "0.75rem" }}>
+              <p className="mt-3 text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1" style={{ fontSize: "0.75rem" }}>
                 <Shield className="w-3 h-3" />
-                اتصال آمن ومشفر
+                {t("اتصال آمن ومشفر", "Secure encrypted connection")}
               </p>
             </div>
           </motion.div>

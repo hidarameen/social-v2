@@ -68,6 +68,32 @@
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
+  /* Enforce language-aware typography globally (Arabic/English) with no component exceptions */
+  html[lang="ar"],
+  html[lang="ar"] body {
+    font-family: "Cairo", "Inter", sans-serif;
+  }
+
+  html[lang="en"],
+  html[lang="en"] body {
+    font-family: "Inter", "Cairo", sans-serif;
+  }
+
+  html[lang="ar"] * {
+    font-family: inherit !important;
+  }
+
+  html[lang="en"] * {
+    font-family: inherit !important;
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  }
+
   /* Prevent text size adjustment */
   html {
     -webkit-text-size-adjust: 100%;

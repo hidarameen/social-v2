@@ -12,6 +12,7 @@ import {
   Eye,
 } from "lucide-react";
 import { getPlatformIcon, type PlatformType, type PlatformInfo } from "./PlatformIcons";
+import { useTheme } from "../context/ThemeContext";
 
 export interface ConnectedAccount {
   id: string;
@@ -39,6 +40,7 @@ export function AccountCard({
   onRefresh,
   viewMode = "grid",
 }: AccountCardProps) {
+  const { language, t } = useTheme();
   const [showMenu, setShowMenu] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -66,21 +68,21 @@ export function AccountCard({
       color: "text-emerald-700",
       bg: "bg-emerald-50",
       border: "border-emerald-200",
-      label: "نشط",
+      label: t("نشط", "Active"),
       dot: "bg-emerald-500",
     },
     expired: {
       color: "text-amber-700",
       bg: "bg-amber-50",
       border: "border-amber-200",
-      label: "منتهي",
+      label: t("منتهي", "Expired"),
       dot: "bg-amber-500",
     },
     refreshing: {
       color: "text-blue-700",
       bg: "bg-blue-50",
       border: "border-blue-200",
-      label: "يتم التحديث",
+      label: t("يتم التحديث", "Refreshing"),
       dot: "bg-blue-500",
     },
   };
@@ -110,7 +112,7 @@ export function AccountCard({
         }}
       >
         <motion.div
-          className="relative rounded-2xl bg-white transition-all duration-300"
+          className="relative rounded-2xl bg-white dark:bg-slate-800/70 transition-all duration-300"
           style={{
             border: "1px solid rgba(0,0,0,0.06)",
             boxShadow: isHovered
@@ -119,7 +121,7 @@ export function AccountCard({
           }}
           whileHover={{ y: -1 }}
         >
-          <div className="flex items-center gap-4 p-4" dir="rtl">
+          <div className="flex items-center gap-4 p-4" dir={language === "ar" ? "rtl" : "ltr"}>
             {/* Platform Icon + Avatar */}
             <div className="relative shrink-0">
               <div
@@ -143,7 +145,7 @@ export function AccountCard({
             {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h4 className="text-slate-800 truncate">{account.platform.name}</h4>
+                <h4 className="text-slate-800 dark:text-slate-200 truncate">{account.platform.name}</h4>
                 <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${status.bg} ${status.border} border`}>
                   <motion.div
                     className={`w-1.5 h-1.5 rounded-full ${status.dot}`}
@@ -153,22 +155,22 @@ export function AccountCard({
                   <span className={status.color} style={{ fontSize: "0.6875rem" }}>{status.label}</span>
                 </div>
               </div>
-              <p className="text-slate-500 truncate" style={{ fontSize: "0.8125rem" }}>{account.username}</p>
+              <p className="text-slate-500 dark:text-slate-400 truncate" style={{ fontSize: "0.8125rem" }}>{account.username}</p>
             </div>
 
             {/* Stats */}
             <div className="hidden sm:flex items-center gap-6 shrink-0">
               <div className="text-center">
-                <p className="text-slate-700" style={{ fontSize: "0.875rem" }}>{account.postsCount}</p>
-                <p className="text-slate-400" style={{ fontSize: "0.6875rem" }}>منشور</p>
+                <p className="text-slate-700 dark:text-slate-200" style={{ fontSize: "0.875rem" }}>{account.postsCount}</p>
+                <p className="text-slate-400 dark:text-slate-500" style={{ fontSize: "0.6875rem" }}>{t("منشور", "Posts")}</p>
               </div>
               <div className="text-center">
-                <p className="text-slate-700" style={{ fontSize: "0.875rem" }}>{account.followers}</p>
-                <p className="text-slate-400" style={{ fontSize: "0.6875rem" }}>متابع</p>
+                <p className="text-slate-700 dark:text-slate-200" style={{ fontSize: "0.875rem" }}>{account.followers}</p>
+                <p className="text-slate-400 dark:text-slate-500" style={{ fontSize: "0.6875rem" }}>{t("متابع", "Followers")}</p>
               </div>
               <div className="text-center">
-                <p className="text-slate-700" style={{ fontSize: "0.875rem" }}>{account.connectedAt}</p>
-                <p className="text-slate-400" style={{ fontSize: "0.6875rem" }}>تاريخ الربط</p>
+                <p className="text-slate-700 dark:text-slate-200" style={{ fontSize: "0.875rem" }}>{account.connectedAt}</p>
+                <p className="text-slate-400 dark:text-slate-500" style={{ fontSize: "0.6875rem" }}>{t("تاريخ الربط", "Connected")}</p>
               </div>
             </div>
 
@@ -176,25 +178,27 @@ export function AccountCard({
             <div className="flex items-center gap-1 shrink-0">
               <motion.button
                 onClick={handleVisitProfile}
-                className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 whileTap={{ scale: 0.9 }}
-                title="زيارة الحساب"
+                title={t("زيارة الحساب", "Visit Account")}
               >
-                <ExternalLink className="w-4 h-4 text-slate-400" />
+                <ExternalLink className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               </motion.button>
               <div className="relative">
                 <motion.button
                   ref={btnRef}
                   onClick={() => setShowMenu(!showMenu)}
-                  className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                  className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                   whileTap={{ scale: 0.9 }}
                 >
-                  <MoreHorizontal className="w-4 h-4 text-slate-400" />
+                  <MoreHorizontal className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                 </motion.button>
                 <AnimatePresence>
                   {showMenu && (
                     <DropdownMenu
                       ref={menuRef}
+                      language={language}
+                      t={t}
                       onRefresh={() => { onRefresh(account.id); setShowMenu(false); }}
                       onVisit={() => { handleVisitProfile(); setShowMenu(false); }}
                       onDelete={() => { onDelete(account.id); setShowMenu(false); }}
@@ -225,7 +229,7 @@ export function AccountCard({
       }}
     >
       <motion.div
-        className="relative rounded-2xl bg-white transition-all duration-300"
+        className="relative rounded-2xl bg-white dark:bg-slate-800/70 transition-all duration-300"
         style={{
           border: isHovered ? "1px solid rgba(0,0,0,0.1)" : "1px solid rgba(0,0,0,0.06)",
           boxShadow: isHovered
@@ -243,7 +247,7 @@ export function AccountCard({
 
         <div className="p-5">
           {/* Header Row */}
-          <div className="flex items-start justify-between mb-4" dir="rtl">
+          <div className="flex items-start justify-between mb-4" dir={language === "ar" ? "rtl" : "ltr"}>
             {/* Left: Platform Icon + Info */}
             <div className="flex items-center gap-3 min-w-0">
               <div className="relative shrink-0">
@@ -272,8 +276,8 @@ export function AccountCard({
                 )}
               </div>
               <div className="min-w-0">
-                <h4 className="text-slate-800 truncate">{account.platform.name}</h4>
-                <p className="text-slate-500 truncate" style={{ fontSize: "0.8125rem" }}>
+                <h4 className="text-slate-800 dark:text-slate-200 truncate">{account.platform.name}</h4>
+                <p className="text-slate-500 dark:text-slate-400 truncate" style={{ fontSize: "0.8125rem" }}>
                   {account.username}
                 </p>
               </div>
@@ -284,11 +288,11 @@ export function AccountCard({
               {/* Visit profile button */}
               <motion.button
                 onClick={handleVisitProfile}
-                className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors opacity-0 group-hover:opacity-100"
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover:opacity-100"
                 whileTap={{ scale: 0.9 }}
-                title="زيارة الحساب"
+                title={t("زيارة الحساب", "Visit Account")}
               >
-                <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
               </motion.button>
 
               {/* Menu button */}
@@ -296,10 +300,10 @@ export function AccountCard({
                 <motion.button
                   ref={btnRef}
                   onClick={() => setShowMenu(!showMenu)}
-                  className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
+                  className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
                   whileTap={{ scale: 0.9 }}
                 >
-                  <MoreHorizontal className="w-4 h-4 text-slate-500" />
+                  <MoreHorizontal className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                 </motion.button>
 
                 {/* Dropdown Menu */}
@@ -307,6 +311,8 @@ export function AccountCard({
                   {showMenu && (
                     <DropdownMenu
                       ref={menuRef}
+                      language={language}
+                      t={t}
                       onRefresh={() => { onRefresh(account.id); setShowMenu(false); }}
                       onVisit={() => { handleVisitProfile(); setShowMenu(false); }}
                       onDelete={() => { onDelete(account.id); setShowMenu(false); }}
@@ -318,7 +324,7 @@ export function AccountCard({
           </div>
 
           {/* Status Badge */}
-          <div className="flex items-center justify-between mb-4" dir="rtl">
+          <div className="flex items-center justify-between mb-4" dir={language === "ar" ? "rtl" : "ltr"}>
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${status.bg} ${status.border} border`}
             >
@@ -339,29 +345,29 @@ export function AccountCard({
             {/* OAuth badge */}
             <div className="flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-slate-400" style={{ fontSize: "0.6875rem" }}>
+              <span className="text-slate-400 dark:text-slate-500" style={{ fontSize: "0.6875rem" }}>
                 OAuth 2.0
               </span>
             </div>
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-3 gap-2 mb-4" dir="rtl">
+          <div className="grid grid-cols-3 gap-2 mb-4" dir={language === "ar" ? "rtl" : "ltr"}>
             {[
-              { icon: BarChart3, value: account.postsCount, label: "منشور", color: "text-blue-500" },
-              { icon: Users, value: account.followers, label: "متابع", color: "text-violet-500" },
-              { icon: Calendar, value: account.connectedAt, label: "تاريخ الربط", color: "text-emerald-500" },
+              { icon: BarChart3, value: account.postsCount, label: t("منشور", "Posts"), color: "text-blue-500" },
+              { icon: Users, value: account.followers, label: t("متابع", "Followers"), color: "text-violet-500" },
+              { icon: Calendar, value: account.connectedAt, label: t("تاريخ الربط", "Connected"), color: "text-emerald-500" },
             ].map((stat, i) => (
               <div
                 key={i}
-                className="text-center py-2.5 rounded-xl bg-slate-50/80 hover:bg-slate-100/80 transition-colors"
+                className="text-center py-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-700/40 hover:bg-slate-100/80 dark:hover:bg-slate-700 transition-colors"
                 style={{ border: "1px solid rgba(0,0,0,0.04)" }}
               >
                 <stat.icon className={`w-3.5 h-3.5 mx-auto mb-1 ${stat.color}`} />
-                <p className="text-slate-700" style={{ fontSize: "0.8125rem" }}>
+                <p className="text-slate-700 dark:text-slate-200" style={{ fontSize: "0.8125rem" }}>
                   {stat.value}
                 </p>
-                <p className="text-slate-400" style={{ fontSize: "0.625rem" }}>
+                <p className="text-slate-400 dark:text-slate-500" style={{ fontSize: "0.625rem" }}>
                   {stat.label}
                 </p>
               </div>
@@ -369,9 +375,9 @@ export function AccountCard({
           </div>
 
           {/* Connection Quality Bar */}
-          <div className="flex items-center justify-between" dir="rtl">
-            <span className="text-slate-400" style={{ fontSize: "0.6875rem" }}>
-              جودة الاتصال
+          <div className="flex items-center justify-between" dir={language === "ar" ? "rtl" : "ltr"}>
+            <span className="text-slate-400 dark:text-slate-500" style={{ fontSize: "0.6875rem" }}>
+              {t("جودة الاتصال", "Connection Quality")}
             </span>
             <div className="flex gap-0.5 items-end">
               {[1, 2, 3, 4, 5].map((bar) => (
@@ -406,17 +412,19 @@ export function AccountCard({
 // Extracted dropdown menu component
 
 interface DropdownMenuProps {
+  language: "ar" | "en";
+  t: (ar: string, en: string) => string;
   onRefresh: () => void;
   onVisit: () => void;
   onDelete: () => void;
 }
 
 const DropdownMenu = forwardRef<HTMLDivElement, DropdownMenuProps>(
-  ({ onRefresh, onVisit, onDelete }, ref) => {
+  ({ language, t, onRefresh, onVisit, onDelete }, ref) => {
     return (
       <motion.div
         ref={ref}
-        className="absolute top-full mt-1 left-0 w-48 rounded-xl bg-white py-1"
+        className={`absolute top-full mt-1 ${language === "ar" ? "left-0" : "right-0"} w-48 rounded-xl bg-white dark:bg-slate-800 py-1`}
         style={{
           border: "1px solid rgba(0,0,0,0.08)",
           boxShadow: "0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)",
@@ -429,40 +437,40 @@ const DropdownMenu = forwardRef<HTMLDivElement, DropdownMenuProps>(
       >
         <button
           onClick={onRefresh}
-          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-600 hover:bg-slate-50 transition-colors text-right"
-          dir="rtl"
+          className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${language === "ar" ? "text-right" : "text-left"}`}
+          dir={language === "ar" ? "rtl" : "ltr"}
           style={{ fontSize: "0.8125rem" }}
         >
           <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
-          <span>تحديث الربط</span>
+          <span>{t("تحديث الربط", "Refresh Connection")}</span>
         </button>
         <button
           onClick={onVisit}
-          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-600 hover:bg-slate-50 transition-colors text-right"
-          dir="rtl"
+          className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${language === "ar" ? "text-right" : "text-left"}`}
+          dir={language === "ar" ? "rtl" : "ltr"}
           style={{ fontSize: "0.8125rem" }}
         >
           <Eye className="w-3.5 h-3.5 text-violet-500" />
-          <span>معاينة الحساب</span>
+          <span>{t("معاينة الحساب", "Preview Account")}</span>
         </button>
         <button
           onClick={onVisit}
-          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-600 hover:bg-slate-50 transition-colors text-right"
-          dir="rtl"
+          className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${language === "ar" ? "text-right" : "text-left"}`}
+          dir={language === "ar" ? "rtl" : "ltr"}
           style={{ fontSize: "0.8125rem" }}
         >
           <ExternalLink className="w-3.5 h-3.5 text-emerald-500" />
-          <span>فتح الحساب</span>
+          <span>{t("فتح الحساب", "Open Account")}</span>
         </button>
-        <div className="my-1 border-t border-slate-100" />
+        <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
         <button
           onClick={onDelete}
-          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors text-right"
-          dir="rtl"
+          className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors ${language === "ar" ? "text-right" : "text-left"}`}
+          dir={language === "ar" ? "rtl" : "ltr"}
           style={{ fontSize: "0.8125rem" }}
         >
           <Trash2 className="w-3.5 h-3.5" />
-          <span>حذف الحساب</span>
+          <span>{t("حذف الحساب", "Delete Account")}</span>
         </button>
       </motion.div>
     );

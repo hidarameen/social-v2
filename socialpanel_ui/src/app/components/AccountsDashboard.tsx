@@ -14,6 +14,7 @@ import {
   X,
   ArrowUpDown,
   ChevronUp,
+  Loader2,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { AnimatedBackground } from "./AnimatedBackground";
@@ -26,21 +27,23 @@ import {
   type PlatformInfo,
 } from "./PlatformIcons";
 import { apiRequest } from "../services/api";
+import { useTheme } from "../context/ThemeContext";
 
 type SortMode = "newest" | "name" | "followers";
+const ACCOUNTS_CACHE_KEY = "socialflow_accounts_cache_v1";
 
 function trimInput(value: unknown): string {
   return String(value || "").trim();
 }
 
-function mapApiAccount(account: any): ConnectedAccount {
+function mapApiAccount(account: any, language: "ar" | "en"): ConnectedAccount {
   const platform = platforms.find((p) => p.id === account.platformId) || platforms[0];
   const username = String(account.accountUsername || account.accountName || account.accountId || "Account");
   return {
     id: String(account.id),
     platform,
     username,
-    connectedAt: account.createdAt ? new Date(account.createdAt).toLocaleDateString("ar") : "",
+    connectedAt: account.createdAt ? new Date(account.createdAt).toLocaleDateString(language) : "",
     status: account.isActive ? "active" : "expired",
     postsCount: 0,
     followers: "0",
@@ -48,7 +51,20 @@ function mapApiAccount(account: any): ConnectedAccount {
 }
 
 export function AccountsDashboard() {
-  const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
+  const { language, t } = useTheme();
+  const [accounts, setAccounts] = useState<ConnectedAccount[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.sessionStorage.getItem(ACCOUNTS_CACHE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed as ConnectedAccount[];
+    } catch {
+      return [];
+    }
+  });
+  const [accountsLoading, setAccountsLoading] = useState<boolean>(accounts.length === 0);
   const [showPlatformSelector, setShowPlatformSelector] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformInfo | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -63,19 +79,35 @@ export function AccountsDashboard() {
     let active = true;
     async function loadAccounts() {
       try {
+        if (accounts.length === 0) {
+          setAccountsLoading(true);
+        }
         const payload = await apiRequest<any>("/api/accounts?limit=200&offset=0&sortBy=createdAt&sortDir=desc");
         if (!active) return;
-        const mapped = ((payload.accounts || []) as any[]).map((account) => mapApiAccount(account));
+        const mapped = ((payload.accounts || []) as any[]).map((account) => mapApiAccount(account, language));
         setAccounts(mapped);
       } catch {
         if (active) setAccounts([]);
+      } finally {
+        if (active) {
+          setAccountsLoading(false);
+        }
       }
     }
     void loadAccounts();
     return () => {
       active = false;
     };
-  }, []);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.setItem(ACCOUNTS_CACHE_KEY, JSON.stringify(accounts));
+    } catch {
+      // no-op when storage is unavailable
+    }
+  }, [accounts]);
 
   // Scroll to top detector
   useEffect(() => {
@@ -200,7 +232,7 @@ export function AccountsDashboard() {
         },
       });
 
-      const account = mapApiAccount(response.account || {});
+      const account = mapApiAccount(response.account || {}, language);
       setAccounts((prev) => {
         const next = prev.filter((item) => item.id !== account.id);
         return [account, ...next];
@@ -280,9 +312,9 @@ export function AccountsDashboard() {
     <div
       className="w-full relative"
       style={{
-        fontFamily: "Inter, sans-serif",
+        fontFamily: language === "ar" ? "Cairo, Inter, sans-serif" : "Inter, sans-serif",
       }}
-      dir="rtl"
+      dir={language === "ar" ? "rtl" : "ltr"}
     >
       {/* Hero Header */}
       <motion.div
@@ -301,7 +333,7 @@ export function AccountsDashboard() {
             >
               <div className="px-3 py-1 rounded-full bg-white border border-purple-200" style={{ boxShadow: "0 2px 8px rgba(139,92,246,0.1)" }}>
                 <span className="text-purple-700" style={{ fontSize: "0.75rem" }}>
-                  لوحة الحسابات
+                  {t("لوحة الحسابات", "Accounts Panel")}
                 </span>
               </div>
               <div className="px-3 py-1 rounded-full bg-white border border-emerald-200 flex items-center gap-1.5" style={{ boxShadow: "0 2px 8px rgba(16,185,129,0.1)" }}>
@@ -311,14 +343,14 @@ export function AccountsDashboard() {
                   transition={{ duration: 2, repeat: Infinity }}
                 />
                 <span className="text-emerald-700" style={{ fontSize: "0.75rem" }}>
-                  {stats.active} حسابات نشطة
+                  {t(`${stats.active} حسابات نشطة`, `${stats.active} active accounts`)}
                 </span>
               </div>
               {stats.expired > 0 && (
                 <div className="px-3 py-1 rounded-full bg-white border border-amber-200 flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                   <span className="text-amber-700" style={{ fontSize: "0.75rem" }}>
-                    {stats.expired} تحتاج تحديث
+                    {t(`${stats.expired} تحتاج تحديث`, `${stats.expired} need refresh`)}
                   </span>
                 </div>
               )}
@@ -331,7 +363,7 @@ export function AccountsDashboard() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
             >
-              إدارة الحسابات
+              {t("إدارة الحسابات", "Accounts Management")}
             </motion.h1>
             <motion.p
               className="text-slate-500"
@@ -340,7 +372,10 @@ export function AccountsDashboard() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.4 }}
             >
-              ربط وإدارة حسابات التواصل الاجتماعي عبر OAuth للنشر التلقائي
+              {t(
+                "ربط وإدارة حسابات التواصل الاجتماعي عبر OAuth للنشر التلقائي",
+                "Connect and manage social accounts via OAuth for automation"
+              )}
             </motion.p>
           </div>
 
@@ -355,7 +390,7 @@ export function AccountsDashboard() {
             transition={{ delay: 0.5 }}
           >
             <Plus className="w-5 h-5" />
-            <span>إضافة حساب</span>
+            <span>{t("إضافة حساب", "Add Account")}</span>
             <motion.div
               className="absolute inset-0 bg-white/10"
               initial={{ x: "-100%" }}
@@ -376,28 +411,28 @@ export function AccountsDashboard() {
         {[
           {
             icon: Globe,
-            label: "إجمالي الحسابات",
+            label: t("إجمالي الحسابات", "Total Accounts"),
             value: stats.total,
             iconBg: "bg-violet-100",
             iconColor: "text-violet-600",
           },
           {
             icon: Activity,
-            label: "حسابات نشطة",
+            label: t("حسابات نشطة", "Active Accounts"),
             value: stats.active,
             iconBg: "bg-emerald-100",
             iconColor: "text-emerald-600",
           },
           {
             icon: TrendingUp,
-            label: "إجمالي المنشورات",
+            label: t("إجمالي المنشورات", "Total Posts"),
             value: stats.totalPosts,
             iconBg: "bg-blue-100",
             iconColor: "text-blue-600",
           },
           {
             icon: Link2,
-            label: "تنتظر تحديث",
+            label: t("تنتظر تحديث", "Need Refresh"),
             value: stats.expired,
             iconBg: "bg-amber-100",
             iconColor: "text-amber-600",
@@ -440,7 +475,7 @@ export function AccountsDashboard() {
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="ابحث عن حساب..."
+            placeholder={t("ابحث عن حساب...", "Search account...")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full py-2.5 pr-10 pl-10 rounded-xl bg-white border border-slate-200 text-slate-700 placeholder-slate-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all"
@@ -466,9 +501,9 @@ export function AccountsDashboard() {
             }}
           >
             {[
-              { id: "all", label: "الكل", count: accounts.length },
-              { id: "active", label: "نشط", count: stats.active },
-              { id: "expired", label: "منتهي", count: stats.expired },
+              { id: "all", label: t("الكل", "All"), count: accounts.length },
+              { id: "active", label: t("نشط", "Active"), count: stats.active },
+              { id: "expired", label: t("منتهي", "Expired"), count: stats.expired },
             ].map((f) => (
               <button
                 key={f.id}
@@ -514,11 +549,11 @@ export function AccountsDashboard() {
               }}
               className="px-3 py-2.5 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1"
               style={{ fontSize: "0.8125rem" }}
-              title="ترتيب"
+              title={t("ترتيب", "Sort")}
             >
               <ArrowUpDown className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">
-                {sortMode === "newest" ? "الأحدث" : sortMode === "name" ? "الاسم" : "المتابعين"}
+                {sortMode === "newest" ? t("الأحدث", "Newest") : sortMode === "name" ? t("الاسم", "Name") : t("المتابعين", "Followers")}
               </span>
             </button>
           </div>
@@ -563,13 +598,26 @@ export function AccountsDashboard() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          {filteredAccounts.length} نتيجة لـ "{searchQuery}"
+          {t(`${filteredAccounts.length} نتيجة لـ "${searchQuery}"`, `${filteredAccounts.length} results for "${searchQuery}"`)}
         </motion.p>
       )}
 
       {/* Accounts Grid/List */}
       <AnimatePresence mode="popLayout">
-        {filteredAccounts.length > 0 ? (
+        {accountsLoading && accounts.length === 0 ? (
+          <motion.div
+            className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/50 backdrop-blur-sm p-8 sm:p-10"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex items-center justify-center gap-3 text-slate-600 dark:text-slate-300">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span style={{ fontSize: "0.9rem" }}>
+                {t("جاري تحميل الحسابات...", "Loading accounts...")}
+              </span>
+            </div>
+          </motion.div>
+        ) : filteredAccounts.length > 0 ? (
           <motion.div
             className={
               viewMode === "grid"
@@ -618,10 +666,10 @@ export function AccountsDashboard() {
                     <Plus className="w-7 h-7 text-violet-600" />
                   </motion.div>
                   <p className="text-slate-600" style={{ fontSize: "0.875rem" }}>
-                    إضافة حساب جديد
+                    {t("إضافة حساب جديد", "Add New Account")}
                   </p>
                   <p className="text-slate-400 mt-1" style={{ fontSize: "0.75rem" }}>
-                    12 منصة متاحة للربط
+                    {t("12 منصة متاحة للربط", "12 platforms available")}
                   </p>
                 </div>
               </motion.button>
@@ -650,11 +698,11 @@ export function AccountsDashboard() {
             >
               <Globe className="w-10 h-10 text-violet-500" />
             </motion.div>
-            <h3 className="text-slate-700 mb-2">لا توجد حسابات</h3>
+            <h3 className="text-slate-700 mb-2">{t("لا توجد حسابات", "No accounts found")}</h3>
             <p className="text-slate-500 mb-6" style={{ fontSize: "0.875rem" }}>
               {searchQuery
-                ? `لم يتم العثور على نتائج لـ "${searchQuery}"`
-                : "ابدأ بربط حسابات التواصل الاجتماعي"}
+                ? t(`لم يتم العثور على نتائج لـ "${searchQuery}"`, `No results for "${searchQuery}"`)
+                : t("ابدأ بربط حسابات التواصل الاجتماعي", "Start by connecting your social accounts")}
             </p>
             {searchQuery ? (
               <motion.button
@@ -664,7 +712,7 @@ export function AccountsDashboard() {
                 whileTap={{ scale: 0.98 }}
               >
                 <X className="w-4 h-4" />
-                مسح البحث
+                {t("مسح البحث", "Clear Search")}
               </motion.button>
             ) : (
               <motion.button
@@ -675,7 +723,7 @@ export function AccountsDashboard() {
                 whileTap={{ scale: 0.95 }}
               >
                 <Plus className="w-5 h-5" />
-                إضافة أول حساب
+                {t("إضافة أول حساب", "Add First Account")}
               </motion.button>
             )}
           </motion.div>
@@ -691,7 +739,7 @@ export function AccountsDashboard() {
           whileTap={{ scale: 0.99 }}
         >
           <Plus className="w-4 h-4" />
-          <span style={{ fontSize: "0.875rem" }}>إضافة حساب جديد</span>
+          <span style={{ fontSize: "0.875rem" }}>{t("إضافة حساب جديد", "Add New Account")}</span>
         </motion.button>
       )}
 
@@ -711,7 +759,7 @@ export function AccountsDashboard() {
         >
           <Shield className="w-4 h-4 text-emerald-500" />
           <span className="text-slate-500" style={{ fontSize: "0.75rem" }}>
-            جميع الاتصالات مشفرة ومؤمنة عبر بروتوكول OAuth 2.0
+            {t("جميع الاتصالات مشفرة ومؤمنة عبر بروتوكول OAuth 2.0", "All connections are encrypted and secured via OAuth 2.0")}
           </span>
           <Zap className="w-4 h-4 text-amber-500" />
         </div>
