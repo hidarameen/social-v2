@@ -12,6 +12,10 @@ import { apiRequest } from "../../services/api";
 
 type FilterType = "all" | "active" | "paused" | "error";
 
+function getTaskAccountIds(items: Array<{ accountId?: string }>): string[] {
+  return [...new Set(items.map((item) => String(item.accountId || "").trim()).filter(Boolean))];
+}
+
 export function TasksPage() {
   const [tasks, setTasks] = useState<AutomationTask[]>([]);
   const [showCreator, setShowCreator] = useState(false);
@@ -36,6 +40,7 @@ export function TasksPage() {
             const account = accountsById[id] || {};
             return {
               platformId: (account.platformId || "twitter") as PlatformType,
+              accountId: String(id),
               accountLabel: String(account.accountName || account.accountUsername || id),
               triggerId: "trigger",
             };
@@ -44,6 +49,7 @@ export function TasksPage() {
             const account = accountsById[id] || {};
             return {
               platformId: (account.platformId || "facebook") as PlatformType,
+              accountId: String(id),
               accountLabel: String(account.accountName || account.accountUsername || id),
               actionId: "action",
             };
@@ -130,17 +136,22 @@ export function TasksPage() {
       body: {
         name: dup.name,
         description: dup.description,
-        sourceAccounts: [],
-        targetAccounts: [],
+        sourceAccounts: getTaskAccountIds(dup.sources),
+        targetAccounts: getTaskAccountIds(dup.targets),
         status: "paused",
       },
+    }).then((payload: any) => {
+      const createdId = String(payload?.task?.id || "").trim();
+      if (!createdId) return;
+      setTasks((prev) => prev.map((item) => (item.id === dup.id ? { ...item, id: createdId } : item)));
     }).catch(() => {
       // Ignore sync failure in optimistic duplicate flow.
     });
   };
 
   const handleSave = (task: AutomationTask) => {
-    if (editingTask) setTasks((prev) => prev.map((t) => t.id === task.id ? task : t));
+    const isEditing = !!editingTask;
+    if (isEditing) setTasks((prev) => prev.map((t) => t.id === task.id ? task : t));
     else setTasks((prev) => [...prev, task]);
     setShowCreator(false);
     setEditingTask(null);
@@ -148,16 +159,20 @@ export function TasksPage() {
     const payload = {
       name: task.name,
       description: task.description,
-      sourceAccounts: [],
-      targetAccounts: [],
+      sourceAccounts: getTaskAccountIds(task.sources),
+      targetAccounts: getTaskAccountIds(task.targets),
       status: task.enabled ? "active" : "paused",
     };
-    if (editingTask) {
+    if (isEditing) {
       void apiRequest(`/api/tasks/${task.id}`, { method: "PATCH", body: payload }).catch(() => {
         // Keep local state when sync fails.
       });
     } else {
-      void apiRequest("/api/tasks", { method: "POST", body: payload }).catch(() => {
+      void apiRequest("/api/tasks", { method: "POST", body: payload }).then((response: any) => {
+        const createdId = String(response?.task?.id || "").trim();
+        if (!createdId) return;
+        setTasks((prev) => prev.map((item) => (item.id === task.id ? { ...item, id: createdId } : item)));
+      }).catch(() => {
         // Keep local state when sync fails.
       });
     }

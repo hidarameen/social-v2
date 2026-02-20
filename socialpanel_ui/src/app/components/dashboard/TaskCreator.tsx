@@ -10,14 +10,27 @@ import { apiRequest } from "../../services/api";
 
 export interface TaskSource {
   platformId: PlatformType;
+  accountId: string;
   accountLabel: string;
   triggerId: string;
 }
 
 export interface TaskTarget {
   platformId: PlatformType;
+  accountId: string;
   accountLabel: string;
   actionId: string;
+}
+
+interface AccountOption {
+  id: string;
+  label: string;
+}
+
+function createEmptyAccountsByPlatform(): Record<PlatformType, AccountOption[]> {
+  return Object.fromEntries(
+    platforms.map((platform) => [platform.id, [] as AccountOption[]])
+  ) as Record<PlatformType, AccountOption[]>;
 }
 
 export interface AutomationTask {
@@ -49,11 +62,11 @@ export function TaskCreator({ task, onSave, onCancel }: TaskCreatorProps) {
   const [addingSource, setAddingSource] = useState(false);
   const [addingTarget, setAddingTarget] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformType | null>(null);
-  const [selectedAccount, setSelectedAccount] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
   const [selectedTrigger, setSelectedTrigger] = useState("");
   const [selectedAction, setSelectedAction] = useState("");
-  const [accountsByPlatform, setAccountsByPlatform] = useState<Record<PlatformType, string[]>>(() =>
-    Object.fromEntries(platforms.map((platform) => [platform.id, []])) as Record<PlatformType, string[]>
+  const [accountsByPlatform, setAccountsByPlatform] = useState<Record<PlatformType, AccountOption[]>>(
+    () => createEmptyAccountsByPlatform()
   );
 
   useEffect(() => {
@@ -62,24 +75,25 @@ export function TaskCreator({ task, onSave, onCancel }: TaskCreatorProps) {
       try {
         const payload = await apiRequest<any>("/api/accounts?limit=200&offset=0&sortBy=createdAt&sortDir=desc");
         if (!active) return;
-        const grouped = Object.fromEntries(
-          platforms.map((platform) => [platform.id, [] as string[]])
-        ) as Record<PlatformType, string[]>;
+        const grouped = createEmptyAccountsByPlatform();
         for (const account of (payload.accounts || []) as any[]) {
           const platformId = account.platformId as PlatformType;
           if (!grouped[platformId]) continue;
+          const accountId = String(account.id || "").trim();
+          if (!accountId) continue;
           const label = String(
             account.accountName || account.accountUsername || account.accountId || ""
           ).trim();
-          if (!label || grouped[platformId].includes(label)) continue;
-          grouped[platformId].push(label);
+          if (grouped[platformId].some((entry) => entry.id === accountId)) continue;
+          grouped[platformId].push({
+            id: accountId,
+            label: label || accountId,
+          });
         }
         setAccountsByPlatform(grouped);
       } catch {
         if (!active) return;
-        setAccountsByPlatform(
-          Object.fromEntries(platforms.map((platform) => [platform.id, []])) as Record<PlatformType, string[]>
-        );
+        setAccountsByPlatform(createEmptyAccountsByPlatform());
       }
     }
     void loadAccounts();
@@ -89,16 +103,38 @@ export function TaskCreator({ task, onSave, onCancel }: TaskCreatorProps) {
   }, []);
 
   const handleAddSource = () => {
-    if (selectedPlatform && selectedAccount && selectedTrigger) {
-      setSources([...sources, { platformId: selectedPlatform, accountLabel: selectedAccount, triggerId: selectedTrigger }]);
+    if (selectedPlatform && selectedAccountId && selectedTrigger) {
+      const account =
+        accountsByPlatform[selectedPlatform]?.find((entry) => entry.id === selectedAccountId) || null;
+      if (!account) return;
+      setSources([
+        ...sources,
+        {
+          platformId: selectedPlatform,
+          accountId: account.id,
+          accountLabel: account.label,
+          triggerId: selectedTrigger,
+        },
+      ]);
       resetSelection();
       setAddingSource(false);
     }
   };
 
   const handleAddTarget = () => {
-    if (selectedPlatform && selectedAccount && selectedAction) {
-      setTargets([...targets, { platformId: selectedPlatform, accountLabel: selectedAccount, actionId: selectedAction }]);
+    if (selectedPlatform && selectedAccountId && selectedAction) {
+      const account =
+        accountsByPlatform[selectedPlatform]?.find((entry) => entry.id === selectedAccountId) || null;
+      if (!account) return;
+      setTargets([
+        ...targets,
+        {
+          platformId: selectedPlatform,
+          accountId: account.id,
+          accountLabel: account.label,
+          actionId: selectedAction,
+        },
+      ]);
       resetSelection();
       setAddingTarget(false);
     }
@@ -106,7 +142,7 @@ export function TaskCreator({ task, onSave, onCancel }: TaskCreatorProps) {
 
   const resetSelection = () => {
     setSelectedPlatform(null);
-    setSelectedAccount("");
+    setSelectedAccountId("");
     setSelectedTrigger("");
     setSelectedAction("");
   };
@@ -218,11 +254,11 @@ export function TaskCreator({ task, onSave, onCancel }: TaskCreatorProps) {
             <AnimatePresence>
               {addingSource && (
                 <motion.div className="p-4 rounded-xl bg-slate-50" style={{ border: "1px solid rgba(0,0,0,0.06)" }} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                  <PlatformNodeSelector mode="trigger" selectedPlatform={selectedPlatform} selectedAccount={selectedAccount} selectedItem={selectedTrigger}
+                  <PlatformNodeSelector mode="trigger" selectedPlatform={selectedPlatform} selectedAccountId={selectedAccountId} selectedItem={selectedTrigger}
                     accountsByPlatform={accountsByPlatform}
-                    onPlatformSelect={setSelectedPlatform} onAccountSelect={setSelectedAccount} onItemSelect={setSelectedTrigger} />
+                    onPlatformSelect={setSelectedPlatform} onAccountSelect={setSelectedAccountId} onItemSelect={setSelectedTrigger} />
                   <div className="flex items-center gap-2 mt-3">
-                    <motion.button onClick={handleAddSource} disabled={!selectedPlatform || !selectedAccount || !selectedTrigger} className="px-4 py-2 rounded-xl bg-blue-600 text-white flex items-center gap-1.5 disabled:opacity-40" style={{ fontSize: "0.8125rem" }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <motion.button onClick={handleAddSource} disabled={!selectedPlatform || !selectedAccountId || !selectedTrigger} className="px-4 py-2 rounded-xl bg-blue-600 text-white flex items-center gap-1.5 disabled:opacity-40" style={{ fontSize: "0.8125rem" }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                       <CheckCircle className="w-4 h-4" /><span>إضافة</span>
                     </motion.button>
                     <motion.button onClick={() => setAddingSource(false)} className="px-4 py-2 rounded-xl bg-white text-slate-600" style={{ border: "1px solid rgba(0,0,0,0.08)", fontSize: "0.8125rem" }} whileTap={{ scale: 0.98 }}>
@@ -280,11 +316,11 @@ export function TaskCreator({ task, onSave, onCancel }: TaskCreatorProps) {
             <AnimatePresence>
               {addingTarget && (
                 <motion.div className="p-4 rounded-xl bg-slate-50" style={{ border: "1px solid rgba(0,0,0,0.06)" }} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                  <PlatformNodeSelector mode="action" selectedPlatform={selectedPlatform} selectedAccount={selectedAccount} selectedItem={selectedAction}
+                  <PlatformNodeSelector mode="action" selectedPlatform={selectedPlatform} selectedAccountId={selectedAccountId} selectedItem={selectedAction}
                     accountsByPlatform={accountsByPlatform}
-                    onPlatformSelect={setSelectedPlatform} onAccountSelect={setSelectedAccount} onItemSelect={setSelectedAction} />
+                    onPlatformSelect={setSelectedPlatform} onAccountSelect={setSelectedAccountId} onItemSelect={setSelectedAction} />
                   <div className="flex items-center gap-2 mt-3">
-                    <motion.button onClick={handleAddTarget} disabled={!selectedPlatform || !selectedAccount || !selectedAction} className="px-4 py-2 rounded-xl bg-violet-600 text-white flex items-center gap-1.5 disabled:opacity-40" style={{ fontSize: "0.8125rem" }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <motion.button onClick={handleAddTarget} disabled={!selectedPlatform || !selectedAccountId || !selectedAction} className="px-4 py-2 rounded-xl bg-violet-600 text-white flex items-center gap-1.5 disabled:opacity-40" style={{ fontSize: "0.8125rem" }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                       <CheckCircle className="w-4 h-4" /><span>إضافة</span>
                     </motion.button>
                     <motion.button onClick={() => setAddingTarget(false)} className="px-4 py-2 rounded-xl bg-white text-slate-600" style={{ border: "1px solid rgba(0,0,0,0.08)", fontSize: "0.8125rem" }} whileTap={{ scale: 0.98 }}>
@@ -389,12 +425,12 @@ export function TaskCreator({ task, onSave, onCancel }: TaskCreatorProps) {
 }
 
 // Platform/Account/Trigger-Action selector component
-function PlatformNodeSelector({ mode, selectedPlatform, selectedAccount, selectedItem, accountsByPlatform, onPlatformSelect, onAccountSelect, onItemSelect }: {
+function PlatformNodeSelector({ mode, selectedPlatform, selectedAccountId, selectedItem, accountsByPlatform, onPlatformSelect, onAccountSelect, onItemSelect }: {
   mode: "trigger" | "action";
   selectedPlatform: PlatformType | null;
-  selectedAccount: string;
+  selectedAccountId: string;
   selectedItem: string;
-  accountsByPlatform: Record<PlatformType, string[]>;
+  accountsByPlatform: Record<PlatformType, AccountOption[]>;
   onPlatformSelect: (p: PlatformType) => void;
   onAccountSelect: (a: string) => void;
   onItemSelect: (t: string) => void;
@@ -430,10 +466,10 @@ function PlatformNodeSelector({ mode, selectedPlatform, selectedAccount, selecte
           <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.75rem" }}>اختر الحساب</label>
           <div className="flex flex-wrap gap-2">
             {accounts.map((acc) => (
-              <motion.button key={acc} onClick={() => onAccountSelect(acc)}
-                className={`px-3 py-1.5 rounded-lg transition-all ${selectedAccount === acc ? "bg-violet-100 text-violet-700 ring-1 ring-violet-300" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+              <motion.button key={acc.id} onClick={() => onAccountSelect(acc.id)}
+                className={`px-3 py-1.5 rounded-lg transition-all ${selectedAccountId === acc.id ? "bg-violet-100 text-violet-700 ring-1 ring-violet-300" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                 style={{ border: "1px solid rgba(0,0,0,0.06)", fontSize: "0.75rem" }} whileTap={{ scale: 0.97 }}>
-                {acc}
+                {acc.label}
               </motion.button>
             ))}
           </div>
@@ -452,7 +488,7 @@ function PlatformNodeSelector({ mode, selectedPlatform, selectedAccount, selecte
       )}
 
       {/* Trigger/Action selection */}
-      {selectedPlatform && selectedAccount && items.length > 0 && (
+      {selectedPlatform && selectedAccountId && items.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}>
           <label className="block text-slate-600 mb-1.5" style={{ fontSize: "0.75rem" }}>
             {mode === "trigger" ? "اختر الحدث (Trigger)" : "اختر الإجراء (Action)"}
