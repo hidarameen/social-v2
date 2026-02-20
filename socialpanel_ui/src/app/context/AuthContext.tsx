@@ -110,8 +110,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const socialLogin = useCallback(async (provider: "google" | "twitter" | "facebook") => {
-    setAuthError(`${provider} sign in is not connected yet in this build.`);
-    return false;
+    setIsLoading(true);
+    setAuthError("");
+    try {
+      const providerMap = await apiRequest<Record<string, { id: string; name?: string }>>(
+        "/api/auth/providers",
+        { auth: false }
+      );
+      const providerConfig = providerMap?.[provider];
+      if (!providerConfig?.id) {
+        setAuthError(`${provider} sign in is not configured on the server yet.`);
+        return false;
+      }
+
+      const callbackUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/social-v2/index.html#/dashboard`
+          : "/social-v2/index.html#/dashboard";
+      const signInUrl = `/api/auth/signin/${encodeURIComponent(
+        providerConfig.id
+      )}?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+
+      if (typeof window !== "undefined") {
+        window.location.assign(signInUrl);
+      }
+      return true;
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Unable to start social sign in");
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const signup = useCallback(async (name: string, email: string, password: string) => {
