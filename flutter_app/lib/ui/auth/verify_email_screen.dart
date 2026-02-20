@@ -93,10 +93,8 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   }
 
   void _setCode(String value) {
-    final normalized = value
-        .replaceAll(RegExp(r'\D'), '')
-        .padRight(6)
-        .substring(0, 6);
+    final normalized =
+        value.replaceAll(RegExp(r'\D'), '').padRight(6).substring(0, 6);
     for (int i = 0; i < _otpControllers.length; i++) {
       _otpControllers[i].text = normalized[i] == ' ' ? '' : normalized[i];
     }
@@ -129,15 +127,24 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
   Future<void> _submit() async {
     if (_busy) return;
+    final i18n = I18n(widget.state.locale);
     final email = _email.text.trim().toLowerCase();
     final code = _normalizedCode();
 
     if (!_isValidEmail(email)) {
-      setState(() => _error = 'Enter a valid email address.');
+      setState(() {
+        _error = i18n.isArabic
+            ? 'أدخل بريدًا إلكترونيًا صحيحًا.'
+            : 'Enter a valid email address.';
+      });
       return;
     }
     if (code.length != 6) {
-      setState(() => _error = 'Enter the 6-digit verification code.');
+      setState(() {
+        _error = i18n.isArabic
+            ? 'أدخل رمز التحقق المكون من 6 أرقام.'
+            : 'Enter the 6-digit verification code.';
+      });
       return;
     }
 
@@ -152,13 +159,19 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       if (!mounted) return;
       setState(() {
         _success = true;
-        _info = 'Your email has been verified successfully.';
+        _info = i18n.isArabic
+            ? 'تم التحقق من بريدك الإلكتروني بنجاح.'
+            : 'Your email has been verified successfully.';
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _success = false;
-        _error = error is ApiException ? error.message : 'Verification failed.';
+        _error = error is ApiException
+            ? error.message
+            : i18n.isArabic
+                ? 'فشل التحقق.'
+                : 'Verification failed.';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -167,9 +180,14 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
   Future<void> _resend() async {
     if (_busy || _resendSeconds > 0) return;
+    final i18n = I18n(widget.state.locale);
     final email = _email.text.trim().toLowerCase();
     if (!_isValidEmail(email)) {
-      setState(() => _error = 'Enter a valid email address first.');
+      setState(() {
+        _error = i18n.isArabic
+            ? 'أدخل بريدًا إلكترونيًا صحيحًا أولاً.'
+            : 'Enter a valid email address first.';
+      });
       return;
     }
 
@@ -189,8 +207,12 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       if (!mounted) return;
       setState(() {
         _info = debugCode.isNotEmpty
-            ? 'Code sent. (debug code: $debugCode)'
-            : 'If the account exists, a verification code has been sent.';
+            ? (i18n.isArabic
+                ? 'تم إرسال الرمز. (كود التطوير: $debugCode)'
+                : 'Code sent. (debug code: $debugCode)')
+            : i18n.isArabic
+                ? 'إذا كان الحساب موجودًا، تم إرسال رمز التحقق.'
+                : 'If the account exists, a verification code has been sent.';
       });
       if (debugCode.isNotEmpty) {
         _setCode(debugCode);
@@ -201,7 +223,9 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       setState(() {
         _error = error is ApiException
             ? error.message
-            : 'Unable to resend code.';
+            : i18n.isArabic
+                ? 'تعذر إعادة إرسال الرمز.'
+                : 'Unable to resend code.';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -218,8 +242,10 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     return AuthShell(
       state: widget.state,
       heroIcon: Icons.security_rounded,
-      title: 'Verify Your Account',
-      description: 'We sent a verification code to your email',
+      title: i18n.isArabic ? 'تحقق من حسابك' : 'Verify Your Account',
+      description: i18n.isArabic
+          ? 'لقد أرسلنا رمز تحقق إلى بريدك الإلكتروني'
+          : 'We sent a verification code to your email',
       child: Form(
         key: _formKey,
         child: Column(
@@ -235,10 +261,10 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 enabled: !_success,
                 onTapOutside: (_) =>
                     FocusManager.instance.primaryFocus?.unfocus(),
-                decoration: const InputDecoration(
-                  labelText: 'Email',
+                decoration: InputDecoration(
+                  labelText: i18n.t('auth.email', 'Email'),
                   hintText: 'you@example.com',
-                  prefixIcon: Icon(Icons.mail_outline_rounded),
+                  prefixIcon: const Icon(Icons.mail_outline_rounded),
                   floatingLabelBehavior: FloatingLabelBehavior.auto,
                 ),
               ),
@@ -274,8 +300,12 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 Expanded(
                   child: Text(
                     _resendSeconds > 0
-                        ? 'Resend available in $mm:$ss'
-                        : 'You can resend a new code now',
+                        ? (i18n.isArabic
+                            ? 'إعادة الإرسال متاحة بعد $mm:$ss'
+                            : 'Resend available in $mm:$ss')
+                        : (i18n.isArabic
+                            ? 'يمكنك إعادة إرسال رمز جديد الآن'
+                            : 'You can resend a new code now'),
                     style: TextStyle(
                       fontSize: 12,
                       color: scheme.onSurfaceVariant,
@@ -305,21 +335,18 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
             const SizedBox(height: 8),
             if (_success)
               _GradientCtaButton(
-                label: i18n.isArabic
-                    ? 'الانتقال لتسجيل الدخول'
-                    : 'Go to Sign In',
-                loadingLabel: i18n.isArabic
-                    ? 'جارٍ التحويل...'
-                    : 'Redirecting...',
+                label:
+                    i18n.isArabic ? 'الانتقال لتسجيل الدخول' : 'Go to Sign In',
+                loadingLabel:
+                    i18n.isArabic ? 'جارٍ التحويل...' : 'Redirecting...',
                 loading: false,
                 onPressed: widget.onVerified,
               )
             else
               _GradientCtaButton(
                 label: i18n.t('auth.verifyEmail', 'Confirm Code'),
-                loadingLabel: i18n.isArabic
-                    ? 'جارٍ التحقق...'
-                    : 'Confirming...',
+                loadingLabel:
+                    i18n.isArabic ? 'جارٍ التحقق...' : 'Confirming...',
                 loading: _busy,
                 onPressed: _busy ? null : _submit,
               ),
@@ -355,8 +382,8 @@ class _OtpDigitField extends StatelessWidget {
         final borderColor = hasError
             ? scheme.error.withValues(alpha: 0.62)
             : focused
-            ? scheme.primary
-            : scheme.outline.withValues(alpha: 0.38);
+                ? scheme.primary
+                : scheme.outline.withValues(alpha: 0.38);
         return AnimatedContainer(
           duration: const Duration(milliseconds: 170),
           width: 46,

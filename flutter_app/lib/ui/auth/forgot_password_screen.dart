@@ -86,11 +86,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
   }
 
+  void _changeEmail() {
+    _countdownTimer?.cancel();
+    setState(() {
+      _emailSent = false;
+      _done = false;
+      _busy = false;
+      _error = '';
+      _message = '';
+      _resendSeconds = 0;
+      _code.clear();
+      _password.clear();
+      _confirmPassword.clear();
+    });
+    _emailFocus.requestFocus();
+  }
+
   Future<void> _sendCode() async {
     if (_busy) return;
+    final i18n = I18n(widget.state.locale);
     final email = _email.text.trim().toLowerCase();
     if (!_isValidEmail(email)) {
-      setState(() => _error = 'Enter a valid email address.');
+      setState(() {
+        _error = i18n.isArabic
+            ? 'أدخل بريدًا إلكترونيًا صحيحًا.'
+            : 'Enter a valid email address.';
+      });
       return;
     }
 
@@ -110,9 +131,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (!mounted) return;
       setState(() {
         _emailSent = true;
-        _message =
-            res['message']?.toString() ??
-            'If the account exists, a reset code has been sent.';
+        _message = (res['message']?.toString() ?? '').trim().isNotEmpty
+            ? res['message'].toString().trim()
+            : i18n.isArabic
+                ? 'إذا كان الحساب موجودًا، تم إرسال رمز إعادة التعيين.'
+                : 'If the account exists, a reset code has been sent.';
         if (debugCode.isNotEmpty) {
           _code.text = _normalizeCode(debugCode);
         }
@@ -124,7 +147,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() {
         _error = error is ApiException
             ? error.message
-            : 'Unable to process request.';
+            : i18n.isArabic
+                ? 'تعذر تنفيذ الطلب.'
+                : 'Unable to process request.';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -133,6 +158,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Future<void> _updatePassword() async {
     if (_busy) return;
+    final i18n = I18n(widget.state.locale);
 
     if (!_formKey.currentState!.validate()) return;
 
@@ -155,7 +181,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (!mounted) return;
       setState(() {
         _done = true;
-        _message = 'Password updated successfully. You can sign in now.';
+        _message = i18n.isArabic
+            ? 'تم تحديث كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.'
+            : 'Password updated successfully. You can sign in now.';
         _password.clear();
         _confirmPassword.clear();
       });
@@ -164,7 +192,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() {
         _error = error is ApiException
             ? error.message
-            : 'Unable to reset password.';
+            : i18n.isArabic
+                ? 'تعذر إعادة تعيين كلمة المرور.'
+                : 'Unable to reset password.';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -191,9 +221,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return AuthShell(
       state: widget.state,
       heroIcon: Icons.lock_reset_rounded,
-      title: 'Reset Password',
-      description:
-          'Enter your email first. After we send the code, complete verification and set a new password.',
+      title: i18n.isArabic ? 'إعادة تعيين كلمة المرور' : 'Reset Password',
+      description: i18n.isArabic
+          ? 'أدخل بريدك أولاً، ثم أرسل الكود لإظهار خطوات التحقق وتعيين كلمة مرور جديدة.'
+          : 'Enter your email first. After sending the code, complete verification and set a new password.',
       child: Form(
         key: _formKey,
         child: Column(
@@ -206,7 +237,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 focusNode: _emailFocus,
                 keyboardType: TextInputType.emailAddress,
                 textDirection: TextDirection.ltr,
-                enabled: !_done,
+                enabled: !_done && !_emailSent,
                 textInputAction: TextInputAction.next,
                 onFieldSubmitted: (_) {
                   if (_emailSent) _codeFocus.requestFocus();
@@ -217,10 +248,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   labelText: i18n.t('auth.email', 'Email'),
                   hintText: 'you@example.com',
                   prefixIcon: const Icon(Icons.mail_outline_rounded),
+                  suffixIcon: _emailSent && !_done
+                      ? TextButton(
+                          onPressed: _busy ? null : _changeEmail,
+                          child: Text(i18n.isArabic ? 'تغيير' : 'Change'),
+                        )
+                      : null,
                   floatingLabelBehavior: FloatingLabelBehavior.auto,
                 ),
                 validator: (value) {
                   final v = (value ?? '').trim();
+                  if (v.isEmpty) {
+                    return i18n.isArabic
+                        ? 'البريد الإلكتروني مطلوب.'
+                        : 'Email is required.';
+                  }
                   if (!_isValidEmail(v)) {
                     return i18n.isArabic
                         ? 'أدخل بريدًا صحيحًا.'
@@ -234,9 +276,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             if (!_emailSent)
               _GradientCtaButton(
                 label: i18n.isArabic ? 'إرسال الكود' : 'Send Code',
-                loadingLabel: i18n.isArabic
-                    ? 'جارٍ الإرسال...'
-                    : 'Sending code...',
+                loadingLabel:
+                    i18n.isArabic ? 'جارٍ الإرسال...' : 'Sending code...',
                 loading: _busy,
                 onPressed: _busy ? null : _sendCode,
               ),
@@ -266,9 +307,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     }
                   },
                   decoration: InputDecoration(
-                    labelText: i18n.isArabic
-                        ? 'رمز التحقق'
-                        : 'Verification Code',
+                    labelText:
+                        i18n.isArabic ? 'رمز التحقق' : 'Verification Code',
                     hintText: '123456',
                     prefixIcon: const Icon(Icons.pin_outlined),
                     floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -300,16 +340,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       FocusManager.instance.primaryFocus?.unfocus(),
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    labelText: i18n.isArabic
-                        ? 'كلمة مرور جديدة'
-                        : 'New Password',
+                    labelText:
+                        i18n.isArabic ? 'كلمة مرور جديدة' : 'New Password',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
                     floatingLabelBehavior: FloatingLabelBehavior.auto,
                     suffixIcon: IconButton(
                       onPressed: _done
                           ? null
                           : () =>
-                                setState(() => _showPassword = !_showPassword),
+                              setState(() => _showPassword = !_showPassword),
                       icon: Icon(
                         _showPassword
                             ? Icons.visibility_off_rounded
@@ -384,9 +423,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       onPressed: _done
                           ? null
                           : () => setState(
-                              () =>
-                                  _showConfirmPassword = !_showConfirmPassword,
-                            ),
+                                () => _showConfirmPassword =
+                                    !_showConfirmPassword,
+                              ),
                       icon: Icon(
                         _showConfirmPassword
                             ? Icons.visibility_off_rounded
@@ -411,8 +450,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   Expanded(
                     child: Text(
                       _resendSeconds > 0
-                          ? 'Resend in $mm:$ss'
-                          : 'Need another code?',
+                          ? (i18n.isArabic
+                              ? 'إعادة الإرسال بعد $mm:$ss'
+                              : 'Resend in $mm:$ss')
+                          : (i18n.isArabic
+                              ? 'تحتاج رمزًا جديدًا؟'
+                              : 'Need another code?'),
                       style: TextStyle(
                         fontSize: 12,
                         color: scheme.onSurfaceVariant,
@@ -431,9 +474,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               if (!_done)
                 _GradientCtaButton(
                   label: i18n.isArabic ? 'تأكيد الكود' : 'Confirm Code',
-                  loadingLabel: i18n.isArabic
-                      ? 'جارٍ التأكيد...'
-                      : 'Confirming...',
+                  loadingLabel:
+                      i18n.isArabic ? 'جارٍ التأكيد...' : 'Confirming...',
                   loading: _busy,
                   onPressed: _busy ? null : _updatePassword,
                 ),
