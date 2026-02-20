@@ -8,29 +8,30 @@ import type {
   PostRequest,
   PostResponse,
 } from '../types';
-import type { OutstandingNetworkId, OutstandingPost, OutstandingSocialAccount } from './types';
+import type {
+  BufferCreatePostPayload,
+  BufferNetworkId,
+  BufferPost,
+  BufferSocialAccount,
+} from './types';
 import {
-  createOutstandPost,
-  deleteOutstandSocialAccount,
-  deleteOutstandPost,
-  getOutstandNetworkAuthUrl,
-  getOutstandSocialAccountMetrics,
-  getOutstandTenantId,
-  listOutstandSocialAccounts,
+  createBufferPost,
+  deleteBufferPost,
+  getBufferSocialAccountMetrics,
+  listBufferSocialAccounts,
   normalizeSelector,
-  parseOutstandNumber,
+  parseBufferNumber,
 } from './client';
 
 type TokenHints = {
-  apiKey?: string;
-  tenantId?: string;
+  accessToken?: string;
   baseUrl?: string;
   selectors: string[];
 };
 
-type OutstandingHandlerOptions = {
+type BufferHandlerOptions = {
   config: PlatformConfig;
-  network: OutstandingNetworkId;
+  network: BufferNetworkId;
   selectorsEnvKey: string;
 };
 
@@ -61,8 +62,8 @@ function parseTokenHints(token?: string): TokenHints {
         const fromArrays = [
           parsed.accounts,
           parsed.accountIds,
-          parsed.outstandAccounts,
-          parsed.outstandAccountIds,
+          parsed.profileIds,
+          parsed.bufferProfileIds,
           parsed.selectors,
         ];
         for (const candidate of fromArrays) {
@@ -75,7 +76,8 @@ function parseTokenHints(token?: string): TokenHints {
         }
 
         const fromStrings = [
-          parsed.outstandAccountId,
+          parsed.bufferProfileId,
+          parsed.profileId,
           parsed.selector,
           parsed.accountSelector,
         ];
@@ -84,25 +86,19 @@ function parseTokenHints(token?: string): TokenHints {
           if (value) selectors.push(value);
         }
 
-        const apiKey =
+        const accessToken =
+          trimString(parsed.accessToken) ||
           trimString(parsed.apiKey) ||
-          trimString(parsed.outstandApiKey) ||
-          trimString(parsed.outstandingApiKey) ||
-          undefined;
-
-        const tenantId =
-          trimString(parsed.tenantId) ||
-          trimString(parsed.outstandTenantId) ||
-          trimString(parsed.outstandingTenantId) ||
+          trimString(parsed.bufferAccessToken) ||
+          trimString(parsed.bufferApiKey) ||
           undefined;
 
         const baseUrl =
           trimString(parsed.baseUrl) ||
-          trimString(parsed.outstandBaseUrl) ||
-          trimString(parsed.outstandingBaseUrl) ||
+          trimString(parsed.bufferBaseUrl) ||
           undefined;
 
-        return { apiKey, tenantId, baseUrl, selectors };
+        return { accessToken, baseUrl, selectors };
       }
     } catch {
       // Keep fallback parsing below.
@@ -112,13 +108,20 @@ function parseTokenHints(token?: string): TokenHints {
   return { selectors: parseSelectorsFromRaw(raw) };
 }
 
-function buildBestEffortPostUrl(network: OutstandingNetworkId, post: OutstandingPost): string | undefined {
+function normalizeNetworkToken(value: string): string {
+  const token = value.trim().toLowerCase();
+  if (token === 'x') return 'twitter';
+  if (token === 'google_business') return 'googlebusiness';
+  return token;
+}
+
+function buildBestEffortPostUrl(network: BufferNetworkId, post: BufferPost): string | undefined {
   const first = Array.isArray(post.socialAccounts) ? post.socialAccounts[0] : undefined;
   const platformPostId = trimString(first?.platformPostId);
   if (!platformPostId) return undefined;
 
-  switch (network) {
-    case 'x':
+  switch (normalizeNetworkToken(network)) {
+    case 'twitter':
       return `https://x.com/i/web/status/${platformPostId}`;
     case 'facebook':
       return `https://www.facebook.com/${platformPostId}`;
@@ -134,16 +137,12 @@ function buildBestEffortPostUrl(network: OutstandingNetworkId, post: Outstanding
       return `https://www.pinterest.com/pin/${platformPostId}`;
     case 'threads':
       return `https://www.threads.net/t/${platformPostId}`;
-    case 'snapchat':
-    case 'google_business':
-    case 'whatsapp':
-    case 'telegram':
     default:
       return undefined;
   }
 }
 
-function matchesSelector(account: OutstandingSocialAccount, selector: string): boolean {
+function matchesSelector(account: BufferSocialAccount, selector: string): boolean {
   const normalized = normalizeSelector(selector);
   if (!normalized) return false;
 
@@ -155,6 +154,7 @@ function matchesSelector(account: OutstandingSocialAccount, selector: string): b
     trimString(account.metadata?.id),
     trimString(account.metadata?.username),
     trimString(account.metadata?.handle),
+    trimString((account.metadata as any)?.service_id),
   ]
     .map(normalizeSelector)
     .filter(Boolean);
@@ -162,45 +162,43 @@ function matchesSelector(account: OutstandingSocialAccount, selector: string): b
   return candidates.includes(normalized);
 }
 
-function mapAccountToInfo(account?: OutstandingSocialAccount): AccountInfo | null {
+function mapAccountToInfo(account?: BufferSocialAccount): AccountInfo | null {
   if (!account?.id) return null;
   return {
     id: String(account.id),
     username: trimString(account.username) || String(account.id),
-    name: trimString(account.name) || trimString(account.username) || 'Outstand Account',
-    followers: parseOutstandNumber(account.stats?.followers) || undefined,
-    following: parseOutstandNumber(account.stats?.following) || undefined,
+    name: trimString(account.name) || trimString(account.username) || 'Buffer Account',
+    followers: parseBufferNumber(account.stats?.followers) || undefined,
+    following: parseBufferNumber(account.stats?.following) || undefined,
     avatar: trimString(account.avatarUrl) || undefined,
   };
 }
 
 function collectNumericMetricValues(payload: any): Record<string, number> {
-  const source = payload?.metrics && typeof payload.metrics === 'object' ? payload.metrics : payload;
-  if (!source || typeof source !== 'object') return {};
-
+  if (!payload || typeof payload !== 'object') return {};
   const map: Record<string, number> = {};
-  for (const [key, value] of Object.entries(source)) {
-    map[key] = parseOutstandNumber(value);
+  for (const [key, value] of Object.entries(payload)) {
+    map[key] = parseBufferNumber(value);
   }
   return map;
 }
 
-export class OutstandingPlatformHandler implements BasePlatformHandler {
+export class BufferPlatformHandler implements BasePlatformHandler {
   config: PlatformConfig;
 
-  private network: OutstandingNetworkId;
+  private network: BufferNetworkId;
   private selectorsEnvKey: string;
 
-  constructor(options: OutstandingHandlerOptions) {
+  constructor(options: BufferHandlerOptions) {
     this.config = options.config;
     this.network = options.network;
     this.selectorsEnvKey = options.selectorsEnvKey;
   }
 
-  private resolveApiKey(config?: AuthConfig, token?: string): string | undefined {
+  private resolveAccessToken(config?: AuthConfig, token?: string): string | undefined {
     const hints = parseTokenHints(token);
-    const fromConfig = trimString(config?.apiKey);
-    return fromConfig || hints.apiKey || undefined;
+    const fromConfig = trimString(config?.accessToken) || trimString(config?.apiKey);
+    return fromConfig || hints.accessToken || undefined;
   }
 
   private resolveSelectors(token?: string): string[] {
@@ -214,16 +212,15 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
       return parseSelectorsFromRaw(fromEnv);
     }
 
-    return [this.network];
+    return [];
   }
 
-  private async getMatchingAccounts(token?: string, apiKey?: string): Promise<OutstandingSocialAccount[]> {
+  private async getMatchingAccounts(token?: string, accessToken?: string): Promise<BufferSocialAccount[]> {
     const hints = parseTokenHints(token);
-    const accounts = await listOutstandSocialAccounts({
+    const accounts = await listBufferSocialAccounts({
       network: this.network,
       limit: 200,
-      apiKey: apiKey || hints.apiKey,
-      tenantId: hints.tenantId,
+      accessToken: accessToken || hints.accessToken,
       baseUrl: hints.baseUrl,
     });
     if (accounts.length === 0) return [];
@@ -231,57 +228,38 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
     const selectors = this.resolveSelectors(token);
     if (selectors.length === 0) return accounts;
 
-    const matched = accounts.filter((account) => selectors.some((selector) => matchesSelector(account, selector)));
-    return matched.length > 0 ? matched : accounts;
+    return accounts.filter((account) => selectors.some((selector) => matchesSelector(account, selector)));
   }
 
-  private buildPostPayload(post: PostRequest, accountIds: string[]): {
-    payload?: {
-      content?: string;
-      accounts: string[];
-      scheduledAt?: string;
-      containers?: Array<{ content?: string; media?: Array<{ url: string }> }>;
-    };
+  private buildPostPayload(post: PostRequest, profileIds: string[]): {
+    payload?: BufferCreatePostPayload;
     error?: string;
   } {
-    if (accountIds.length === 0) {
-      return { error: 'No Outstand target accounts configured for this platform.' };
+    if (profileIds.length === 0) {
+      return { error: 'No Buffer target profiles configured for this platform.' };
     }
 
     const content = trimString(post.content);
     const mediaUrl = trimString(post.media?.url);
-    if (!content && !mediaUrl) {
+    const text = content || (mediaUrl ? `Shared via SocialFlow ${mediaUrl}` : '');
+    if (!text) {
       return { error: 'Post content or media URL is required.' };
     }
 
-    const payload: {
-      content?: string;
-      accounts: string[];
-      scheduledAt?: string;
-      containers?: Array<{ content?: string; media?: Array<{ url: string }> }>;
-    } = {
-      accounts: accountIds,
+    return {
+      payload: {
+        text,
+        profileIds,
+        scheduledAt:
+          post.scheduleTime instanceof Date && !Number.isNaN(post.scheduleTime.getTime())
+            ? post.scheduleTime.toISOString()
+            : undefined,
+        mediaUrl: mediaUrl || undefined,
+      },
     };
-
-    if (post.scheduleTime instanceof Date && !Number.isNaN(post.scheduleTime.getTime())) {
-      payload.scheduledAt = post.scheduleTime.toISOString();
-    }
-
-    if (mediaUrl) {
-      payload.containers = [
-        {
-          content: content || undefined,
-          media: [{ url: mediaUrl }],
-        },
-      ];
-    } else if (content) {
-      payload.content = content;
-    }
-
-    return { payload };
   }
 
-  private postResponseFromOutstand(post?: OutstandingPost, fallbackScheduledAt?: Date): PostResponse {
+  private postResponseFromBuffer(post?: BufferPost, fallbackScheduledAt?: Date): PostResponse {
     const postId = trimString(post?.id);
     return {
       success: Boolean(postId),
@@ -291,14 +269,14 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
         post?.scheduledAt && !Number.isNaN(new Date(post.scheduledAt).getTime())
           ? new Date(post.scheduledAt)
           : fallbackScheduledAt,
-      error: postId ? undefined : 'Outstand API did not return post id.',
+      error: postId ? undefined : 'Buffer API did not return post id.',
     };
   }
 
   async authenticate(config: AuthConfig): Promise<AuthResponse> {
     try {
-      const apiKey = this.resolveApiKey(config);
-      const accounts = await this.getMatchingAccounts(undefined, apiKey);
+      const accessToken = this.resolveAccessToken(config);
+      const accounts = await this.getMatchingAccounts(undefined, accessToken);
       const accountInfo = mapAccountToInfo(accounts[0] || undefined) || undefined;
 
       return {
@@ -310,7 +288,7 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Outstand authentication failed',
+        error: error instanceof Error ? error.message : 'Buffer authentication failed',
       };
     }
   }
@@ -323,46 +301,29 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
     };
   }
 
-  async revokeAuth(accessToken: string): Promise<boolean> {
-    try {
-      const hints = parseTokenHints(accessToken);
-      const accountIds = hints.selectors.filter(Boolean);
-      if (accountIds.length === 0) return false;
-
-      const results = await Promise.all(
-        accountIds.map(async (accountId) => {
-          try {
-            await deleteOutstandSocialAccount(accountId, hints.apiKey, hints.baseUrl);
-            return true;
-          } catch {
-            return false;
-          }
-        })
-      );
-      return results.some(Boolean);
-    } catch {
-      return false;
-    }
+  async revokeAuth(_accessToken: string): Promise<boolean> {
+    return false;
   }
 
   async publishPost(post: PostRequest, token: string): Promise<PostResponse> {
     try {
       const hints = parseTokenHints(token);
-      const accounts = await this.getMatchingAccounts(token, hints.apiKey);
-      const accountIds = accounts
+      const accounts = await this.getMatchingAccounts(token, hints.accessToken);
+      const profileIds = accounts
         .map((account) => trimString(account.id))
         .filter((value): value is string => value.length > 0);
-      const built = this.buildPostPayload(post, accountIds);
+
+      const built = this.buildPostPayload(post, profileIds);
       if (!built.payload) {
-        return { success: false, error: built.error || 'Failed to build Outstand post payload' };
+        return { success: false, error: built.error || 'Failed to build Buffer payload' };
       }
 
-      const created = await createOutstandPost(built.payload, hints.apiKey, hints.baseUrl);
-      return this.postResponseFromOutstand(created);
+      const created = await createBufferPost(built.payload, hints.accessToken, hints.baseUrl);
+      return this.postResponseFromBuffer(created, post.scheduleTime);
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to publish via Outstand',
+        error: error instanceof Error ? error.message : 'Failed to publish via Buffer',
       };
     }
   }
@@ -391,7 +352,7 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
       if (!replacement.success) {
         return {
           success: false,
-          error: replacement.error || 'Failed to create replacement post via Outstand',
+          error: replacement.error || 'Failed to create replacement post via Buffer',
         };
       }
 
@@ -400,7 +361,7 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to edit post via Outstand',
+        error: error instanceof Error ? error.message : 'Failed to edit post via Buffer',
       };
     }
   }
@@ -408,7 +369,7 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
   async deletePost(postId: string, token: string): Promise<boolean> {
     try {
       const hints = parseTokenHints(token);
-      return await deleteOutstandPost(postId, hints.apiKey, hints.baseUrl);
+      return await deleteBufferPost(postId, hints.accessToken, hints.baseUrl);
     } catch {
       return false;
     }
@@ -417,42 +378,36 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
   async getAccountInfo(token: string): Promise<AccountInfo | null> {
     try {
       const hints = parseTokenHints(token);
-      const accounts = await this.getMatchingAccounts(token, hints.apiKey);
+      const accounts = await this.getMatchingAccounts(token, hints.accessToken);
       return mapAccountToInfo(accounts[0] || undefined);
     } catch {
       return null;
     }
   }
 
-  async getAnalytics(token: string, startDate: Date, endDate: Date): Promise<AnalyticsData[]> {
+  async getAnalytics(token: string, _startDate: Date, endDate: Date): Promise<AnalyticsData[]> {
     try {
       const hints = parseTokenHints(token);
-      const accounts = await this.getMatchingAccounts(token, hints.apiKey);
+      const accounts = await this.getMatchingAccounts(token, hints.accessToken);
       if (accounts.length === 0) return [];
 
       const results = await Promise.all(
         accounts.slice(0, 20).map(async (account) => {
-          const metricsPayload = await getOutstandSocialAccountMetrics(account.id, {
-            since: startDate,
-            until: endDate,
-            apiKey: hints.apiKey,
+          const metricsPayload = await getBufferSocialAccountMetrics(account.id, {
+            accessToken: hints.accessToken,
             baseUrl: hints.baseUrl,
           });
 
           const metrics = collectNumericMetricValues(metricsPayload);
-          const engagements =
-            metrics.engagements ||
-            metrics.total_engagements ||
-            metrics.likes + metrics.comments + metrics.shares + metrics.replies;
 
           return {
             date: endDate,
-            posts: metrics.posts || metrics.post_count || 0,
-            engagements,
-            clicks: metrics.clicks || metrics.link_clicks || 0,
-            reach: metrics.reach || metrics.unique_views || 0,
-            impressions: metrics.impressions || metrics.views || 0,
-            shares: metrics.shares || metrics.reposts || 0,
+            posts: metrics.posts || 0,
+            engagements: metrics.engagements || 0,
+            clicks: metrics.clicks || 0,
+            reach: metrics.reach || 0,
+            impressions: metrics.impressions || 0,
+            shares: metrics.shares || 0,
             saves: metrics.saves || 0,
           } satisfies AnalyticsData;
         })
@@ -462,20 +417,5 @@ export class OutstandingPlatformHandler implements BasePlatformHandler {
     } catch {
       return [];
     }
-  }
-
-  async getAuthUrl(
-    apiKey?: string,
-    redirectUri?: string,
-    baseUrl?: string,
-    tenantId?: string
-  ): Promise<string | undefined> {
-    return getOutstandNetworkAuthUrl({
-      network: this.network,
-      tenantId: tenantId || getOutstandTenantId(),
-      apiKey,
-      redirectUri,
-      baseUrl,
-    });
   }
 }

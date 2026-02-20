@@ -1,7 +1,7 @@
 import type { PlatformId } from './types';
-import { getOutstandUserSettings, isOutstandEnabledForPlatform } from '@/lib/outstand-user-settings';
+import { getBufferUserSettings, isBufferEnabledForPlatform } from '@/lib/buffer-user-settings';
 
-export type PlatformApiProvider = 'native' | 'outstanding';
+export type PlatformApiProvider = 'native' | 'buffer';
 
 const PLATFORM_TOKEN_MAP: Record<string, PlatformId> = {
   facebook: 'facebook',
@@ -23,12 +23,9 @@ const PLATFORM_TOKEN_MAP: Record<string, PlatformId> = {
 function normalizeProvider(value: string | undefined): PlatformApiProvider {
   const normalized = String(value || '').trim().toLowerCase();
   if (
-    normalized === 'outstanding' ||
-    normalized === 'outstand' ||
-    normalized === 'outs' ||
-    normalized === 'os'
+    normalized === 'buffer'
   ) {
-    return 'outstanding';
+    return 'buffer';
   }
   return 'native';
 }
@@ -48,11 +45,11 @@ function parsePlatformList(value: string | undefined): Set<PlatformId> {
   return set;
 }
 
-function resolveOutstandPlatformSet(): Set<PlatformId> {
+function resolveBufferPlatformSet(): Set<PlatformId> {
   return parsePlatformList(
-    process.env.OUTSTAND_PLATFORMS ||
-      process.env.SOCIAL_API_OUTSTAND_PLATFORMS ||
-      process.env.SOCIAL_API_PROVIDER_OUTSTAND_PLATFORMS
+    process.env.BUFFER_PLATFORMS ||
+      process.env.SOCIAL_API_BUFFER_PLATFORMS ||
+      process.env.SOCIAL_API_PROVIDER_BUFFER_PLATFORMS
   );
 }
 
@@ -71,18 +68,18 @@ export function getPlatformApiProvider(platformId: PlatformId): PlatformApiProvi
   const specific = process.env[key] || process.env[keyMode];
   if (specific) return normalizeProvider(specific);
 
-  // If OUTSTAND_PLATFORMS is explicitly configured, it becomes the source of truth:
-  // listed platforms => outstanding, others => native.
-  const selectedOutstandPlatforms = resolveOutstandPlatformSet();
-  if (selectedOutstandPlatforms.size > 0) {
-    return selectedOutstandPlatforms.has(platformId) ? 'outstanding' : 'native';
+  // If BUFFER_PLATFORMS is explicitly configured, it becomes the source of truth:
+  // listed platforms => buffer, others => native.
+  const selectedBufferPlatforms = resolveBufferPlatformSet();
+  if (selectedBufferPlatforms.size > 0) {
+    return selectedBufferPlatforms.has(platformId) ? 'buffer' : 'native';
   }
 
   return getGlobalPlatformApiProvider();
 }
 
-export function isOutstandingProvider(platformId: PlatformId): boolean {
-  return getPlatformApiProvider(platformId) === 'outstanding';
+export function isBufferProvider(platformId: PlatformId): boolean {
+  return getPlatformApiProvider(platformId) === 'buffer';
 }
 
 export async function getPlatformApiProviderForUser(
@@ -90,12 +87,12 @@ export async function getPlatformApiProviderForUser(
   platformId: PlatformId
 ): Promise<PlatformApiProvider> {
   try {
-    const settings = await getOutstandUserSettings(userId);
-    if (isOutstandEnabledForPlatform(settings, platformId)) {
-      if (String(settings.apiKey || '').trim().length > 0) {
-        return 'outstanding';
+    const settings = await getBufferUserSettings(userId);
+    if (isBufferEnabledForPlatform(settings, platformId)) {
+      if (String(settings.accessToken || '').trim().length > 0) {
+        return 'buffer';
       }
-      // Misconfigured user settings: Outstand selected but API key is missing.
+      // Misconfigured user settings: Buffer selected but access token is missing.
       // Fall back to native provider instead of failing publish at runtime.
       return 'native';
     }
@@ -109,9 +106,9 @@ export async function getPlatformApiProviderForUser(
   return getPlatformApiProvider(platformId);
 }
 
-export async function isOutstandingProviderForUser(
+export async function isBufferProviderForUser(
   userId: string,
   platformId: PlatformId
 ): Promise<boolean> {
-  return (await getPlatformApiProviderForUser(userId, platformId)) === 'outstanding';
+  return (await getPlatformApiProviderForUser(userId, platformId)) === 'buffer';
 }

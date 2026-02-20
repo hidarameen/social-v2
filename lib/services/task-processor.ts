@@ -7,10 +7,10 @@ import {
 import type { PlatformId } from '@/lib/platforms/types';
 import { randomUUID } from 'crypto';
 import {
-  createOutstandPublishToken,
-  createOutstandPublishTokenForAccount,
-  getOutstandUserSettings,
-} from '@/lib/outstand-user-settings';
+  createBufferPublishToken,
+  createBufferPublishTokenForAccount,
+  getBufferUserSettings,
+} from '@/lib/buffer-user-settings';
 
 const GENERIC_TASK_SUPPORTED_TARGETS_NATIVE = new Set<PlatformId>([
   'facebook',
@@ -61,34 +61,33 @@ export class TaskProcessor {
       );
     }
 
-    const outstandSettings = await getOutstandUserSettings(task.userId);
-    const applyOutstandToAllAccounts = outstandSettings.applyToAllAccounts !== false;
+    const bufferSettings = await getBufferUserSettings(task.userId);
+    const applyBufferToAllAccounts = bufferSettings.applyToAllAccounts !== false;
 
     const dedupedTargetAccounts: PlatformAccount[] = [];
-    const seenOutstandPlatforms = new Set<PlatformId>();
+    const seenBufferPlatforms = new Set<PlatformId>();
     for (const targetAccount of targetAccounts) {
       const provider = providerByTargetId.get(targetAccount.id) || 'native';
       const targetPlatformId = targetAccount.platformId as PlatformId;
-      if (provider === 'outstanding' && applyOutstandToAllAccounts) {
-        if (seenOutstandPlatforms.has(targetPlatformId)) {
+      if (provider === 'buffer' && applyBufferToAllAccounts) {
+        if (seenBufferPlatforms.has(targetPlatformId)) {
           continue;
         }
-        seenOutstandPlatforms.add(targetPlatformId);
+        seenBufferPlatforms.add(targetPlatformId);
       }
       dedupedTargetAccounts.push(targetAccount);
     }
 
-    const outstandPublishTokenByTargetId = new Map<string, string>();
+    const bufferPublishTokenByTargetId = new Map<string, string>();
     for (const targetAccount of dedupedTargetAccounts) {
-      if ((providerByTargetId.get(targetAccount.id) || 'native') !== 'outstanding') continue;
-      outstandPublishTokenByTargetId.set(
+      if ((providerByTargetId.get(targetAccount.id) || 'native') !== 'buffer') continue;
+      bufferPublishTokenByTargetId.set(
         targetAccount.id,
-        createOutstandPublishTokenForAccount({
+        createBufferPublishTokenForAccount({
           userId: task.userId,
-          apiKey: outstandSettings.apiKey,
-          tenantId: outstandSettings.tenantId,
-          baseUrl: outstandSettings.baseUrl,
-          applyToAllAccounts: applyOutstandToAllAccounts,
+          accessToken: bufferSettings.accessToken,
+          baseUrl: bufferSettings.baseUrl,
+          applyToAllAccounts: applyBufferToAllAccounts,
           account: targetAccount,
         })
       );
@@ -100,12 +99,12 @@ export class TaskProcessor {
         sourceAccount,
         targetAccount,
         targetProvider: providerByTargetId.get(targetAccount.id) || 'native',
-        outstandPublishToken: outstandPublishTokenByTargetId.get(targetAccount.id),
+        bufferPublishToken: bufferPublishTokenByTargetId.get(targetAccount.id),
       }))
     );
 
     const executionResults = await Promise.all(
-      routePairs.map(async ({ sourceAccount, targetAccount, targetProvider, outstandPublishToken }) => {
+      routePairs.map(async ({ sourceAccount, targetAccount, targetProvider, bufferPublishToken }) => {
         try {
           return await this.executeTransfer(
             task,
@@ -113,7 +112,7 @@ export class TaskProcessor {
             targetAccount,
             executionGroupId,
             targetProvider,
-            outstandPublishToken,
+            bufferPublishToken,
           );
         } catch (error) {
           return db.createExecution({
@@ -159,7 +158,7 @@ export class TaskProcessor {
     targetAccount: PlatformAccount,
     executionGroupId: string,
     targetProvider?: PlatformApiProvider,
-    outstandPublishToken?: string
+    bufferPublishToken?: string
   ): Promise<TaskExecution> {
     const sourcePlatformId = sourceAccount.platformId as PlatformId;
     const targetPlatformId = targetAccount.platformId as PlatformId;
@@ -236,8 +235,8 @@ export class TaskProcessor {
 
       let postResponse;
       const publishToken =
-        provider === 'outstanding'
-          ? outstandPublishToken || createOutstandPublishToken({ userId: task.userId })
+        provider === 'buffer'
+          ? bufferPublishToken || createBufferPublishToken({ userId: task.userId })
           : targetAccount.accessToken;
 
       if (task.executionType === 'scheduled' && task.scheduleTime) {

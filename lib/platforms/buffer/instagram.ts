@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'instagram',
   name: 'Instagram',
   icon: '📷',
   color: '#E4405F',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['image', 'video', 'text'],
   maxContentLength: 2200,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingInstagramHandler = new OutstandingPlatformHandler({
+export const bufferInstagramHandler = new BufferPlatformHandler({
   config,
   network: 'instagram',
-  selectorsEnvKey: 'OUTSTAND_INSTAGRAM_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_INSTAGRAM_ACCOUNTS',
 });

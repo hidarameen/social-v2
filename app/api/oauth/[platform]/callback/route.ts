@@ -8,9 +8,9 @@ import { buildBasicAuth, decodeJwtPayload, safeJsonParse } from '@/lib/oauth/uti
 import { triggerBackgroundServicesRefresh } from '@/lib/services/background-services';
 import { getOAuthClientCredentials, type ManagedPlatformId } from '@/lib/platform-credentials';
 import type { PlatformId } from '@/lib/platforms/types';
-import type { OutstandingNetworkId, OutstandingSocialAccount } from '@/lib/platforms/outstanding/types';
-import { listOutstandSocialAccounts } from '@/lib/platforms/outstanding/client';
-import { getOutstandUserSettings } from '@/lib/outstand-user-settings';
+import type { BufferNetworkId, BufferSocialAccount } from '@/lib/platforms/buffer/types';
+import { listBufferSocialAccounts } from '@/lib/platforms/buffer/client';
+import { getBufferUserSettings } from '@/lib/buffer-user-settings';
 
 export const runtime = 'nodejs';
 
@@ -31,11 +31,11 @@ type OAuthStateCookie = {
   codeVerifier?: string;
   userId: string;
   returnTo?: string;
-  provider?: 'native' | 'outstanding';
+  provider?: 'native' | 'buffer';
 };
 
-const OUTSTAND_NETWORK_BY_PLATFORM: Partial<Record<PlatformId, OutstandingNetworkId>> = {
-  twitter: 'x',
+const BUFFER_NETWORK_BY_PLATFORM: Partial<Record<PlatformId, BufferNetworkId>> = {
+  twitter: 'twitter',
   facebook: 'facebook',
   instagram: 'instagram',
   youtube: 'youtube',
@@ -43,18 +43,18 @@ const OUTSTAND_NETWORK_BY_PLATFORM: Partial<Record<PlatformId, OutstandingNetwor
   telegram: 'telegram',
   linkedin: 'linkedin',
   pinterest: 'pinterest',
-  google_business: 'google_business',
+  google_business: 'googlebusiness',
   threads: 'threads',
   snapchat: 'snapchat',
   whatsapp: 'whatsapp',
 };
 
-function asOutstandPlatformId(value: string): PlatformId | null {
+function asBufferPlatformId(value: string): PlatformId | null {
   const platformId = value as PlatformId;
-  return OUTSTAND_NETWORK_BY_PLATFORM[platformId] ? platformId : null;
+  return BUFFER_NETWORK_BY_PLATFORM[platformId] ? platformId : null;
 }
 
-function mapOutstandAccountInfo(account: OutstandingSocialAccount): {
+function mapBufferAccountInfo(account: BufferSocialAccount): {
   accountId: string;
   accountName: string;
   accountUsername: string;
@@ -408,39 +408,38 @@ export async function GET(
 
     const appBaseUrl = (process.env.APP_URL || request.nextUrl.origin).replace(/\/+$/, '');
     const returnTo = parsed.returnTo && parsed.returnTo.startsWith('/') ? parsed.returnTo : '/accounts';
-    const provider = parsed.provider === 'outstanding' ? 'outstanding' : 'native';
+    const provider = parsed.provider === 'buffer' ? 'buffer' : 'native';
 
-    if (provider === 'outstanding') {
-      const platformId = asOutstandPlatformId(platform.id);
+    if (provider === 'buffer') {
+      const platformId = asBufferPlatformId(platform.id);
       if (!platformId) {
-        return NextResponse.json({ success: false, error: 'Unsupported Outstand platform' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Unsupported Buffer platform' }, { status: 400 });
       }
 
-      const outstandSettings = await getOutstandUserSettings(user.id);
-      if (!outstandSettings.apiKey) {
+      const bufferSettings = await getBufferUserSettings(user.id);
+      if (!bufferSettings.accessToken) {
         return NextResponse.json(
-          { success: false, error: 'Missing Outstand API key. Add it in Settings before connecting accounts.' },
+          { success: false, error: 'Missing Buffer access token. Add it in Settings before connecting accounts.' },
           { status: 400 }
         );
       }
 
-      const network = OUTSTAND_NETWORK_BY_PLATFORM[platformId];
-      const outstandAccounts = await listOutstandSocialAccounts({
+      const network = BUFFER_NETWORK_BY_PLATFORM[platformId];
+      const bufferAccounts = await listBufferSocialAccounts({
         network,
         limit: 200,
-        tenantId: outstandSettings.tenantId,
-        apiKey: outstandSettings.apiKey,
-        baseUrl: outstandSettings.baseUrl,
+        accessToken: bufferSettings.accessToken,
+        baseUrl: bufferSettings.baseUrl,
       });
 
-      if (outstandAccounts.length === 0) {
-        throw new Error(`No ${platform.name} accounts found in Outstand. Complete authorization and try again.`);
+      if (bufferAccounts.length === 0) {
+        throw new Error(`No ${platform.name} accounts found in Buffer. Complete authorization and try again.`);
       }
 
       const userAccounts = await db.getUserAccounts(user.id);
       let linkedCount = 0;
-      for (const outstandAccount of outstandAccounts) {
-        const mapped = mapOutstandAccountInfo(outstandAccount);
+      for (const bufferAccount of bufferAccounts) {
+        const mapped = mapBufferAccountInfo(bufferAccount);
         if (!mapped) continue;
 
         const existing = userAccounts.find(
@@ -449,9 +448,9 @@ export async function GET(
 
         const nextCredentials = {
           ...(existing?.credentials || {}),
-          authProvider: 'outstanding',
-          outstandManaged: true,
-          outstandAccount: {
+          authProvider: 'buffer',
+          bufferManaged: true,
+          bufferProfile: {
             id: mapped.accountId,
             username: mapped.accountUsername,
             name: mapped.accountName,
@@ -465,7 +464,7 @@ export async function GET(
           await db.updateAccount(existing.id, {
             accountName: mapped.accountName,
             accountUsername: mapped.accountUsername,
-            accessToken: existing.accessToken || 'outstand',
+            accessToken: existing.accessToken || 'buffer',
             refreshToken: existing.refreshToken,
             credentials: nextCredentials,
             isActive: true,
@@ -478,7 +477,7 @@ export async function GET(
             accountName: mapped.accountName,
             accountUsername: mapped.accountUsername,
             accountId: mapped.accountId,
-            accessToken: 'outstand',
+            accessToken: 'buffer',
             refreshToken: undefined,
             credentials: nextCredentials,
             isActive: true,
@@ -489,14 +488,14 @@ export async function GET(
       }
 
       if (linkedCount === 0) {
-        throw new Error(`No valid ${platform.name} accounts were returned by Outstand.`);
+        throw new Error(`No valid ${platform.name} accounts were returned by Buffer.`);
       }
 
       triggerBackgroundServicesRefresh({ force: platform.id === 'twitter' });
       const redirect = new URL(returnTo, appBaseUrl);
       redirect.searchParams.set('oauth', 'success');
       redirect.searchParams.set('platform', platform.id);
-      redirect.searchParams.set('provider', 'outstanding');
+      redirect.searchParams.set('provider', 'buffer');
       return NextResponse.redirect(redirect.toString());
     }
 

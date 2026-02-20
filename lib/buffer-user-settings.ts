@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import type { PlatformId } from '@/lib/platforms/types';
 
-export const OUTSTAND_SETTINGS_PLATFORM_ID = 'outstanding';
+export const BUFFER_SETTINGS_PLATFORM_ID = 'buffer';
 
 const PLATFORM_TOKEN_MAP: Record<string, PlatformId> = {
   facebook: 'facebook',
@@ -20,7 +20,7 @@ const PLATFORM_TOKEN_MAP: Record<string, PlatformId> = {
   whatsapp: 'whatsapp',
 };
 
-export const ALL_OUTSTAND_PLATFORM_IDS: PlatformId[] = [
+export const ALL_BUFFER_PLATFORM_IDS: PlatformId[] = [
   'facebook',
   'instagram',
   'twitter',
@@ -35,16 +35,15 @@ export const ALL_OUTSTAND_PLATFORM_IDS: PlatformId[] = [
   'whatsapp',
 ];
 
-export type OutstandUserSettings = {
+export type BufferUserSettings = {
   enabled: boolean;
-  apiKey?: string;
+  accessToken?: string;
   baseUrl?: string;
-  tenantId?: string;
   platforms: PlatformId[];
   applyToAllAccounts: boolean;
 };
 
-export type OutstandSelectorSource = {
+export type BufferSelectorSource = {
   accountId?: unknown;
   accountUsername?: unknown;
   accountName?: unknown;
@@ -53,11 +52,10 @@ export type OutstandSelectorSource = {
   credentials?: unknown;
 };
 
-type UpsertOutstandUserSettingsInput = {
+type UpsertBufferUserSettingsInput = {
   enabled?: boolean;
-  apiKey?: string;
+  accessToken?: string;
   baseUrl?: string;
-  tenantId?: string;
   platforms?: string[];
   applyToAllAccounts?: boolean;
 };
@@ -77,28 +75,30 @@ function pushSelector(map: Map<string, string>, value: unknown) {
 
 function collectSelectorsFromRecord(map: Map<string, string>, record: Record<string, unknown>) {
   const scalarKeys = [
-    'outstandAccountId',
-    'outstandingAccountId',
+    'bufferProfileId',
+    'bufferAccountId',
+    'profileId',
     'selector',
     'accountSelector',
     'socialAccountId',
-    'outstandSocialAccountId',
     'id',
     'accountId',
     'username',
     'handle',
     'chatId',
     'platformAccountId',
+    'service_id',
   ];
   for (const key of scalarKeys) {
     pushSelector(map, record[key]);
   }
 
   const arrayKeys = [
+    'profiles',
+    'profileIds',
     'accounts',
     'accountIds',
-    'outstandAccountIds',
-    'outstandingAccountIds',
+    'bufferProfileIds',
     'selectors',
   ];
   for (const key of arrayKeys) {
@@ -157,55 +157,75 @@ function parsePlatformList(value: unknown): PlatformId[] {
   return [...set];
 }
 
-function normalizeSettings(raw: Record<string, unknown>): OutstandUserSettings {
+function normalizeSettings(raw: Record<string, unknown>): BufferUserSettings {
   const platforms = parsePlatformList(raw.platforms);
+  const accessToken =
+    trimString(raw.accessToken) ||
+    trimString(raw.apiKey) ||
+    undefined;
+
   return {
     enabled: parseBoolean(raw.enabled, false),
-    apiKey: trimString(raw.apiKey) || undefined,
+    accessToken,
     baseUrl: trimString(raw.baseUrl) || undefined,
-    tenantId: trimString(raw.tenantId) || undefined,
     platforms,
     applyToAllAccounts: parseBoolean(raw.applyToAllAccounts, true),
   };
 }
 
-function serializeSettings(input: UpsertOutstandUserSettingsInput): Record<string, unknown> {
+function getEnvBufferAccessToken(): string | undefined {
+  return (
+    trimString(process.env.BUFFER_ACCESS_TOKEN) ||
+    trimString(process.env.BUFFER_API_KEY) ||
+    undefined
+  );
+}
+
+function getEnvBufferBaseUrl(): string | undefined {
+  return trimString(process.env.BUFFER_API_BASE_URL) || undefined;
+}
+
+function serializeSettings(input: UpsertBufferUserSettingsInput): Record<string, unknown> {
   const output: Record<string, unknown> = {};
 
   if (typeof input.enabled === 'boolean') output.enabled = input.enabled;
   if (typeof input.applyToAllAccounts === 'boolean') output.applyToAllAccounts = input.applyToAllAccounts;
 
-  if (typeof input.apiKey === 'string') output.apiKey = input.apiKey.trim();
+  if (typeof input.accessToken === 'string') output.accessToken = input.accessToken.trim();
   if (typeof input.baseUrl === 'string') output.baseUrl = input.baseUrl.trim();
-  if (typeof input.tenantId === 'string') output.tenantId = input.tenantId.trim();
   if (Array.isArray(input.platforms)) output.platforms = parsePlatformList(input.platforms);
 
   return output;
 }
 
-export function isOutstandEnabledForPlatform(settings: OutstandUserSettings, platformId: PlatformId): boolean {
+export function isBufferEnabledForPlatform(settings: BufferUserSettings, platformId: PlatformId): boolean {
   if (!settings.enabled) return false;
   if (settings.platforms.length === 0) return false;
   return settings.platforms.includes(platformId);
 }
 
-export async function getOutstandUserSettings(userId: string): Promise<OutstandUserSettings> {
-  const record = await db.getUserPlatformCredential(userId, OUTSTAND_SETTINGS_PLATFORM_ID);
+export async function getBufferUserSettings(userId: string): Promise<BufferUserSettings> {
+  const record = await db.getUserPlatformCredential(userId, BUFFER_SETTINGS_PLATFORM_ID);
   const raw = (record?.credentials || {}) as Record<string, unknown>;
-  return normalizeSettings(raw);
+  const normalized = normalizeSettings(raw);
+
+  return {
+    ...normalized,
+    accessToken: normalized.accessToken || getEnvBufferAccessToken(),
+    baseUrl: normalized.baseUrl || getEnvBufferBaseUrl(),
+  };
 }
 
-export async function upsertOutstandUserSettings(
+export async function upsertBufferUserSettings(
   userId: string,
-  input: UpsertOutstandUserSettingsInput
-): Promise<OutstandUserSettings> {
-  const current = await getOutstandUserSettings(userId);
+  input: UpsertBufferUserSettingsInput
+): Promise<BufferUserSettings> {
+  const current = await getBufferUserSettings(userId);
   const updates = serializeSettings(input);
   const mergedRaw: Record<string, unknown> = {
     enabled: current.enabled,
-    apiKey: current.apiKey || '',
+    accessToken: current.accessToken || '',
     baseUrl: current.baseUrl || '',
-    tenantId: current.tenantId || '',
     platforms: current.platforms,
     applyToAllAccounts: current.applyToAllAccounts,
     ...updates,
@@ -213,14 +233,14 @@ export async function upsertOutstandUserSettings(
 
   const saved = await db.upsertUserPlatformCredential({
     userId,
-    platformId: OUTSTAND_SETTINGS_PLATFORM_ID,
+    platformId: BUFFER_SETTINGS_PLATFORM_ID,
     credentials: mergedRaw,
   });
 
   return normalizeSettings((saved.credentials || {}) as Record<string, unknown>);
 }
 
-export function getOutstandAccountSelectors(source: OutstandSelectorSource): string[] {
+export function getBufferAccountSelectors(source: BufferSelectorSource): string[] {
   const selectors = new Map<string, string>();
   pushSelector(selectors, source.accountId);
   pushSelector(selectors, source.accountUsername);
@@ -236,18 +256,16 @@ export function getOutstandAccountSelectors(source: OutstandSelectorSource): str
   return [...selectors.values()];
 }
 
-export function createOutstandPublishToken(params: {
+export function createBufferPublishToken(params: {
   userId?: string;
-  apiKey?: string;
-  tenantId?: string;
+  accessToken?: string;
   baseUrl?: string;
   applyToAllAccounts?: boolean;
   selectors?: string[];
 }): string {
   const payload: Record<string, unknown> = {};
   const userId = trimString(params.userId);
-  const apiKey = trimString(params.apiKey);
-  const tenantId = trimString(params.tenantId);
+  const accessToken = trimString(params.accessToken);
   const baseUrl = trimString(params.baseUrl);
   const applyToAllAccounts = params.applyToAllAccounts !== false;
   const selectors = Array.isArray(params.selectors)
@@ -257,37 +275,39 @@ export function createOutstandPublishToken(params: {
     : [];
 
   if (userId) payload.userId = userId;
-  if (apiKey) payload.apiKey = apiKey;
-  if (tenantId) payload.tenantId = tenantId;
+  if (accessToken) {
+    payload.accessToken = accessToken;
+    payload.apiKey = accessToken;
+  }
   if (baseUrl) payload.baseUrl = baseUrl;
   if (!applyToAllAccounts) {
     payload.applyToAllAccounts = false;
     if (selectors.length > 0) {
       payload.selectors = selectors;
       payload.accounts = selectors;
+      payload.profileIds = selectors;
       payload.accountSelector = selectors[0];
+      payload.profileId = selectors[0];
     }
   }
 
   return JSON.stringify(payload);
 }
 
-export function createOutstandPublishTokenForAccount(params: {
+export function createBufferPublishTokenForAccount(params: {
   userId?: string;
-  apiKey?: string;
-  tenantId?: string;
+  accessToken?: string;
   baseUrl?: string;
   applyToAllAccounts?: boolean;
-  account?: OutstandSelectorSource;
+  account?: BufferSelectorSource;
 }): string {
   const applyToAllAccounts = params.applyToAllAccounts !== false;
   const selectors =
-    !applyToAllAccounts && params.account ? getOutstandAccountSelectors(params.account) : [];
+    !applyToAllAccounts && params.account ? getBufferAccountSelectors(params.account) : [];
 
-  return createOutstandPublishToken({
+  return createBufferPublishToken({
     userId: params.userId,
-    apiKey: params.apiKey,
-    tenantId: params.tenantId,
+    accessToken: params.accessToken,
     baseUrl: params.baseUrl,
     applyToAllAccounts,
     selectors,

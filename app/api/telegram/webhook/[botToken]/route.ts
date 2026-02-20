@@ -17,9 +17,9 @@ import { getPlatformApiProviderForUser } from '@/lib/platforms/provider';
 import { getPlatformHandlerForUser } from '@/lib/platforms/handlers';
 import type { PlatformId, PostRequest } from '@/lib/platforms/types';
 import {
-  createOutstandPublishTokenForAccount,
-  getOutstandUserSettings,
-} from '@/lib/outstand-user-settings';
+  createBufferPublishTokenForAccount,
+  getBufferUserSettings,
+} from '@/lib/buffer-user-settings';
 import {
   buildTelegramBotFileUrl,
   buildTelegramBotMethodUrl,
@@ -110,12 +110,11 @@ function asManagedPlatformId(platformId: string): PlatformId | null {
   return null;
 }
 
-async function buildOutstandingPublishToken(target: TelegramSourceAccount): Promise<string> {
-  const settings = await getOutstandUserSettings(target.userId);
-  return createOutstandPublishTokenForAccount({
+async function buildBufferPublishToken(target: TelegramSourceAccount): Promise<string> {
+  const settings = await getBufferUserSettings(target.userId);
+  return createBufferPublishTokenForAccount({
     userId: target.userId,
-    apiKey: settings.apiKey,
-    tenantId: settings.tenantId,
+    accessToken: settings.accessToken,
     baseUrl: settings.baseUrl,
     applyToAllAccounts: settings.applyToAllAccounts,
     account: target,
@@ -538,9 +537,9 @@ type TelegramTaskDispatchContext = {
   mediaItems: PickedTelegramMedia[];
 };
 
-async function dedupeOutstandTargets(targets: TelegramSourceAccount[]): Promise<TelegramSourceAccount[]> {
+async function dedupeBufferTargets(targets: TelegramSourceAccount[]): Promise<TelegramSourceAccount[]> {
   const selected: TelegramSourceAccount[] = [];
-  const seenOutstandTargets = new Set<string>();
+  const seenBufferTargets = new Set<string>();
 
   for (const target of targets) {
     const managedTargetPlatformId = asManagedPlatformId(target.platformId);
@@ -550,16 +549,16 @@ async function dedupeOutstandTargets(targets: TelegramSourceAccount[]): Promise<
     }
 
     const provider = await getPlatformApiProviderForUser(target.userId, managedTargetPlatformId);
-    if (provider !== 'outstanding') {
+    if (provider !== 'buffer') {
       selected.push(target);
       continue;
     }
 
     const dedupeKey = `${target.userId}:${managedTargetPlatformId}`;
-    if (seenOutstandTargets.has(dedupeKey)) {
+    if (seenBufferTargets.has(dedupeKey)) {
       continue;
     }
-    seenOutstandTargets.add(dedupeKey);
+    seenBufferTargets.add(dedupeKey);
     selected.push(target);
   }
 
@@ -579,7 +578,7 @@ async function processTelegramTask({
     .map((id: string) => accountsById.get(id))
     .filter((a: TelegramSourceAccount | undefined): a is TelegramSourceAccount => Boolean(a))
     .filter((a: TelegramSourceAccount) => a.isActive);
-  const normalizedTargets = await dedupeOutstandTargets(targets);
+  const normalizedTargets = await dedupeBufferTargets(targets);
 
   let failures = 0;
 
@@ -641,8 +640,8 @@ async function processTelegramTask({
         managedTargetPlatformId
           ? await getPlatformApiProviderForUser(target.userId, managedTargetPlatformId)
           : 'native';
-      if (managedTargetPlatformId && targetProvider === 'outstanding') {
-        debugLog('Telegram -> Outstand start', {
+      if (managedTargetPlatformId && targetProvider === 'buffer') {
+        debugLog('Telegram -> Buffer start', {
           taskId: task.id,
           targetId: target.id,
           platformId: managedTargetPlatformId,
@@ -669,7 +668,7 @@ async function processTelegramTask({
               await cleanupTempFile(downloaded.tempPath);
             }
           } catch (error) {
-            debugLog('Telegram -> Outstand media fallback to text-only', {
+            debugLog('Telegram -> Buffer media fallback to text-only', {
               taskId: task.id,
               targetId: target.id,
               reason: getErrorMessage(error),
@@ -678,17 +677,17 @@ async function processTelegramTask({
         }
 
         transformedContent = text;
-        const outstandResponse = await handler.publishPost(
+        const bufferResponse = await handler.publishPost(
           postRequest,
-          await buildOutstandingPublishToken(target)
+          await buildBufferPublishToken(target)
         );
-        if (!outstandResponse.success) {
-          throw new Error(outstandResponse.error || 'Outstand publish failed');
+        if (!bufferResponse.success) {
+          throw new Error(bufferResponse.error || 'Buffer publish failed');
         }
         responseData = {
-          id: outstandResponse.postId,
-          url: outstandResponse.url,
-          provider: 'outstanding',
+          id: bufferResponse.postId,
+          url: bufferResponse.url,
+          provider: 'buffer',
         };
       } else if (target.platformId === 'twitter') {
         debugLog('Telegram -> Twitter start', { taskId: task.id, targetId: target.id });

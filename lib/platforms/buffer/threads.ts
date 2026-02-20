@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'threads',
   name: 'Threads',
   icon: '🧵',
   color: '#101010',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['text', 'image', 'video', 'link'],
   maxContentLength: 500,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingThreadsHandler = new OutstandingPlatformHandler({
+export const bufferThreadsHandler = new BufferPlatformHandler({
   config,
   network: 'threads',
-  selectorsEnvKey: 'OUTSTAND_THREADS_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_THREADS_ACCOUNTS',
 });

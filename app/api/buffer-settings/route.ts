@@ -2,20 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getAuthUser } from '@/lib/auth';
 import {
-  ALL_OUTSTAND_PLATFORM_IDS,
-  getOutstandUserSettings,
-  upsertOutstandUserSettings,
-} from '@/lib/outstand-user-settings';
+  ALL_BUFFER_PLATFORM_IDS,
+  getBufferUserSettings,
+  upsertBufferUserSettings,
+} from '@/lib/buffer-user-settings';
 
 export const runtime = 'nodejs';
 
-const platformEnum = z.enum(ALL_OUTSTAND_PLATFORM_IDS as [string, ...string[]]);
+const platformEnum = z.enum(ALL_BUFFER_PLATFORM_IDS as [string, ...string[]]);
 
 const updateSchema = z.object({
   enabled: z.boolean().optional(),
-  apiKey: z.string().optional(),
+  accessToken: z.string().optional(),
   baseUrl: z.string().optional(),
-  tenantId: z.string().optional(),
   platforms: z.array(platformEnum).optional(),
   applyToAllAccounts: z.boolean().optional(),
 });
@@ -27,11 +26,11 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const settings = await getOutstandUserSettings(user.id);
+    const settings = await getBufferUserSettings(user.id);
     return NextResponse.json({ success: true, settings });
   } catch (error) {
-    console.error('[API] Outstand settings GET error:', error);
-    return NextResponse.json({ success: false, error: 'Failed to load Outstand settings' }, { status: 500 });
+    console.error('[API] Buffer settings GET error:', error);
+    return NextResponse.json({ success: false, error: 'Failed to load Buffer settings' }, { status: 500 });
   }
 }
 
@@ -47,27 +46,30 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
 
-    const current = await getOutstandUserSettings(user.id);
+    const current = await getBufferUserSettings(user.id);
     const nextSettings = {
       enabled: parsed.data.enabled ?? current.enabled,
-      apiKey: typeof parsed.data.apiKey === 'string' ? parsed.data.apiKey : current.apiKey,
+      accessToken:
+        typeof parsed.data.accessToken === 'string'
+          ? parsed.data.accessToken
+          : current.accessToken,
       platforms: parsed.data.platforms ?? current.platforms,
     };
     if (
       nextSettings.enabled &&
       nextSettings.platforms.length > 0 &&
-      String(nextSettings.apiKey || '').trim().length === 0
+      String(nextSettings.accessToken || '').trim().length === 0
     ) {
       return NextResponse.json(
-        { success: false, error: 'Outstand API key is required when Outstand is enabled for any platform.' },
+        { success: false, error: 'Buffer access token is required when Buffer is enabled for any platform.' },
         { status: 400 }
       );
     }
 
-    const settings = await upsertOutstandUserSettings(user.id, parsed.data);
+    const settings = await upsertBufferUserSettings(user.id, parsed.data);
     return NextResponse.json({ success: true, settings });
   } catch (error) {
-    console.error('[API] Outstand settings PUT error:', error);
-    return NextResponse.json({ success: false, error: 'Failed to save Outstand settings' }, { status: 500 });
+    console.error('[API] Buffer settings PUT error:', error);
+    return NextResponse.json({ success: false, error: 'Failed to save Buffer settings' }, { status: 500 });
   }
 }

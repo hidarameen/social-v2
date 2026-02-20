@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'tiktok',
   name: 'TikTok',
   icon: '🎵',
   color: '#000000',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['video', 'text'],
   maxContentLength: 5000,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingTikTokHandler = new OutstandingPlatformHandler({
+export const bufferTikTokHandler = new BufferPlatformHandler({
   config,
   network: 'tiktok',
-  selectorsEnvKey: 'OUTSTAND_TIKTOK_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_TIKTOK_ACCOUNTS',
 });

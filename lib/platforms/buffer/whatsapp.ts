@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'whatsapp',
   name: 'WhatsApp',
   icon: '💬',
   color: '#25D366',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['text', 'image', 'video', 'link'],
   maxContentLength: 4096,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingWhatsAppHandler = new OutstandingPlatformHandler({
+export const bufferWhatsAppHandler = new BufferPlatformHandler({
   config,
   network: 'whatsapp',
-  selectorsEnvKey: 'OUTSTAND_WHATSAPP_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_WHATSAPP_ACCOUNTS',
 });

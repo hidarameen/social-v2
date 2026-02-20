@@ -8,7 +8,7 @@ import { TelegramClient } from '@/platforms/telegram/client'
 import { getPlatformHandler, getPlatformHandlerForUser } from './platforms/handlers'
 import { getPlatformApiProvider, getPlatformApiProviderForUser } from './platforms/provider'
 import type { PlatformId, PostRequest } from './platforms/types'
-import { createOutstandPublishToken, createOutstandPublishTokenForAccount, getOutstandUserSettings } from './outstand-user-settings'
+import { createBufferPublishToken, createBufferPublishTokenForAccount, getBufferUserSettings } from './buffer-user-settings'
 
 const MANAGED_PLATFORMS: ReadonlySet<PlatformId> = new Set([
   'facebook',
@@ -50,21 +50,20 @@ function mapContentToPostRequest(content: ContentItem): PostRequest {
   }
 }
 
-async function buildOutstandingToken(account: PlatformAccount): Promise<string> {
+async function buildBufferToken(account: PlatformAccount): Promise<string> {
   try {
-    const settings = await getOutstandUserSettings(account.userId)
-    return createOutstandPublishTokenForAccount({
+    const settings = await getBufferUserSettings(account.userId)
+    return createBufferPublishTokenForAccount({
       userId: account.userId,
-      apiKey: settings.apiKey || account.credentials.apiKey,
-      tenantId: settings.tenantId,
+      accessToken: settings.accessToken || account.credentials.apiKey,
       baseUrl: settings.baseUrl,
       applyToAllAccounts: settings.applyToAllAccounts,
       account,
     })
   } catch {
-    return createOutstandPublishToken({
+    return createBufferPublishToken({
       userId: account.userId,
-      apiKey: account.credentials.apiKey,
+      accessToken: account.credentials.accessToken || account.credentials.apiKey,
     })
   }
 }
@@ -91,8 +90,8 @@ export class PlatformManager {
       if (
         platformId &&
         (account.userId
-          ? (await getPlatformApiProviderForUser(account.userId, platformId)) === 'outstanding'
-          : getPlatformApiProvider(platformId) === 'outstanding')
+          ? (await getPlatformApiProviderForUser(account.userId, platformId)) === 'buffer'
+          : getPlatformApiProvider(platformId) === 'buffer')
       ) {
         return
       }
@@ -163,15 +162,15 @@ export class PlatformManager {
       if (
         platformId &&
         (account.userId
-          ? (await getPlatformApiProviderForUser(account.userId, platformId)) === 'outstanding'
-          : getPlatformApiProvider(platformId) === 'outstanding')
+          ? (await getPlatformApiProviderForUser(account.userId, platformId)) === 'buffer'
+          : getPlatformApiProvider(platformId) === 'buffer')
       ) {
         const handler = account.userId
           ? await getPlatformHandlerForUser(account.userId, platformId)
           : getPlatformHandler(platformId)
         const result = await handler.publishPost(
           mapContentToPostRequest(content),
-          await buildOutstandingToken(account)
+          await buildBufferToken(account)
         )
         return {
           success: result.success,
@@ -352,13 +351,13 @@ export class PlatformManager {
         if (
           platformId &&
           (account.userId
-            ? (await getPlatformApiProviderForUser(account.userId, platformId)) === 'outstanding'
-            : getPlatformApiProvider(platformId) === 'outstanding')
+            ? (await getPlatformApiProviderForUser(account.userId, platformId)) === 'buffer'
+            : getPlatformApiProvider(platformId) === 'buffer')
         ) {
           const handler = account.userId
             ? await getPlatformHandlerForUser(account.userId, platformId)
             : getPlatformHandler(platformId)
-          const info = await handler.getAccountInfo(await buildOutstandingToken(account))
+          const info = await handler.getAccountInfo(await buildBufferToken(account))
           results[account.id] = Boolean(info)
           continue
         }

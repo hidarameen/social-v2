@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'pinterest',
   name: 'Pinterest',
   icon: '📌',
   color: '#BD081C',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['text', 'image', 'link'],
   maxContentLength: 500,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingPinterestHandler = new OutstandingPlatformHandler({
+export const bufferPinterestHandler = new BufferPlatformHandler({
   config,
   network: 'pinterest',
-  selectorsEnvKey: 'OUTSTAND_PINTEREST_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_PINTEREST_ACCOUNTS',
 });

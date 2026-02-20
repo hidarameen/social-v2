@@ -1,4 +1,4 @@
-# SocialFlow Platform Report
+tstand الان # SocialFlow Platform Report
 
 Updated: February 16, 2026
 
@@ -203,9 +203,9 @@ This report replaces previous fragmented README files with a single organized te
 5. إعادة توجيه خاطئة تكسر صفحة تفاصيل المهمة:
    - تحويل `/tasks/:id` إلى `/tasks`.
    - المرجع: `proxy.ts`.
-6. فجوة منطقية في Outstand:
+6. فجوة منطقية في Buffer:
    - خيار `applyToAllAccounts` موجود في الإعدادات لكن لا يفرض فعليا في قرار المزود.
-   - المراجع: `app/settings/page.tsx:629`, `lib/outstand-user-settings.ts:99`, `lib/platforms/provider.ts:87`.
+   - المراجع: `app/settings/page.tsx:629`, `lib/buffer-user-settings.ts:99`, `lib/platforms/provider.ts:87`.
 7. لا توجد اختبارات Web (unit/integration) داخل `app/lib/components`.
 8. لا توجد اختبارات E2E (Playwright/Cypress) للموقع.
 9. لا يوجد Workflow CI خاص بالويب:
@@ -325,7 +325,7 @@ Reference: `app/settings/page.tsx`
 1. Initial loading behavior
 - On mount, the page loads user email from session (`useSession`).
 - It fetches platform credentials from `GET /api/platform-credentials`.
-- It fetches Outstand config from `GET /api/outstand-settings`.
+- It fetches Buffer config from `GET /api/buffer-settings`.
 - Both requests handle loading and error states, and show toast errors on failure.
 
 2. Platform Credentials section
@@ -336,16 +336,15 @@ Reference: `app/settings/page.tsx`
   - Sends `PUT /api/platform-credentials` with `{ platformId, credentials }`.
   - Updates local state with normalized response and shows success toast.
 
-3. Outstand Integration section
+3. Buffer Integration section
 - Includes:
   - `enabled` switch
-  - `apiKey`
+  - `accessToken`
   - `baseUrl`
-  - `tenantId`
   - platform selection chips
   - `applyToAllAccounts` switch
 - Platform chips toggle selection in local state.
-- On save, it sends `PUT /api/outstand-settings` with all fields above.
+- On save, it sends `PUT /api/buffer-settings` with all fields above.
 - Returned settings are normalized and reloaded into UI state.
 
 4. Account / Appearance / Workspace / Notifications / Privacy / Storage

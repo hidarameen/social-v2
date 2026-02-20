@@ -18,9 +18,9 @@ import { getPlatformApiProviderForUser } from '@/lib/platforms/provider';
 import { getPlatformHandlerForUser } from '@/lib/platforms/handlers';
 import type { PlatformId, PostRequest } from '@/lib/platforms/types';
 import {
-  createOutstandPublishTokenForAccount,
-  getOutstandUserSettings,
-} from '@/lib/outstand-user-settings';
+  createBufferPublishTokenForAccount,
+  getBufferUserSettings,
+} from '@/lib/buffer-user-settings';
 
 const MANAGED_PLATFORM_IDS = new Set<PlatformId>([
   'facebook',
@@ -39,12 +39,11 @@ function asManagedPlatformId(platformId: string): PlatformId | null {
   return null;
 }
 
-async function buildOutstandingPublishToken(target: PlatformAccount): Promise<string> {
-  const settings = await getOutstandUserSettings(target.userId);
-  return createOutstandPublishTokenForAccount({
+async function buildBufferPublishToken(target: PlatformAccount): Promise<string> {
+  const settings = await getBufferUserSettings(target.userId);
+  return createBufferPublishTokenForAccount({
     userId: target.userId,
-    apiKey: settings.apiKey,
-    tenantId: settings.tenantId,
+    accessToken: settings.accessToken,
     baseUrl: settings.baseUrl,
     applyToAllAccounts: settings.applyToAllAccounts,
     account: target,
@@ -447,9 +446,9 @@ async function createSessionClient(sessionString: string): Promise<MtprotoTelegr
   return client;
 }
 
-async function dedupeOutstandTargets(targets: PlatformAccount[]): Promise<PlatformAccount[]> {
+async function dedupeBufferTargets(targets: PlatformAccount[]): Promise<PlatformAccount[]> {
   const selected: PlatformAccount[] = [];
-  const seenOutstandTargets = new Set<string>();
+  const seenBufferTargets = new Set<string>();
 
   for (const target of targets) {
     const managedTargetPlatformId = asManagedPlatformId(target.platformId);
@@ -459,16 +458,16 @@ async function dedupeOutstandTargets(targets: PlatformAccount[]): Promise<Platfo
     }
 
     const provider = await getPlatformApiProviderForUser(target.userId, managedTargetPlatformId);
-    if (provider !== 'outstanding') {
+    if (provider !== 'buffer') {
       selected.push(target);
       continue;
     }
 
     const dedupeKey = `${target.userId}:${managedTargetPlatformId}`;
-    if (seenOutstandTargets.has(dedupeKey)) {
+    if (seenBufferTargets.has(dedupeKey)) {
       continue;
     }
-    seenOutstandTargets.add(dedupeKey);
+    seenBufferTargets.add(dedupeKey);
     selected.push(target);
   }
 
@@ -510,7 +509,7 @@ async function processTelegramTaskMessage(params: {
   };
 
   try {
-    const normalizedTargets = await dedupeOutstandTargets(targets);
+    const normalizedTargets = await dedupeBufferTargets(targets);
     const targetResults = await Promise.allSettled(normalizedTargets.map(async (target) => {
       let status: 'success' | 'failed' = 'success';
       let errorMessage: string | undefined;
@@ -569,9 +568,9 @@ async function processTelegramTaskMessage(params: {
           managedTargetPlatformId
             ? await getPlatformApiProviderForUser(target.userId, managedTargetPlatformId)
             : 'native';
-        if (managedTargetPlatformId && targetProvider === 'outstanding') {
+        if (managedTargetPlatformId && targetProvider === 'buffer') {
           if (mediaItems.length > 0) {
-            debugLog('Telegram realtime -> Outstand media fallback to text-only', {
+            debugLog('Telegram realtime -> Buffer media fallback to text-only', {
               taskId: task.id,
               sourceId: source.id,
               targetId: target.id,
@@ -580,17 +579,17 @@ async function processTelegramTaskMessage(params: {
           }
           const handler = await getPlatformHandlerForUser(target.userId, managedTargetPlatformId);
           const postRequest: PostRequest = { content: text };
-          const outstandResponse = await handler.publishPost(
+          const bufferResponse = await handler.publishPost(
             postRequest,
-            await buildOutstandingPublishToken(target)
+            await buildBufferPublishToken(target)
           );
-          if (!outstandResponse.success) {
-            throw new Error(outstandResponse.error || 'Outstand publish failed');
+          if (!bufferResponse.success) {
+            throw new Error(bufferResponse.error || 'Buffer publish failed');
           }
           responseData = {
-            id: outstandResponse.postId,
-            url: outstandResponse.url,
-            provider: 'outstanding',
+            id: bufferResponse.postId,
+            url: bufferResponse.url,
+            provider: 'buffer',
           };
         } else if (target.platformId === 'twitter') {
           responseData = await withTwitterClientRetry(target, async (twitterClient) => {

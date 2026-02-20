@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'telegram',
   name: 'Telegram',
   icon: '✈️',
   color: '#0088cc',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['text', 'image', 'video'],
   maxContentLength: 4096,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingTelegramHandler = new OutstandingPlatformHandler({
+export const bufferTelegramHandler = new BufferPlatformHandler({
   config,
   network: 'telegram',
-  selectorsEnvKey: 'OUTSTAND_TELEGRAM_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_TELEGRAM_ACCOUNTS',
 });

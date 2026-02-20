@@ -1,18 +1,18 @@
-export type OutstandingNetworkId =
+export type BufferNetworkId =
   | 'facebook'
   | 'instagram'
-  | 'x'
+  | 'twitter'
   | 'tiktok'
   | 'youtube'
   | 'telegram'
   | 'linkedin'
   | 'pinterest'
-  | 'google_business'
+  | 'googlebusiness'
   | 'threads'
   | 'snapchat'
   | 'whatsapp';
 
-export interface OutstandingSocialAccount {
+export interface BufferSocialAccount {
   id: string;
   network?: string;
   username?: string;
@@ -25,17 +25,14 @@ export interface OutstandingSocialAccount {
   metadata?: Record<string, unknown>;
 }
 
-export interface OutstandingCreatePostPayload {
-  content?: string;
-  accounts: string[];
+export interface BufferCreatePostPayload {
+  text: string;
+  profileIds: string[];
   scheduledAt?: string;
-  containers?: Array<{
-    content?: string;
-    media?: Array<{ url: string }>;
-  }>;
+  mediaUrl?: string;
 }
 
-export interface OutstandingPost {
+export interface BufferPost {
   id?: string;
   status?: string;
   scheduledAt?: string;
@@ -48,10 +45,10 @@ export interface OutstandingPost {
   }>;
 }
 
-export interface OutstandingEnvelope<T> {
+export interface BufferEnvelope<T> {
   success?: boolean;
   data?: T;
-  post?: OutstandingPost;
+  post?: BufferPost;
   message?: string;
   error?: unknown;
 }

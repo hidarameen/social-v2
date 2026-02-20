@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { getPlatformApiProvider } from '@/lib/platforms/provider';
-import { outstandingTwitterHandler } from '@/lib/platforms/outstanding/twitter';
-import { outstandingPlatformHandlers } from '@/lib/platforms/outstanding';
+import { bufferTwitterHandler } from '@/lib/platforms/buffer/twitter';
+import { bufferPlatformHandlers } from '@/lib/platforms/buffer';
 import { PlatformManager } from '@/lib/platform-manager';
 import type { ContentItem, PlatformAccount } from '@/lib/types';
 import type { PlatformId, PostRequest } from '@/lib/platforms/types';
@@ -144,12 +144,12 @@ async function testProviderResolution(): Promise<void> {
   {
     const restore = patchEnv({
       SOCIAL_API_PROVIDER: 'native',
-      OUTSTAND_PLATFORMS: 'twitter,facebook',
+      BUFFER_PLATFORMS: 'twitter,facebook',
       SOCIAL_API_PROVIDER_FACEBOOK: undefined,
     });
     try {
-      assert.equal(getPlatformApiProvider('twitter'), 'outstanding');
-      assert.equal(getPlatformApiProvider('facebook'), 'outstanding');
+      assert.equal(getPlatformApiProvider('twitter'), 'buffer');
+      assert.equal(getPlatformApiProvider('facebook'), 'buffer');
       assert.equal(getPlatformApiProvider('youtube'), 'native');
       assert.equal(getPlatformApiProvider('instagram'), 'native');
     } finally {
@@ -160,11 +160,11 @@ async function testProviderResolution(): Promise<void> {
   {
     const restore = patchEnv({
       SOCIAL_API_PROVIDER: 'native',
-      OUTSTAND_PLATFORMS: 'x,linkedin',
+      BUFFER_PLATFORMS: 'x,linkedin',
     });
     try {
-      assert.equal(getPlatformApiProvider('twitter'), 'outstanding');
-      assert.equal(getPlatformApiProvider('linkedin'), 'outstanding');
+      assert.equal(getPlatformApiProvider('twitter'), 'buffer');
+      assert.equal(getPlatformApiProvider('linkedin'), 'buffer');
       assert.equal(getPlatformApiProvider('facebook'), 'native');
     } finally {
       restore();
@@ -174,12 +174,12 @@ async function testProviderResolution(): Promise<void> {
   {
     const restore = patchEnv({
       SOCIAL_API_PROVIDER: 'native',
-      OUTSTAND_PLATFORMS: 'twitter',
-      SOCIAL_API_PROVIDER_FACEBOOK: 'outstanding',
+      BUFFER_PLATFORMS: 'twitter',
+      SOCIAL_API_PROVIDER_FACEBOOK: 'buffer',
     });
     try {
-      assert.equal(getPlatformApiProvider('twitter'), 'outstanding');
-      assert.equal(getPlatformApiProvider('facebook'), 'outstanding');
+      assert.equal(getPlatformApiProvider('twitter'), 'buffer');
+      assert.equal(getPlatformApiProvider('facebook'), 'buffer');
       assert.equal(getPlatformApiProvider('youtube'), 'native');
     } finally {
       restore();
@@ -188,24 +188,24 @@ async function testProviderResolution(): Promise<void> {
 
   {
     const restore = patchEnv({
-      SOCIAL_API_PROVIDER: 'outstanding',
-      OUTSTAND_PLATFORMS: '',
+      SOCIAL_API_PROVIDER: 'buffer',
+      BUFFER_PLATFORMS: '',
     });
     try {
-      assert.equal(getPlatformApiProvider('twitter'), 'outstanding');
-      assert.equal(getPlatformApiProvider('facebook'), 'outstanding');
-      assert.equal(getPlatformApiProvider('youtube'), 'outstanding');
+      assert.equal(getPlatformApiProvider('twitter'), 'buffer');
+      assert.equal(getPlatformApiProvider('facebook'), 'buffer');
+      assert.equal(getPlatformApiProvider('youtube'), 'buffer');
     } finally {
       restore();
     }
   }
 }
 
-async function testOutstandingHandlerPublishAndAccountInfo(): Promise<void> {
+async function testBufferHandlerPublishAndAccountInfo(): Promise<void> {
   const restoreEnv = patchEnv({
-    OUTSTAND_API_KEY: 'test_key',
-    OUTSTAND_API_BASE_URL: 'https://api.outstand.so/v1',
-    OUTSTAND_X_ACCOUNTS: '',
+    BUFFER_API_KEY: 'test_key',
+    BUFFER_API_BASE_URL: 'https://api.bufferapp.com/1',
+    BUFFER_X_ACCOUNTS: '',
   });
 
   const originalFetch = global.fetch;
@@ -213,8 +213,8 @@ async function testOutstandingHandlerPublishAndAccountInfo(): Promise<void> {
   global.fetch = mock as typeof fetch;
 
   try {
-    const publishResult = await outstandingTwitterHandler.publishPost(
-      { content: 'hello outstand' },
+    const publishResult = await bufferTwitterHandler.publishPost(
+      { content: 'hello buffer' },
       JSON.stringify({ accountId: 'acc_1' })
     );
 
@@ -222,7 +222,7 @@ async function testOutstandingHandlerPublishAndAccountInfo(): Promise<void> {
     assert.equal(publishResult.postId, 'post_1');
     assert.match(String(publishResult.url || ''), /x\.com/i);
 
-    const accountInfo = await outstandingTwitterHandler.getAccountInfo(
+    const accountInfo = await bufferTwitterHandler.getAccountInfo(
       JSON.stringify({ accountId: 'acc_1' })
     );
 
@@ -240,31 +240,31 @@ async function testOutstandingHandlerPublishAndAccountInfo(): Promise<void> {
   }
 }
 
-async function testOutstandingHandlerMissingKey(): Promise<void> {
+async function testBufferHandlerMissingKey(): Promise<void> {
   const restoreEnv = patchEnv({
-    OUTSTAND_API_KEY: undefined,
-    OUTSTANDING_API_KEY: undefined,
+    BUFFER_ACCESS_TOKEN: undefined,
+    BUFFER_API_KEY: undefined,
   });
 
   try {
-    const result = await outstandingTwitterHandler.publishPost(
+    const result = await bufferTwitterHandler.publishPost(
       { content: 'missing key check' },
       JSON.stringify({ accountId: 'acc_1' })
     );
 
     assert.equal(result.success, false);
-    assert.match(String(result.error || ''), /Missing Outstand API key/i);
+    assert.match(String(result.error || ''), /Missing Buffer access token/i);
   } finally {
     restoreEnv();
   }
 }
 
-async function testPlatformManagerOutstandingPath(): Promise<void> {
+async function testPlatformManagerBufferPath(): Promise<void> {
   const restoreEnv = patchEnv({
     SOCIAL_API_PROVIDER: 'native',
-    OUTSTAND_PLATFORMS: 'twitter',
-    OUTSTAND_API_KEY: 'test_key',
-    OUTSTAND_API_BASE_URL: 'https://api.outstand.so/v1',
+    BUFFER_PLATFORMS: 'twitter',
+    BUFFER_ACCESS_TOKEN: 'test_key',
+    BUFFER_API_BASE_URL: 'https://api.bufferapp.com/1',
   });
 
   const originalFetch = global.fetch;
@@ -300,24 +300,24 @@ async function testPlatformManagerOutstandingPath(): Promise<void> {
     assert.equal(result.postId, 'post_1');
 
     const postCall = calls.find((item) => item.url.endsWith('/v1/posts'));
-    assert.ok(postCall, 'Expected manager to publish through Outstand /posts');
+    assert.ok(postCall, 'Expected manager to publish through Buffer /posts');
   } finally {
     global.fetch = originalFetch;
     restoreEnv();
   }
 }
 
-async function testAllOutstandingPlatformHandlersPublish(): Promise<void> {
+async function testAllBufferPlatformHandlersPublish(): Promise<void> {
   const restoreEnv = patchEnv({
-    OUTSTAND_API_KEY: 'test_key',
-    OUTSTAND_API_BASE_URL: 'https://api.outstand.so/v1',
-    OUTSTAND_X_ACCOUNTS: '',
-    OUTSTAND_FACEBOOK_ACCOUNTS: '',
-    OUTSTAND_INSTAGRAM_ACCOUNTS: '',
-    OUTSTAND_TIKTOK_ACCOUNTS: '',
-    OUTSTAND_YOUTUBE_ACCOUNTS: '',
-    OUTSTAND_TELEGRAM_ACCOUNTS: '',
-    OUTSTAND_LINKEDIN_ACCOUNTS: '',
+    BUFFER_API_KEY: 'test_key',
+    BUFFER_API_BASE_URL: 'https://api.bufferapp.com/1',
+    BUFFER_X_ACCOUNTS: '',
+    BUFFER_FACEBOOK_ACCOUNTS: '',
+    BUFFER_INSTAGRAM_ACCOUNTS: '',
+    BUFFER_TIKTOK_ACCOUNTS: '',
+    BUFFER_YOUTUBE_ACCOUNTS: '',
+    BUFFER_TELEGRAM_ACCOUNTS: '',
+    BUFFER_LINKEDIN_ACCOUNTS: '',
   });
 
   const originalFetch = global.fetch;
@@ -341,7 +341,7 @@ async function testAllOutstandingPlatformHandlersPublish(): Promise<void> {
     ];
 
     for (const platformId of platformIds) {
-      const handler = outstandingPlatformHandlers[platformId];
+      const handler = bufferPlatformHandlers[platformId];
       const res = await handler.publishPost(post, JSON.stringify({ accountId: 'acc_1' }));
       assert.equal(res.success, true, `Expected success for ${platformId}`);
       assert.equal(res.postId, 'post_1', `Expected post ID for ${platformId}`);
@@ -357,14 +357,14 @@ async function testAllOutstandingPlatformHandlersPublish(): Promise<void> {
 
 async function main(): Promise<void> {
   await testProviderResolution();
-  await testOutstandingHandlerPublishAndAccountInfo();
-  await testOutstandingHandlerMissingKey();
-  await testPlatformManagerOutstandingPath();
-  await testAllOutstandingPlatformHandlersPublish();
-  console.log('Outstand smoke tests passed.');
+  await testBufferHandlerPublishAndAccountInfo();
+  await testBufferHandlerMissingKey();
+  await testPlatformManagerBufferPath();
+  await testAllBufferPlatformHandlersPublish();
+  console.log('Buffer smoke tests passed.');
 }
 
 main().catch((error) => {
-  console.error('Outstand smoke tests failed:', error);
+  console.error('Buffer smoke tests failed:', error);
   process.exitCode = 1;
 });

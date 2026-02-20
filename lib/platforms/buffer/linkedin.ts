@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'linkedin',
   name: 'LinkedIn',
   icon: '💼',
   color: '#0A66C2',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['text', 'image', 'video', 'link'],
   maxContentLength: 3000,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingLinkedInHandler = new OutstandingPlatformHandler({
+export const bufferLinkedInHandler = new BufferPlatformHandler({
   config,
   network: 'linkedin',
-  selectorsEnvKey: 'OUTSTAND_LINKEDIN_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_LINKEDIN_ACCOUNTS',
 });

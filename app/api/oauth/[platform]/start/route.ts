@@ -6,8 +6,7 @@ import { generateCodeChallenge, generateCodeVerifier, generateState } from '@/li
 import { getOAuthClientCredentials, type ManagedPlatformId } from '@/lib/platform-credentials';
 import type { PlatformId } from '@/lib/platforms/types';
 import { getPlatformApiProviderForUser } from '@/lib/platforms/provider';
-import { outstandingPlatformHandlers } from '@/lib/platforms/outstanding';
-import { getOutstandUserSettings } from '@/lib/outstand-user-settings';
+import { getBufferUserSettings } from '@/lib/buffer-user-settings';
 
 export const runtime = 'nodejs';
 
@@ -43,7 +42,7 @@ export async function GET(
     const platformId = asOAuthManagedPlatformId(platform.id);
     const provider =
       platformId ? await getPlatformApiProviderForUser(user.id, platformId) : 'native';
-    if (provider !== 'outstanding') {
+    if (provider !== 'buffer') {
       return NextResponse.json(
         { success: false, error: `${platform.name} does not support OAuth in this app` },
         { status: 400 }
@@ -60,8 +59,8 @@ export async function GET(
   const codeChallenge = codeVerifier ? generateCodeChallenge(codeVerifier) : undefined;
   const baseUrl = (process.env.APP_URL || request.nextUrl.origin).replace(/\/+$/, '');
   const redirectUri =
-    provider === 'outstanding'
-      ? `${baseUrl}/api/oauth/${platform.id}/callback?provider=outstanding`
+    provider === 'buffer'
+      ? `${baseUrl}/api/oauth/${platform.id}/callback?provider=buffer`
       : `${baseUrl}/api/oauth/${platform.id}/callback`;
   const returnTo = request.nextUrl.searchParams.get('returnTo') || '/accounts';
   const responseMode = String(request.nextUrl.searchParams.get('mode') || '').trim().toLowerCase();
@@ -84,36 +83,20 @@ export async function GET(
     maxAge: 10 * 60,
   });
 
-  if (provider === 'outstanding') {
-    if (!platformId) {
-      return NextResponse.json({ success: false, error: 'Unsupported Outstand platform' }, { status: 400 });
+  if (provider === 'buffer') {
+    if (!platformId || !OAUTH_PLATFORM_IDS.has(platformId)) {
+      return NextResponse.json({ success: false, error: 'Unsupported Buffer platform' }, { status: 400 });
     }
 
-    const handler = outstandingPlatformHandlers[platformId];
-    if (!handler || typeof (handler as any).getAuthUrl !== 'function') {
+    const bufferSettings = await getBufferUserSettings(user.id);
+    if (!bufferSettings.accessToken) {
       return NextResponse.json(
-        { success: false, error: `${platform.name} is not configured for Outstand OAuth` },
+        { success: false, error: 'Missing Buffer access token. Add it in Settings before connecting accounts.' },
         { status: 400 }
       );
     }
 
-    const outstandSettings = await getOutstandUserSettings(user.id);
-    if (!outstandSettings.apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'Missing Outstand API key. Add it in Settings before connecting accounts.' },
-        { status: 400 }
-      );
-    }
-
-    const authUrl = await (handler as any).getAuthUrl(
-      outstandSettings.apiKey,
-      redirectUri,
-      outstandSettings.baseUrl,
-      outstandSettings.tenantId
-    );
-    if (!authUrl) {
-      return NextResponse.json({ success: false, error: 'Failed to get Outstand auth URL' }, { status: 502 });
-    }
+    const authUrl = `${baseUrl}/api/oauth/${platform.id}/callback?provider=buffer&state=${encodeURIComponent(state)}`;
     if (wantsJson) {
       return NextResponse.json({ success: true, url: authUrl });
     }

@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'snapchat',
   name: 'Snapchat',
   icon: '👻',
   color: '#FFFC00',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['image', 'video', 'text'],
   maxContentLength: 250,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingSnapchatHandler = new OutstandingPlatformHandler({
+export const bufferSnapchatHandler = new BufferPlatformHandler({
   config,
   network: 'snapchat',
-  selectorsEnvKey: 'OUTSTAND_SNAPCHAT_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_SNAPCHAT_ACCOUNTS',
 });

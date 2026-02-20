@@ -104,6 +104,7 @@ export default function AccountsPage() {
       null,
     [countryDialOptions, formData.phoneCountry]
   );
+  const telegramCurrentStep = !telegramAuthId ? 1 : telegramNeedsPassword ? 3 : 2;
 
   const getTelegramPhoneNumber = () => {
     const digits = formData.phoneNumber.replace(/\D/g, '');
@@ -502,6 +503,32 @@ export default function AccountsPage() {
                   <div className="space-y-4">
                     <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
                       Telegram uses direct sign-in in one flow: phone number, verification code, and 2FA password when required.
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-card/45 p-3">
+                      <p className="mb-2 text-sm font-semibold text-foreground">Telegram Session Login Steps</p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <div
+                          className={`rounded-lg border px-3 py-2 text-sm ${
+                            telegramCurrentStep >= 1 ? 'border-primary bg-primary/10 text-primary' : 'border-border/60'
+                          }`}
+                        >
+                          1. Enter Phone
+                        </div>
+                        <div
+                          className={`rounded-lg border px-3 py-2 text-sm ${
+                            telegramCurrentStep >= 2 ? 'border-primary bg-primary/10 text-primary' : 'border-border/60'
+                          }`}
+                        >
+                          2. Verify Code
+                        </div>
+                        <div
+                          className={`rounded-lg border px-3 py-2 text-sm ${
+                            telegramCurrentStep >= 3 ? 'border-primary bg-primary/10 text-primary' : 'border-border/60'
+                          }`}
+                        >
+                          3. 2FA Password
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">

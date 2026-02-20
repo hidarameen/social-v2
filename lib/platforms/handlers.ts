@@ -11,7 +11,7 @@ import type {
 } from './types';
 import { facebookHandler } from './facebook';
 import { getPlatformApiProvider, getPlatformApiProviderForUser } from './provider';
-import { outstandingPlatformHandlers } from './outstanding';
+import { bufferPlatformHandlers } from './buffer';
 export { getPlatformConfig, platformConfigs } from './configs';
 
 // Instagram Handler
@@ -546,8 +546,8 @@ export const platformHandlers: Record<PlatformId, BasePlatformHandler> = nativeP
 
 export function getPlatformHandler(platformId: PlatformId): BasePlatformHandler {
   const provider = getPlatformApiProvider(platformId);
-  if (provider === 'outstanding') {
-    return outstandingPlatformHandlers[platformId];
+  if (provider === 'buffer') {
+    return bufferPlatformHandlers[platformId];
   }
   return nativePlatformHandlers[platformId];
 }
@@ -557,8 +557,8 @@ export async function getPlatformHandlerForUser(
   platformId: PlatformId
 ): Promise<BasePlatformHandler> {
   const provider = await getPlatformApiProviderForUser(userId, platformId);
-  if (provider === 'outstanding') {
-    return outstandingPlatformHandlers[platformId];
+  if (provider === 'buffer') {
+    return bufferPlatformHandlers[platformId];
   }
   return nativePlatformHandlers[platformId];
 }

@@ -147,7 +147,7 @@ const PLATFORM_FIELDS: Record<ManagedPlatformId, CredentialField[]> = {
   ],
 };
 
-const OUTSTAND_PLATFORM_OPTIONS = [
+const BUFFER_PLATFORM_OPTIONS = [
   { id: 'facebook', label: 'Facebook' },
   { id: 'instagram', label: 'Instagram' },
   { id: 'twitter', label: 'Twitter / X' },
@@ -162,22 +162,20 @@ const OUTSTAND_PLATFORM_OPTIONS = [
   { id: 'snapchat', label: 'Snapchat' },
 ] as const;
 
-type OutstandPlatformId = (typeof OUTSTAND_PLATFORM_OPTIONS)[number]['id'];
+type BufferPlatformId = (typeof BUFFER_PLATFORM_OPTIONS)[number]['id'];
 
-type OutstandSettingsForm = {
+type BufferSettingsForm = {
   enabled: boolean;
-  apiKey: string;
+  accessToken: string;
   baseUrl: string;
-  tenantId: string;
-  platforms: OutstandPlatformId[];
+  platforms: BufferPlatformId[];
   applyToAllAccounts: boolean;
 };
 
-const EMPTY_OUTSTAND_SETTINGS: OutstandSettingsForm = {
+const EMPTY_BUFFER_SETTINGS: BufferSettingsForm = {
   enabled: false,
-  apiKey: '',
-  baseUrl: 'https://api.outstand.so/v1',
-  tenantId: '',
+  accessToken: '',
+  baseUrl: 'https://api.bufferapp.com/1',
   platforms: [],
   applyToAllAccounts: true,
 };
@@ -301,11 +299,11 @@ export default function SettingsPage() {
   const [credentialMap, setCredentialMap] = useState<Record<ManagedPlatformId, PlatformCredentialForm>>(
     buildEmptyCredentialMap()
   );
-  const [outstandSettings, setOutstandSettings] = useState<OutstandSettingsForm>({
-    ...EMPTY_OUTSTAND_SETTINGS,
+  const [bufferSettings, setBufferSettings] = useState<BufferSettingsForm>({
+    ...EMPTY_BUFFER_SETTINGS,
   });
-  const [outstandLoading, setOutstandLoading] = useState(true);
-  const [outstandSaving, setOutstandSaving] = useState(false);
+  const [bufferLoading, setBufferLoading] = useState(true);
+  const [bufferSaving, setBufferSaving] = useState(false);
 
   const [settings, setSettings] = useState({
     email: '',
@@ -358,44 +356,48 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    async function loadOutstandSettings() {
+    async function loadBufferSettings() {
       try {
-        const res = await fetch('/api/outstand-settings', { cache: 'no-store' });
+        const res = await fetch('/api/buffer-settings', { cache: 'no-store' });
         const data = await res.json();
         if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Failed to load Outstand settings');
+          throw new Error(data.error || 'Failed to load Buffer settings');
         }
         if (cancelled) return;
 
         const incoming = data.settings || {};
         const selectedPlatforms = Array.isArray(incoming.platforms)
           ? incoming.platforms.filter((value: string) =>
-              OUTSTAND_PLATFORM_OPTIONS.some((option) => option.id === value)
+              BUFFER_PLATFORM_OPTIONS.some((option) => option.id === value)
             )
           : [];
 
-        setOutstandSettings({
+        setBufferSettings({
           enabled: Boolean(incoming.enabled),
-          apiKey: typeof incoming.apiKey === 'string' ? incoming.apiKey : '',
+          accessToken:
+            typeof incoming.accessToken === 'string'
+              ? incoming.accessToken
+              : typeof incoming.apiKey === 'string'
+                ? incoming.apiKey
+                : '',
           baseUrl:
             typeof incoming.baseUrl === 'string' && incoming.baseUrl.trim().length > 0
               ? incoming.baseUrl
-              : 'https://api.outstand.so/v1',
-          tenantId: typeof incoming.tenantId === 'string' ? incoming.tenantId : '',
+              : 'https://api.bufferapp.com/1',
           platforms: selectedPlatforms,
           applyToAllAccounts:
             typeof incoming.applyToAllAccounts === 'boolean' ? incoming.applyToAllAccounts : true,
         });
       } catch (error) {
         if (!cancelled) {
-          toast.error(error instanceof Error ? error.message : 'Failed to load Outstand settings');
+          toast.error(error instanceof Error ? error.message : 'Failed to load Buffer settings');
         }
       } finally {
-        if (!cancelled) setOutstandLoading(false);
+        if (!cancelled) setBufferLoading(false);
       }
     }
 
-    loadOutstandSettings();
+    loadBufferSettings();
     return () => {
       cancelled = true;
     };
@@ -444,8 +446,8 @@ export default function SettingsPage() {
     }
   };
 
-  const toggleOutstandPlatform = (platformId: OutstandPlatformId) => {
-    setOutstandSettings((prev) => {
+  const toggleBufferPlatform = (platformId: BufferPlatformId) => {
+    setBufferSettings((prev) => {
       const has = prev.platforms.includes(platformId);
       return {
         ...prev,
@@ -456,47 +458,50 @@ export default function SettingsPage() {
     });
   };
 
-  const saveOutstandSettings = async () => {
+  const saveBufferSettings = async () => {
     try {
-      setOutstandSaving(true);
-      const res = await fetch('/api/outstand-settings', {
+      setBufferSaving(true);
+      const res = await fetch('/api/buffer-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          enabled: outstandSettings.enabled,
-          apiKey: outstandSettings.apiKey,
-          baseUrl: outstandSettings.baseUrl,
-          tenantId: outstandSettings.tenantId,
-          platforms: outstandSettings.platforms,
-          applyToAllAccounts: outstandSettings.applyToAllAccounts,
+          enabled: bufferSettings.enabled,
+          accessToken: bufferSettings.accessToken,
+          baseUrl: bufferSettings.baseUrl,
+          platforms: bufferSettings.platforms,
+          applyToAllAccounts: bufferSettings.applyToAllAccounts,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to save Outstand settings');
+        throw new Error(data.error || 'Failed to save Buffer settings');
       }
       const next = data.settings || {};
-      setOutstandSettings({
+      setBufferSettings({
         enabled: Boolean(next.enabled),
-        apiKey: typeof next.apiKey === 'string' ? next.apiKey : '',
+        accessToken:
+          typeof next.accessToken === 'string'
+            ? next.accessToken
+            : typeof next.apiKey === 'string'
+              ? next.apiKey
+              : '',
         baseUrl:
           typeof next.baseUrl === 'string' && next.baseUrl.trim().length > 0
             ? next.baseUrl
-            : 'https://api.outstand.so/v1',
-        tenantId: typeof next.tenantId === 'string' ? next.tenantId : '',
+            : 'https://api.bufferapp.com/1',
         platforms: Array.isArray(next.platforms)
           ? next.platforms.filter((value: string) =>
-              OUTSTAND_PLATFORM_OPTIONS.some((option) => option.id === value)
+              BUFFER_PLATFORM_OPTIONS.some((option) => option.id === value)
             )
           : [],
         applyToAllAccounts:
           typeof next.applyToAllAccounts === 'boolean' ? next.applyToAllAccounts : true,
       });
-      toast.success('Outstand settings saved');
+      toast.success('Buffer settings saved');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save Outstand settings');
+      toast.error(error instanceof Error ? error.message : 'Failed to save Buffer settings');
     } finally {
-      setOutstandSaving(false);
+      setBufferSaving(false);
     }
   };
 
@@ -534,12 +539,12 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <KeyRound size={20} />
-                Platform API Credentials
+                Platform API Credentials (Per User)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                OAuth and API keys are stored per-user in the database and isolated between accounts.
+                OAuth and API keys are stored per logged-in user in the database and isolated between accounts.
               </p>
 
               <div>
@@ -595,32 +600,32 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <KeyRound size={20} />
-                Outstand Integration
+                Buffer Integration (Per User)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Configure one Outstand API key per user, choose which platforms use Outstand, and publish to all
-                Outstand accounts for each selected platform.
+                Configure your personal Buffer access token, choose which platforms use Buffer, and publish
+                to all Buffer accounts for each selected platform.
               </p>
 
-              {outstandLoading ? (
+              {bufferLoading ? (
                 <div className="rounded-lg border border-border/60 bg-card/40 p-4 text-sm text-muted-foreground">
-                  Loading Outstand settings...
+                  Loading Buffer settings...
                 </div>
               ) : (
                 <>
                   <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/35 p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="font-medium text-foreground">Enable Outstand</p>
+                      <p className="font-medium text-foreground">Enable Buffer</p>
                       <p className="text-sm text-muted-foreground">
-                        Use Outstand for the selected platforms only.
+                        Use Buffer for the selected platforms only.
                       </p>
                     </div>
                     <Switch
-                      checked={outstandSettings.enabled}
+                      checked={bufferSettings.enabled}
                       onCheckedChange={(checked) =>
-                        setOutstandSettings((prev) => ({
+                        setBufferSettings((prev) => ({
                           ...prev,
                           enabled: checked,
                         }))
@@ -630,39 +635,26 @@ export default function SettingsPage() {
 
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Outstand API Key</label>
+                      <label className="block text-sm font-medium text-foreground mb-2">Buffer Access Token</label>
                       <Input
                         type="password"
-                        placeholder="outstand_api_key"
-                        value={outstandSettings.apiKey}
+                        placeholder="buffer_access_token"
+                        value={bufferSettings.accessToken}
                         onChange={(event) =>
-                          setOutstandSettings((prev) => ({
+                          setBufferSettings((prev) => ({
                             ...prev,
-                            apiKey: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Outstand Tenant ID</label>
-                      <Input
-                        placeholder="optional tenant id"
-                        value={outstandSettings.tenantId}
-                        onChange={(event) =>
-                          setOutstandSettings((prev) => ({
-                            ...prev,
-                            tenantId: event.target.value,
+                            accessToken: event.target.value,
                           }))
                         }
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">Outstand API Base URL</label>
+                      <label className="block text-sm font-medium text-foreground mb-2">Buffer API Base URL</label>
                       <Input
-                        placeholder="https://api.outstand.so/v1"
-                        value={outstandSettings.baseUrl}
+                        placeholder="https://api.bufferapp.com/1"
+                        value={bufferSettings.baseUrl}
                         onChange={(event) =>
-                          setOutstandSettings((prev) => ({
+                          setBufferSettings((prev) => ({
                             ...prev,
                             baseUrl: event.target.value,
                           }))
@@ -672,15 +664,15 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-foreground">Platforms Using Outstand</label>
+                    <label className="block text-sm font-medium text-foreground">Platforms Using Buffer</label>
                     <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                      {OUTSTAND_PLATFORM_OPTIONS.map((platform) => {
-                        const active = outstandSettings.platforms.includes(platform.id);
+                      {BUFFER_PLATFORM_OPTIONS.map((platform) => {
+                        const active = bufferSettings.platforms.includes(platform.id);
                         return (
                           <button
                             key={platform.id}
                             type="button"
-                            onClick={() => toggleOutstandPlatform(platform.id)}
+                            onClick={() => toggleBufferPlatform(platform.id)}
                             className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
                               active
                                 ? 'border-primary bg-primary/10 text-primary'
@@ -698,13 +690,13 @@ export default function SettingsPage() {
                     <div>
                       <p className="font-medium text-foreground">Apply to all accounts per platform</p>
                       <p className="text-sm text-muted-foreground">
-                        When enabled, each selected platform publishes to all linked Outstand accounts.
+                        When enabled, each selected platform publishes to all linked Buffer accounts.
                       </p>
                     </div>
                     <Switch
-                      checked={outstandSettings.applyToAllAccounts}
+                      checked={bufferSettings.applyToAllAccounts}
                       onCheckedChange={(checked) =>
-                        setOutstandSettings((prev) => ({
+                        setBufferSettings((prev) => ({
                           ...prev,
                           applyToAllAccounts: checked,
                         }))
@@ -714,8 +706,8 @@ export default function SettingsPage() {
                 </>
               )}
 
-              <Button onClick={saveOutstandSettings} disabled={outstandLoading || outstandSaving}>
-                {outstandSaving ? 'Saving...' : 'Save Outstand Settings'}
+              <Button onClick={saveBufferSettings} disabled={bufferLoading || bufferSaving}>
+                {bufferSaving ? 'Saving...' : 'Save Buffer Settings'}
               </Button>
             </CardContent>
           </Card>

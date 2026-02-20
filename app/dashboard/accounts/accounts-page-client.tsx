@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
@@ -35,11 +34,9 @@ const platforms = [
 
 export default function AccountsPage() {
   const { confirm, ConfirmDialog } = useConfirmDialog()
-  const [authMethod, setAuthMethod] = useState<'oauth' | 'manual'>('oauth')
   const [selectedPlatform, setSelectedPlatform] = useState<string>('facebook')
   const [accounts, setAccounts] = useState<any[]>([])
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [formData, setFormData] = useState({ username: '', accessToken: '', chatId: '' })
 
   useEffect(() => {
     let cancelled = false
@@ -78,77 +75,8 @@ export default function AccountsPage() {
 
   const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (authMethod === 'oauth') {
-      if (selectedPlatform === 'telegram' || selectedPlatform === 'linkedin') {
-        toast.error('OAuth is not available for this platform. Please use manual setup.')
-        return
-      }
-      const returnTo = `${window.location.pathname}${window.location.search}`
-      window.location.href = `/api/oauth/${selectedPlatform}/start?returnTo=${encodeURIComponent(returnTo)}`
-      return
-    }
-
-    if (selectedPlatform === 'telegram') {
-      if (!formData.accessToken.trim()) {
-        toast.error('Please enter the Telegram bot token')
-        return
-      }
-      if (!formData.chatId.trim()) {
-        toast.error('Please enter the Telegram channel/chat ID')
-        return
-      }
-    } else if (selectedPlatform === 'twitter' && !formData.accessToken.trim()) {
-      toast.error('Please connect Twitter with OAuth or provide a valid user access token')
-      return
-    } else if (!formData.username.trim()) {
-      toast.error('Please enter username')
-      return
-    }
-
-    try {
-      const payload: any = {
-        platformId: selectedPlatform,
-        accountName: selectedPlatform === 'telegram' ? undefined : formData.username,
-        accountUsername: selectedPlatform === 'telegram' ? undefined : formData.username,
-        accountId: selectedPlatform === 'telegram' ? undefined : `${selectedPlatform}_${Date.now()}`,
-        accessToken: formData.accessToken || 'manual',
-        credentials: selectedPlatform === 'telegram' ? { chatId: formData.chatId } : {},
-        isActive: true,
-      }
-
-      const res = await fetch('/api/accounts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to add account')
-
-      setAccounts(prev => [
-        {
-          id: data.account.id,
-          platform: data.account.platformId,
-          platformName: platforms.find(p => p.id === data.account.platformId)?.name || data.account.platformId,
-          accountName: data.account.accountName,
-          username: data.account.accountUsername,
-          status: data.account.isActive ? 'connected' : 'paused',
-          connectedAt: new Date(data.account.createdAt).toLocaleDateString(),
-          profileImageUrl:
-            data?.account?.credentials?.profileImageUrl ||
-            data?.account?.credentials?.accountInfo?.profileImageUrl ||
-            data?.account?.credentials?.accountInfo?.avatarUrl ||
-            '',
-          isBot: Boolean(data?.account?.credentials?.isBot ?? data?.account?.credentials?.accountInfo?.isBot ?? false),
-        },
-        ...prev,
-      ])
-      setFormData({ username: '', accessToken: '', chatId: '' })
-      setShowAddDialog(false)
-      toast.success('Account added successfully')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to add account')
-    }
+    const returnTo = `${window.location.pathname}${window.location.search}`
+    window.location.href = `/api/oauth/${selectedPlatform}/start?returnTo=${encodeURIComponent(returnTo)}`
   }
 
   const handleRemoveAccount = async (id: string) => {
@@ -190,39 +118,10 @@ export default function AccountsPage() {
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Connect New Account</DialogTitle>
-                <DialogDescription>Choose your authentication method and connect your social media account</DialogDescription>
+                <DialogDescription>Use automatic connect to link your social media account</DialogDescription>
               </DialogHeader>
 
               <div className="space-y-6">
-                {/* Auth Method Selection */}
-                <div>
-                  <Label className="text-base font-semibold mb-4 block">Authentication Method</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <button
-                      onClick={() => setAuthMethod('oauth')}
-                      className={`p-4 rounded-lg border-2 transition-all ${
-                        authMethod === 'oauth'
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border/40 hover:border-border/60'
-                      }`}
-                    >
-                      <div className="font-semibold">OAuth</div>
-                      <div className="text-sm text-muted-foreground">Secure, one-click login</div>
-                    </button>
-                    <button
-                      onClick={() => setAuthMethod('manual')}
-                      className={`p-4 rounded-lg border-2 transition-all ${
-                        authMethod === 'manual'
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border/40 hover:border-border/60'
-                      }`}
-                    >
-                      <div className="font-semibold">Manual</div>
-                      <div className="text-sm text-muted-foreground">API keys/tokens</div>
-                    </button>
-                  </div>
-                </div>
-
                 {/* Platform Selection */}
                 <div>
                   <Label className="text-base font-semibold mb-4 block">Select Platform</Label>
@@ -248,61 +147,15 @@ export default function AccountsPage() {
 
                 {/* Form */}
                 <form onSubmit={handleAddAccount} className="space-y-4">
-                  {authMethod === 'manual' && selectedPlatform !== 'telegram' && (
-                    <>
-                      <div>
-                        <Label htmlFor="username">Username</Label>
-                        <Input
-                          id="username"
-                          placeholder="Your username"
-                          value={formData.username}
-                          onChange={e => setFormData({ ...formData, username: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="token">Access Token / API Key</Label>
-                        <Input
-                          id="token"
-                          placeholder="Paste your token here"
-                          type="password"
-                          value={formData.accessToken}
-                          onChange={e => setFormData({ ...formData, accessToken: e.target.value })}
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {authMethod === 'manual' && selectedPlatform === 'telegram' && (
-                    <>
-                      <div>
-                        <Label htmlFor="token">Telegram Bot Token</Label>
-                        <Input
-                          id="token"
-                          placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-                          type="password"
-                          value={formData.accessToken}
-                          onChange={e => setFormData({ ...formData, accessToken: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="chatId">Channel / Chat ID</Label>
-                        <Input
-                          id="chatId"
-                          placeholder="-1001234567890"
-                          value={formData.chatId}
-                          onChange={e => setFormData({ ...formData, chatId: e.target.value })}
-                        />
-                      </div>
-                    </>
-                  )}
+                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+                    Automatic connect only. Click <strong>Connect Account</strong> to continue.
+                  </div>
 
                   <div className="flex gap-3 justify-end">
                     <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit">
-                      {authMethod === 'oauth' ? 'Connect with OAuth' : 'Add Account'}
-                    </Button>
+                    <Button type="submit">Connect Account</Button>
                   </div>
                 </form>
               </div>

@@ -1,12 +1,12 @@
 import type { PlatformConfig } from '../types';
-import { OutstandingPlatformHandler } from './base-handler';
+import { BufferPlatformHandler } from './base-handler';
 
 const config: PlatformConfig = {
   id: 'youtube',
   name: 'YouTube',
   icon: '📹',
   color: '#FF0000',
-  apiUrl: 'https://api.outstand.so/v1',
+  apiUrl: 'https://api.bufferapp.com/1',
   supportedContentTypes: ['video', 'text'],
   maxContentLength: 5000,
   requiresMediaUpload: true,
@@ -15,8 +15,8 @@ const config: PlatformConfig = {
   supportsAnalytics: true,
 };
 
-export const outstandingYouTubeHandler = new OutstandingPlatformHandler({
+export const bufferYouTubeHandler = new BufferPlatformHandler({
   config,
   network: 'youtube',
-  selectorsEnvKey: 'OUTSTAND_YOUTUBE_ACCOUNTS',
+  selectorsEnvKey: 'BUFFER_YOUTUBE_ACCOUNTS',
 });
