@@ -519,12 +519,12 @@ export default function ExecutionsPage() {
     processing: groupedRunList.filter(({ routes }) => routes.some((e) => e.status === 'pending')).length,
   };
   return (
-    <div className="min-h-screen bg-background control-app">
+    <div className="min-h-screen bg-background control-app dashboard-shell-bg">
       <Sidebar />
       <Header />
 
-      <main className="control-main">
-        <div className="page-header animate-fade-up">
+      <main className="control-main premium-main">
+        <div className="page-header premium-page-header animate-fade-up">
           <div>
             <p className="kpi-pill mb-3 inline-flex items-center gap-1.5">
               <Sparkles size={12} />
@@ -579,9 +579,9 @@ export default function ExecutionsPage() {
 
         {/* Stats Cards */}
         {isInitialLoading ? (
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="equal-grid mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[0, 1, 2, 3].map((idx) => (
-              <Card key={idx} className="surface-card">
+              <Card key={idx} className="surface-card h-full">
                 <CardContent className="pt-6">
                   <div className="animate-pulse space-y-3">
                     <div className="mx-auto h-3 w-24 rounded bg-muted/50" />
@@ -592,8 +592,8 @@ export default function ExecutionsPage() {
             ))}
           </div>
         ) : (
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Card className="surface-card">
+          <div className="equal-grid mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Card className="surface-card h-full">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <p className="text-muted-foreground text-sm mb-1">Total Runs</p>
@@ -601,7 +601,7 @@ export default function ExecutionsPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="surface-card">
+            <Card className="surface-card h-full">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <p className="text-muted-foreground text-sm mb-1">Successful Runs</p>
@@ -611,7 +611,7 @@ export default function ExecutionsPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="surface-card">
+            <Card className="surface-card h-full">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <p className="text-muted-foreground text-sm mb-1">Failed Runs</p>
@@ -621,7 +621,7 @@ export default function ExecutionsPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="surface-card">
+            <Card className="surface-card h-full">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <p className="text-muted-foreground text-sm mb-1">Processing Runs</p>

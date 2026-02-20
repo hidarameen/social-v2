@@ -5064,6 +5064,8 @@ class _SocialShellState extends State<SocialShell> {
         !showingCachedView && (data['hasMore'] == true || _executionsHasMore);
     final nextOffset =
         _readInt(data['nextOffset'], fallback: _executionsOffset);
+    final processingCount = runningCount + pendingCount;
+    final successRate = total > 0 ? ((successCount / total) * 100).round() : 0;
 
     String statusLabel(String normalized) {
       if (normalized == 'success') return i18n.isArabic ? 'نجاح' : 'Success';
@@ -5731,6 +5733,65 @@ class _SocialShellState extends State<SocialShell> {
       );
     }
 
+    Widget executionsKpiGrid() {
+      final width = MediaQuery.sizeOf(context).width;
+      final columns = width >= 1320
+          ? 5
+          : width >= 980
+              ? 3
+              : width >= 680
+                  ? 2
+                  : 1;
+      final aspectRatio = width >= 1320
+          ? 2.9
+          : width >= 980
+              ? 2.45
+              : width >= 680
+                  ? 2.25
+                  : 3.0;
+
+      return GridView.count(
+        crossAxisCount: columns,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: aspectRatio,
+        children: [
+          SfKpiTile(
+            label: i18n.isArabic ? 'إجمالي التنفيذات' : 'Total Runs',
+            value: '$total',
+            icon: Icons.layers_rounded,
+            tone: scheme.primary,
+          ),
+          SfKpiTile(
+            label: i18n.isArabic ? 'ناجح' : 'Successful',
+            value: '$successCount',
+            icon: Icons.check_circle_rounded,
+            tone: Colors.green.shade700,
+          ),
+          SfKpiTile(
+            label: i18n.isArabic ? 'فاشل' : 'Failed',
+            value: '$failedCount',
+            icon: Icons.error_rounded,
+            tone: scheme.error,
+          ),
+          SfKpiTile(
+            label: i18n.isArabic ? 'قيد المعالجة' : 'Processing',
+            value: '$processingCount',
+            icon: Icons.autorenew_rounded,
+            tone: scheme.tertiary,
+          ),
+          SfKpiTile(
+            label: i18n.isArabic ? 'نسبة النجاح' : 'Success Rate',
+            value: '$successRate%',
+            icon: Icons.insights_rounded,
+            tone: scheme.secondary,
+          ),
+        ],
+      );
+    }
+
     Widget executionTile(Map<String, dynamic> execution) {
       final executionId = execution['id']?.toString() ?? '';
       final statusText = execution['status']?.toString() ?? 'unknown';
@@ -5968,8 +6029,9 @@ class _SocialShellState extends State<SocialShell> {
                                             color: _platformColor(
                                                 sourcePlatformId)),
                                         const SizedBox(width: 5),
-                                        SizedBox(
-                                          width: 130,
+                                        ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                              maxWidth: 220),
                                           child: Text(
                                             sourceName == null ||
                                                     sourceName.isEmpty
@@ -6004,8 +6066,9 @@ class _SocialShellState extends State<SocialShell> {
                                             color: _platformColor(
                                                 targetPlatformId)),
                                         const SizedBox(width: 5),
-                                        SizedBox(
-                                          width: 130,
+                                        ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                              maxWidth: 220),
                                           child: Text(
                                             targetName == null ||
                                                     targetName.isEmpty
@@ -6196,6 +6259,8 @@ class _SocialShellState extends State<SocialShell> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         searchCard(),
+        const SizedBox(height: 12),
+        executionsKpiGrid(),
         const SizedBox(height: 14),
         if (filtered.isEmpty)
           SfEmptyState(
