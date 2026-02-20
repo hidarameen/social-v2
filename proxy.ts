@@ -32,6 +32,9 @@ function normalizeV2Route(pathname: string): string {
   if (pathname.startsWith('/dashboard/tasks') || pathname.startsWith('/tasks')) {
     return '/dashboard/tasks';
   }
+  if (pathname.startsWith('/dashboard/manual-publish') || pathname.startsWith('/manual-publish')) {
+    return '/dashboard/manual-publish';
+  }
   if (pathname.startsWith('/dashboard/executions') || pathname.startsWith('/executions')) {
     return '/dashboard/executions';
   }
@@ -40,6 +43,9 @@ function normalizeV2Route(pathname: string): string {
   }
   if (pathname.startsWith('/dashboard/settings') || pathname === '/settings') {
     return '/dashboard/settings';
+  }
+  if (pathname.startsWith('/dashboard/help') || pathname === '/help') {
+    return '/dashboard/help';
   }
   if (pathname.startsWith('/dashboard')) return '/dashboard';
 
