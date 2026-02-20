@@ -11,11 +11,13 @@ export const runtime = 'nodejs';
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   description: z.string().max(500).optional(),
+  isDefault: z.boolean().optional(),
   message: z.string().max(10000).optional(),
   mediaUrl: z.string().max(2000).optional(),
   mediaType: z.enum(['image', 'video', 'link']).optional(),
   defaultAccountIds: z.array(z.string().min(1)).optional(),
   platformOverrides: z.record(z.any()).optional(),
+  platformSettings: z.record(z.any()).optional(),
 });
 
 export async function PATCH(

@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import type { PlatformId } from '@/lib/platforms/types';
 import type {
   ManualPlatformOverride,
+  ManualPlatformTemplateSettings,
   ManualPublishMediaType,
   ManualPublishTemplate,
 } from '@/lib/manual-publish/types';
@@ -48,6 +49,49 @@ function sanitizeOverride(value: unknown): ManualPlatformOverride | undefined {
   };
 }
 
+function sanitizePlatformSettings(value: unknown): ManualPlatformTemplateSettings | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const enabled =
+    typeof record.enabled === 'boolean'
+      ? record.enabled
+      : record.enabled === '1'
+        ? true
+        : record.enabled === '0'
+          ? false
+          : undefined;
+  const notes = trimString(record.notes) || undefined;
+  const defaultHashtags = Array.isArray(record.defaultHashtags)
+    ? record.defaultHashtags
+        .map((item) => trimString(item).replace(/^#+/, ''))
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
+
+  if (enabled === undefined && !notes && defaultHashtags.length === 0) return undefined;
+  return {
+    enabled,
+    notes,
+    defaultHashtags: defaultHashtags.length > 0 ? defaultHashtags : undefined,
+  };
+}
+
+function normalizeDefaultTemplates(
+  templates: ManualPublishTemplate[],
+  preferredDefaultId?: string
+): ManualPublishTemplate[] {
+  if (templates.length === 0) return templates;
+  const preferredId = preferredDefaultId && templates.some((item) => item.id === preferredDefaultId)
+    ? preferredDefaultId
+    : undefined;
+  const existingDefaultId = templates.find((item) => item.isDefault)?.id;
+  const finalDefaultId = preferredId || existingDefaultId || templates[0].id;
+  return templates.map((item) => ({
+    ...item,
+    isDefault: item.id === finalDefaultId,
+  }));
+}
+
 function sanitizeTemplate(raw: unknown): ManualPublishTemplate | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const value = raw as Record<string, unknown>;
@@ -63,9 +107,14 @@ function sanitizeTemplate(raw: unknown): ManualPublishTemplate | undefined {
     : [];
 
   const platformOverrides: Partial<Record<PlatformId, ManualPlatformOverride>> = {};
+  const platformSettings: Partial<Record<PlatformId, ManualPlatformTemplateSettings>> = {};
   const rawOverrides =
     value.platformOverrides && typeof value.platformOverrides === 'object'
       ? (value.platformOverrides as Record<string, unknown>)
+      : {};
+  const rawSettings =
+    value.platformSettings && typeof value.platformSettings === 'object'
+      ? (value.platformSettings as Record<string, unknown>)
       : {};
 
   for (const platformId of PLATFORM_IDS) {
@@ -73,17 +122,23 @@ function sanitizeTemplate(raw: unknown): ManualPublishTemplate | undefined {
     if (parsed) {
       platformOverrides[platformId] = parsed;
     }
+    const parsedSetting = sanitizePlatformSettings(rawSettings[platformId]);
+    if (parsedSetting) {
+      platformSettings[platformId] = parsedSetting;
+    }
   }
 
   return {
     id,
     name,
     description: trimString(value.description) || undefined,
+    isDefault: Boolean(value.isDefault),
     message,
     mediaUrl: trimString(value.mediaUrl) || undefined,
     mediaType: sanitizeMediaType(value.mediaType),
     defaultAccountIds,
     platformOverrides,
+    platformSettings: Object.keys(platformSettings).length > 0 ? platformSettings : undefined,
     createdAt,
     updatedAt,
   };
@@ -112,16 +167,18 @@ async function writeTemplatesRaw(userId: string, templates: ManualPublishTemplat
 }
 
 export async function listManualPublishTemplates(userId: string): Promise<ManualPublishTemplate[]> {
-  return readTemplatesRaw(userId);
+  const templates = await readTemplatesRaw(userId);
+  return normalizeDefaultTemplates(templates);
 }
 
 export async function createManualPublishTemplate(
   userId: string,
-  input: Omit<ManualPublishTemplate, 'id' | 'createdAt' | 'updatedAt'>
+  input: Omit<ManualPublishTemplate, 'id' | 'createdAt' | 'updatedAt' | 'isDefault'> & { isDefault?: boolean }
 ): Promise<ManualPublishTemplate> {
   const now = new Date().toISOString();
   const template: ManualPublishTemplate = sanitizeTemplate({
     ...input,
+    isDefault: Boolean(input.isDefault),
     id: randomUUID(),
     createdAt: now,
     updatedAt: now,
@@ -129,8 +186,9 @@ export async function createManualPublishTemplate(
 
   const templates = await readTemplatesRaw(userId);
   templates.unshift(template);
-  await writeTemplatesRaw(userId, templates);
-  return template;
+  const normalized = normalizeDefaultTemplates(templates, template.isDefault ? template.id : undefined);
+  await writeTemplatesRaw(userId, normalized);
+  return normalized.find((item) => item.id === template.id) as ManualPublishTemplate;
 }
 
 export async function updateManualPublishTemplate(
@@ -153,14 +211,19 @@ export async function updateManualPublishTemplate(
   if (!candidate) return null;
 
   templates[index] = candidate;
-  await writeTemplatesRaw(userId, templates);
-  return candidate;
+  const normalized = normalizeDefaultTemplates(
+    templates,
+    patch.isDefault === true ? candidate.id : undefined
+  );
+  await writeTemplatesRaw(userId, normalized);
+  return normalized.find((item) => item.id === candidate.id) as ManualPublishTemplate;
 }
 
 export async function deleteManualPublishTemplate(userId: string, templateId: string): Promise<boolean> {
   const templates = await readTemplatesRaw(userId);
   const filtered = templates.filter((item) => item.id !== templateId);
   if (filtered.length === templates.length) return false;
-  await writeTemplatesRaw(userId, filtered);
+  const normalized = normalizeDefaultTemplates(filtered);
+  await writeTemplatesRaw(userId, normalized);
   return true;
 }

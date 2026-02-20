@@ -35,6 +35,12 @@ type ManualPublishPlatformOverride = {
   mediaType?: 'image' | 'video' | 'link';
 };
 
+type ManualPublishPlatformSettings = {
+  enabled?: boolean;
+  defaultHashtags?: string[];
+  notes?: string;
+};
+
 type ManualPublishTaskConfig = {
   enabled: true;
   sourceAccountId: string;
@@ -45,6 +51,7 @@ type ManualPublishTaskConfig = {
   mediaUrl?: string;
   mediaType?: 'image' | 'video' | 'link';
   platformOverrides: Partial<Record<PlatformId, ManualPublishPlatformOverride>>;
+  platformSettings: Partial<Record<PlatformId, ManualPublishPlatformSettings>>;
 };
 
 function trimString(value: unknown): string {
@@ -59,6 +66,21 @@ function asRecord(value: unknown): Record<string, unknown> {
 function asMediaType(value: unknown): 'image' | 'video' | 'link' | undefined {
   if (value === 'image' || value === 'video' || value === 'link') return value;
   return undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (value === '1') return true;
+  if (value === '0') return false;
+  return undefined;
+}
+
+function normalizeHashtags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => trimString(item).replace(/^#+/, ''))
+    .filter(Boolean)
+    .slice(0, 20);
 }
 
 function inferMediaType(mediaUrl?: string): 'image' | 'video' | 'link' | undefined {
@@ -233,6 +255,26 @@ export class TaskProcessor {
       }
     }
 
+    const platformSettings: Partial<Record<PlatformId, ManualPublishPlatformSettings>> = {};
+    for (const [platformKey, settingsCandidate] of Object.entries(asRecord(raw.platformSettings))) {
+      const platformId = asPlatformId(platformKey);
+      if (!platformId) continue;
+      const parsed = asRecord(settingsCandidate);
+      const settings: ManualPublishPlatformSettings = {
+        enabled: asBoolean(parsed.enabled),
+        notes: trimString(parsed.notes) || undefined,
+        defaultHashtags: normalizeHashtags(parsed.defaultHashtags),
+      };
+      if (
+        settings.enabled === undefined &&
+        !settings.notes &&
+        (!settings.defaultHashtags || settings.defaultHashtags.length === 0)
+      ) {
+        continue;
+      }
+      platformSettings[platformId] = settings;
+    }
+
     return {
       enabled: true,
       sourceAccountId,
@@ -243,6 +285,7 @@ export class TaskProcessor {
       mediaUrl,
       mediaType,
       platformOverrides,
+      platformSettings,
     };
   }
 
@@ -262,8 +305,19 @@ export class TaskProcessor {
       throw new Error('Target accounts not found');
     }
 
+    const enabledTargetAccounts = targetAccounts.filter((targetAccount) => {
+      const platformId = asPlatformId(targetAccount.platformId);
+      if (!platformId) return true;
+      const settings = manualConfig.platformSettings[platformId];
+      return settings?.enabled !== false;
+    });
+
+    if (enabledTargetAccounts.length === 0) {
+      throw new Error('All target platforms are disabled in manual platform settings.');
+    }
+
     const providerByTargetId = new Map<string, PlatformApiProvider>();
-    for (const targetAccount of targetAccounts) {
+    for (const targetAccount of enabledTargetAccounts) {
       const targetPlatformId = targetAccount.platformId as PlatformId;
       providerByTargetId.set(
         targetAccount.id,
@@ -276,7 +330,7 @@ export class TaskProcessor {
 
     const dedupedTargetAccounts: PlatformAccount[] = [];
     const seenBufferPlatforms = new Set<PlatformId>();
-    for (const targetAccount of targetAccounts) {
+    for (const targetAccount of enabledTargetAccounts) {
       const provider = providerByTargetId.get(targetAccount.id) || 'native';
       const targetPlatformId = targetAccount.platformId as PlatformId;
       if (provider === 'buffer' && applyBufferToAllAccounts) {
@@ -377,6 +431,7 @@ export class TaskProcessor {
 
     const targetHandler = await getPlatformHandlerForUser(task.userId, targetPlatformId);
     const override = manualConfig.platformOverrides[targetPlatformId] || {};
+    const platformSettings = manualConfig.platformSettings[targetPlatformId];
 
     const sourcePlatformId = manualConfig.sourcePlatformId || targetPlatformId;
     const baseResponseData = {
@@ -413,6 +468,16 @@ export class TaskProcessor {
           transformedContent,
           task.transformations
         );
+      }
+
+      const platformHashtags = (platformSettings?.defaultHashtags || [])
+        .map((item) => item.replace(/^#+/, '').trim())
+        .filter(Boolean)
+        .slice(0, 20);
+
+      if (platformHashtags.length > 0) {
+        const appended = platformHashtags.map((tag) => `#${tag}`).join(' ');
+        transformedContent = `${transformedContent}\n\n${appended}`.trim();
       }
 
       await db.updateExecution(pendingExecution.id, {

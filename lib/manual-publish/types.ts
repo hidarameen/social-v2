@@ -10,15 +10,23 @@ export type ManualPlatformOverride = {
   mediaType?: ManualPublishMediaType;
 };
 
+export type ManualPlatformTemplateSettings = {
+  enabled?: boolean;
+  defaultHashtags?: string[];
+  notes?: string;
+};
+
 export type ManualPublishTemplate = {
   id: string;
   name: string;
   description?: string;
+  isDefault?: boolean;
   message: string;
   mediaUrl?: string;
   mediaType?: ManualPublishMediaType;
   defaultAccountIds: string[];
   platformOverrides: Partial<Record<PlatformId, ManualPlatformOverride>>;
+  platformSettings?: Partial<Record<PlatformId, ManualPlatformTemplateSettings>>;
   createdAt: string;
   updatedAt: string;
 };
@@ -31,6 +39,7 @@ export type ManualPublishPayload = {
   mode: ManualPublishMode;
   scheduledAt?: string;
   platformOverrides?: Partial<Record<PlatformId, ManualPlatformOverride>>;
+  platformSettings?: Partial<Record<PlatformId, ManualPlatformTemplateSettings>>;
 };
 
 export type ManualPublishExecutionResult = {

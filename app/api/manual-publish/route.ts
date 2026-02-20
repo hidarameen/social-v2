@@ -16,6 +16,7 @@ import {
 import { validateManualPublishForPlatform } from '@/lib/manual-publish/constraints';
 import type {
   ManualPlatformOverride,
+  ManualPlatformTemplateSettings,
   ManualPublishExecutionResult,
   ManualPublishMediaType,
 } from '@/lib/manual-publish/types';
@@ -49,6 +50,7 @@ const publishSchema = z.object({
   mode: z.enum(['now', 'schedule']).default('now'),
   scheduledAt: z.string().optional(),
   platformOverrides: z.record(z.any()).optional(),
+  platformSettings: z.record(z.any()).optional(),
   dryRun: z.boolean().optional(),
   checkConnectivity: z.boolean().optional(),
 });
@@ -97,6 +99,55 @@ function normalizePlatformOverrides(
     const override = extractPlatformOverride(rawOverrides, platformId);
     if (!override.message && !override.mediaUrl && !override.mediaType) continue;
     normalized[platformId] = override;
+  }
+  return normalized;
+}
+
+function extractPlatformSettings(
+  rawSettings: Record<string, unknown>,
+  platformId: PlatformId
+): ManualPlatformTemplateSettings {
+  const candidate =
+    rawSettings && typeof rawSettings === 'object'
+      ? (rawSettings[platformId] as Record<string, unknown>)
+      : undefined;
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return {};
+
+  const defaultHashtags = Array.isArray(candidate.defaultHashtags)
+    ? candidate.defaultHashtags
+        .map((item) => trimString(item).replace(/^#+/, ''))
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
+
+  return {
+    enabled:
+      typeof candidate.enabled === 'boolean'
+        ? candidate.enabled
+        : candidate.enabled === '1'
+          ? true
+          : candidate.enabled === '0'
+            ? false
+            : undefined,
+    notes: trimString(candidate.notes) || undefined,
+    defaultHashtags: defaultHashtags.length > 0 ? defaultHashtags : undefined,
+  };
+}
+
+function normalizePlatformSettings(
+  rawSettings: Record<string, unknown>
+): Record<string, ManualPlatformTemplateSettings> {
+  const normalized: Record<string, ManualPlatformTemplateSettings> = {};
+  for (const platformId of MANAGED_PLATFORM_IDS) {
+    const settings = extractPlatformSettings(rawSettings, platformId);
+    if (
+      settings.enabled === undefined &&
+      !settings.notes &&
+      (!settings.defaultHashtags || settings.defaultHashtags.length === 0)
+    ) {
+      continue;
+    }
+    normalized[platformId] = settings;
   }
   return normalized;
 }
@@ -180,6 +231,25 @@ export async function POST(request: NextRequest) {
         ? (parsed.data.platformOverrides as Record<string, unknown>)
         : {};
     const normalizedOverrides = normalizePlatformOverrides(overrideMap);
+    const settingsMap =
+      parsed.data.platformSettings && typeof parsed.data.platformSettings === 'object'
+        ? (parsed.data.platformSettings as Record<string, unknown>)
+        : {};
+    const normalizedPlatformSettings = normalizePlatformSettings(settingsMap);
+
+    const selectedAccountsFiltered = selectedAccounts.filter((account) => {
+      const platformId = asManagedPlatformId(account.platformId);
+      if (!platformId) return true;
+      const settings = extractPlatformSettings(settingsMap, platformId);
+      return settings.enabled !== false;
+    });
+
+    if (selectedAccountsFiltered.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'All selected platforms are disabled in platform settings.' },
+        { status: 400 }
+      );
+    }
 
     let bufferSettingsPromise: Promise<Awaited<ReturnType<typeof getBufferUserSettings>>> | null = null;
     async function getBufferSettingsCached() {
@@ -221,7 +291,7 @@ export async function POST(request: NextRequest) {
     }
 
     const validationReport = await Promise.all(
-      selectedAccounts.map(async (account) => {
+      selectedAccountsFiltered.map(async (account) => {
         const platformId = asManagedPlatformId(account.platformId);
         if (!platformId) {
           return {
@@ -304,7 +374,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sourcePlatformId = asManagedPlatformId(selectedAccounts[0]?.platformId || '') || 'facebook';
+    const sourcePlatformId =
+      asManagedPlatformId(selectedAccountsFiltered[0]?.platformId || '') || 'facebook';
     const manualSourceAccountId = `${MANUAL_SOURCE_ACCOUNT_PREFIX}${randomUUID()}`;
     const manualSourceLabel = 'Manual Source';
 
@@ -317,7 +388,7 @@ export async function POST(request: NextRequest) {
           : `Manual Publish ${new Date().toISOString()}`,
       description: parsed.data.message,
       sourceAccounts: [manualSourceAccountId],
-      targetAccounts: uniqueAccountIds,
+      targetAccounts: selectedAccountsFiltered.map((account) => account.id),
       contentType: inferTaskContentType(parsed.data.mediaUrl, parsed.data.mediaType),
       status: 'active',
       executionType: parsed.data.mode === 'schedule' ? 'scheduled' : 'immediate',
@@ -336,6 +407,7 @@ export async function POST(request: NextRequest) {
           mediaUrl: parsed.data.mediaUrl,
           mediaType: parsed.data.mediaType,
           platformOverrides: normalizedOverrides,
+          platformSettings: normalizedPlatformSettings,
           createdAt: new Date().toISOString(),
         },
         automationSources: [
@@ -346,7 +418,7 @@ export async function POST(request: NextRequest) {
             triggerId: 'manual_compose',
           },
         ],
-        automationTargets: selectedAccounts.map((account) => ({
+        automationTargets: selectedAccountsFiltered.map((account) => ({
           accountId: account.id,
           platformId: account.platformId,
           accountLabel: account.accountName,

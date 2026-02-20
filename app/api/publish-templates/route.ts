@@ -8,11 +8,13 @@ export const runtime = 'nodejs';
 const createTemplateSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(500).optional(),
+  isDefault: z.boolean().optional(),
   message: z.string().max(10000).default(''),
   mediaUrl: z.string().max(2000).optional(),
   mediaType: z.enum(['image', 'video', 'link']).optional(),
   defaultAccountIds: z.array(z.string().min(1)).default([]),
   platformOverrides: z.record(z.any()).optional(),
+  platformSettings: z.record(z.any()).optional(),
 });
 
 export async function GET() {
@@ -45,11 +47,13 @@ export async function POST(request: NextRequest) {
     const template = await createManualPublishTemplate(user.id, {
       name: parsed.data.name,
       description: parsed.data.description,
+      isDefault: parsed.data.isDefault,
       message: parsed.data.message,
       mediaUrl: parsed.data.mediaUrl,
       mediaType: parsed.data.mediaType,
       defaultAccountIds: parsed.data.defaultAccountIds,
       platformOverrides: parsed.data.platformOverrides as any,
+      platformSettings: parsed.data.platformSettings as any,
     });
 
     return NextResponse.json({ success: true, template }, { status: 201 });

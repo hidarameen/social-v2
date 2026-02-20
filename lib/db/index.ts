@@ -91,6 +91,14 @@ export interface Task {
           mediaType?: 'image' | 'video' | 'link';
         }
       >;
+      platformSettings?: Record<
+        string,
+        {
+          enabled?: boolean;
+          defaultHashtags?: string[];
+          notes?: string;
+        }
+      >;
       createdAt?: string;
     };
     automationSources?: Array<{
