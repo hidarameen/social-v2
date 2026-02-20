@@ -113,6 +113,15 @@
     transition-timing-function: ease-out;
   }
 
+  /* Avoid first-paint flicker when applying saved lang/theme before React mounts */
+  html.preload *,
+  html.preload *::before,
+  html.preload *::after {
+    transition: none !important;
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+
   /* Override for motion elements */
   [style*="transform"], [style*="opacity"] {
     transition-property: none;

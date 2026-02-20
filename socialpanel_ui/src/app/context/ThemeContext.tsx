@@ -20,14 +20,24 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("sh-theme") as Theme) || "light";
+      const root = window.document.documentElement;
+      const storedTheme = (localStorage.getItem("sh-theme") as Theme) || "";
+      if (storedTheme === "dark" || storedTheme === "light") {
+        return storedTheme;
+      }
+      return root.classList.contains("dark") ? "dark" : "light";
     }
     return "light";
   });
 
   const [language, setLanguageState] = useState<Language>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("sh-lang") as Language) || "ar";
+      const root = window.document.documentElement;
+      const storedLang = (localStorage.getItem("sh-lang") as Language) || "";
+      if (storedLang === "ar" || storedLang === "en") {
+        return storedLang;
+      }
+      return root.lang === "en" ? "en" : "ar";
     }
     return "ar";
   });
@@ -39,6 +49,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } else {
       document.documentElement.classList.remove("dark");
     }
+    document.documentElement.style.colorScheme = theme;
   }, [theme]);
 
   useEffect(() => {
