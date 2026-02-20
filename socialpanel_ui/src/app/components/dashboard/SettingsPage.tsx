@@ -855,14 +855,18 @@ function ToggleSwitch({ label, desc, checked, onChange }: { label: string; desc:
       </div>
       <motion.button
         onClick={() => onChange(!checked)}
-        className={`relative shrink-0 transition-colors duration-300 rounded-full overflow-hidden ${
+        className={`relative shrink-0 transition-colors duration-300 rounded-full overflow-hidden p-0 appearance-none border-0 inline-flex items-center ${
           checked
             ? "bg-emerald-500 dark:bg-emerald-600"
             : "bg-slate-300 dark:bg-slate-600"
         }`}
         style={{
-          width: 46,
-          height: 26,
+          width: 44,
+          minWidth: 44,
+          maxWidth: 44,
+          height: 24,
+          minHeight: 24,
+          maxHeight: 24,
           boxShadow: checked
             ? "inset 0 1px 1px rgba(0,0,0,0.06), 0 0 0 1px rgba(16,185,129,0.12)"
             : "inset 0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)",
@@ -872,10 +876,10 @@ function ToggleSwitch({ label, desc, checked, onChange }: { label: string; desc:
         aria-checked={checked}
       >
         <motion.div
-          className="absolute left-1 top-1 rounded-full bg-white flex items-center justify-center"
+          className="absolute left-0.5 top-0.5 rounded-full bg-white flex items-center justify-center"
           style={{
-            width: 18,
-            height: 18,
+            width: 19,
+            height: 19,
             boxShadow: "0 1px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06)",
           }}
           animate={{ x: checked ? 20 : 0 }}

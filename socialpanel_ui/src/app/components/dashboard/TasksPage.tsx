@@ -256,12 +256,16 @@ export function TasksPage() {
                     {/* Toggle */}
                     <motion.button
                       onClick={() => toggleTask(task.id)}
-                      className={`relative mt-1 shrink-0 rounded-full transition-colors duration-300 ${
+                      className={`relative mt-1 shrink-0 rounded-full transition-colors duration-300 overflow-hidden p-0 appearance-none border-0 inline-flex items-center ${
                         task.enabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
                       }`}
                       style={{
-                        width: 42,
+                        width: 44,
+                        minWidth: 44,
+                        maxWidth: 44,
                         height: 24,
+                        minHeight: 24,
+                        maxHeight: 24,
                         boxShadow: task.enabled
                           ? "inset 0 1px 1px rgba(0,0,0,0.06), 0 0 0 1px rgba(16,185,129,0.12)"
                           : "inset 0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)",
@@ -271,13 +275,13 @@ export function TasksPage() {
                       aria-checked={task.enabled}
                     >
                       <motion.div
-                        className="absolute top-[2px] rounded-full bg-white"
+                        className="absolute left-0.5 top-0.5 rounded-full bg-white"
                         style={{
-                          width: 20,
-                          height: 20,
+                          width: 19,
+                          height: 19,
                           boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06)",
                         }}
-                        animate={{ x: task.enabled ? 20 : 2 }}
+                        animate={{ x: task.enabled ? 20 : 0 }}
                         transition={{ type: "spring", stiffness: 500, damping: 30 }}
                       />
                     </motion.button>
